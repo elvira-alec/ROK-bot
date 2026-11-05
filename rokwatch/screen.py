@@ -353,4 +353,16 @@ def troop_panel(frame: np.ndarray, texts: list[Text]):
            for i, (c, st) in enumerate(slots)]
     if not anchor and len(out) < 2:
         return None  # not convincing without the counter
+    if not anchor and out:
+        # second try at the counter: zoom in on the strip just above the first badge
+        bx, by = out[0].badge
+        x0c, y0c = max(0, int(bx - 0.08 * h)), max(0, int(by - 0.12 * h))
+        crop = frame[y0c:int(by - 0.06 * h), x0c:min(w, int(bx + 0.03 * h))]
+        if crop.size:
+            big = cv2.resize(crop, None, fx=2.5, fy=2.5, interpolation=cv2.INTER_CUBIC)
+            for t in read_text(big):
+                m = re.fullmatch(r"(\d)[/|lI1／](\d)", t.text.replace(" ", ""))
+                if m:
+                    used, total = int(m.group(1)), int(m.group(2))
+                    break
     return used, total, out
