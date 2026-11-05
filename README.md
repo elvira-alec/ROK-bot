@@ -36,16 +36,18 @@ Try each piece on your own screen first:
 
 ### What's checked on real game screens and what isn't yet
 
-Checked against real screenshots (`tests/real_screens/`):
-- Reads the camera coordinates, zoomed-out vs close view, your troop list and which troops are gathering, the RECALL button, the coordinates in a troop's info box, player names, and coordinates in chat.
-- Finds white (other player) and green (alliance) dotted march lines, at different screen sizes. Trees, flowers, resource icons and red territory borders aren't mistaken for marches or attacks.
+Checked against real screenshots (`tests/real_screens/`, day and night):
+- Reads the camera coordinates and your troop list. Tells **gathering** (pickaxe), **marching** (footprints) and scout badges apart.
+- Finds the RECALL button, the coordinates in a troop's info box, player names, and coordinates posted in chat.
+- Finds the **coordinate search bar** and where to tap: the X box, the Y box and the search button. The boxes start empty.
+- Tells the 3 **zoom levels** apart: close 3D view, the patrol level (simplified map with resource points), and too far out (the globe button appears). The bot zooms to the patrol level.
+- Finds white (other player) and green (yours or alliance) dotted march lines, at any screen size and at night. Finds other players' army diamonds. Trees, flowers, icons and red territory borders aren't mistaken for marches or attacks.
+- Ignores green lines at his city, since those are you attacking him.
 
-Built from my best guess, not seen on a real screen yet. Send a screenshot of each if it doesn't work:
-- **The coordinate search box** (after tapping the coordinates at the top). The bot finds the X/Y boxes by their filled-in numbers. If it can't, set `goto_dialog` positions in `config.yaml`.
-- Whether **tapping a troop portrait** opens its info box with RECALL. It looks that way from your screenshot.
-- **Zooming with the mouse wheel** in the browser version.
-- How a **hostile march aimed at you** looks. Probably red dots, which are supported.
-- How the **"under attack" warning** looks.
+Not seen on a real screen yet. Send a screenshot if it doesn't work:
+- Whether **tapping a troop portrait** opens its info box with RECALL. It looks that way from your screenshots.
+- **Mouse-wheel zoom** in the browser version.
+- How a **hostile march aimed at you** looks (probably red dots, which are supported), and how the **"under attack" warning** looks.
 
 ## What you need
 

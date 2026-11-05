@@ -38,6 +38,14 @@ def test_green_alliance_march():
     assert [ln.color for ln in lines] == ["green"]
 
 
+def test_your_marches_at_night_are_green():
+    # 3 of your armies marching (night, blue-tinted map): all lines found are green
+    for name in ("search_bar_marching", "search_bar_far_zoom"):
+        lines = screen.find_march_lines(load(name))
+        assert lines and all(ln.color == "green" for ln in lines), (name, lines)
+        assert screen.find_army_icons(load(name)) == []  # your armies aren't grey diamonds
+
+
 @pytest.mark.parametrize("name", ["own_city_gathering", "enemy_city_close", "enemy_city_simple"])
 def test_no_false_march_lines(name):
     # trees, flowers, rocks, red territory borders, resource icons: none are marches
@@ -86,10 +94,14 @@ def test_patrol_ignores_march_just_passing_by():
 
 ocr = pytest.importorskip("rapidocr_onnxruntime")
 
-CAMERA = {"own_city_gathering": (209, 418), "enemy_city_close": (162, 374),
+CAMERA = {"search_bar_far_zoom": (187, 403), "search_bar_marching": (173, 378),
+          "own_city_gathering": (209, 418), "enemy_city_close": (162, 374),
           "enemy_city_simple": (162, 375), "recall_panel": (205, 424),
           "march_simple_view": (417, 520), "march_close_view": (423, 521)}
-SIMPLE = {"enemy_city_simple", "march_simple_view"}
+SIMPLE = {"enemy_city_simple", "march_simple_view", "search_bar_far_zoom", "search_bar_marching"}
+ZOOM = {"search_bar_far_zoom": "far", "search_bar_marching": "patrol", "enemy_city_simple": "patrol",
+        "march_simple_view": "patrol"}
+MARCHING = {"search_bar_far_zoom", "search_bar_marching"}
 
 
 @pytest.fixture(scope="module")
@@ -114,7 +126,8 @@ def test_troop_panel(name, texts):
     # the counter is a bonus (OCR can miss it); the troops themselves must be found
     assert (used, total) in ((3, 3), (None, None))
     states = [s.state for s in slots]
-    assert states[:3] == ["gathering"] * 3 and states.count("scout") >= 2
+    mode = "marching" if name in MARCHING else "gathering"  # footprints vs pickaxe badge
+    assert states[:3] == [mode] * 3 and states.count("scout") >= 2
     # click points sit on the portraits, one above the other
     xs = {s.portrait[0] for s in slots}
     assert max(xs) - min(xs) < 10
@@ -126,7 +139,8 @@ def test_troop_panel_without_counter(name, texts):
     no_counter = [t for t in texts[name] if not t.text.replace(" ", "").startswith("3/")]
     used, total, slots = screen.troop_panel(load(name), no_counter)
     assert used in (3, None)   # second, zoomed-in read of the counter may succeed
-    assert [s.state for s in slots][:3] == ["gathering"] * 3
+    mode = "marching" if name in MARCHING else "gathering"
+    assert [s.state for s in slots][:3] == [mode] * 3
 
 
 def test_recall_button_and_location(texts):
@@ -142,3 +156,35 @@ def test_enemy_name_and_chat_coords(texts):
     assert any("JONH" in n and "WICK" in n.upper() for n in names), names
     from rokwatch.game import coords_in_chat
     assert (162, 374) in coords_in_chat(texts["recall_panel"])
+
+
+@pytest.mark.parametrize("name", ALL)
+def test_zoom_level(name, texts):
+    expect = ZOOM.get(name, "close")
+    assert screen.zoom_level(load(name), texts[name]) == expect
+
+
+@pytest.mark.parametrize("name", ["search_bar_far_zoom", "search_bar_marching"])
+def test_search_bar_positions(name, texts):
+    bar = screen.find_search_bar(load(name), texts[name])
+    assert bar is not None
+    # X box spans about x 1330-1530, Y box 1610-1830, button 1842-1926, row y 225-295
+    assert 1340 < bar.x_field[0] < 1520 and 1620 < bar.y_field[0] < 1820
+    assert 1850 < bar.button[0] < 1920
+    assert all(225 < p[1] < 295 for p in (bar.x_field, bar.y_field, bar.button))
+
+
+@pytest.mark.parametrize("name", ["recall_panel", "march_simple_view", "own_city_gathering"])
+def test_no_search_bar_when_closed(name, texts):
+    assert screen.find_search_bar(load(name), texts[name]) is None
+
+
+def test_search_bar_when_label_and_number_merge(texts):
+    # OCR sometimes reads "#:" and "4183" as one piece: "#:4183"
+    t = texts["search_bar_marching"]
+    k = next(x for x in t if x.text.strip() == "4183")
+    h = next(x for x in t if x.text.strip() == "#:")
+    merged = [x for x in t if x not in (k, h)] + [
+        screen.Text("#:4183", (h.box[0], k.box[1], k.box[0] + k.box[2] - h.box[0], k.box[3]), 0.8)]
+    bar = screen.find_search_bar(load("search_bar_marching"), merged)
+    assert bar and 1340 < bar.x_field[0] < 1520 and 1620 < bar.y_field[0] < 1820

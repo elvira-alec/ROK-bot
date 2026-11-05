@@ -49,6 +49,10 @@ class Game:
         cam = screen.camera_coords(frame, texts)
         return View(frame, texts, cam[:3] if cam else None, screen.is_simple_view(texts, frame))
 
+    def zoom(self, view: View | None = None) -> str:
+        v = view or self.look()
+        return screen.zoom_level(v.frame, v.texts)
+
     def wait(self, s=None):
         time.sleep(self.settle if s is None else s)
 
@@ -91,6 +95,8 @@ class Game:
             xf = (cfg["x_field"][0] * W, cfg["x_field"][1] * H)
             yf = (cfg["y_field"][0] * W, cfg["y_field"][1] * H)
             go = (cfg["go_button"][0] * W, cfg["go_button"][1] * H) if cfg.get("go_button") else None
+        elif (bar := screen.find_search_bar(v.frame, v.texts)):
+            xf, yf, go = bar.x_field, bar.y_field, bar.button
         else:
             fields = self._find_fields(v)
             if not fields:
@@ -135,16 +141,21 @@ class Game:
         self.b.press("Escape")
         self.wait(0.6)
 
-    def zoom_out_to_simple(self, max_steps=8) -> bool:
-        """Scroll out until the simplified map shows (power/VIP block disappears)."""
+    def zoom_to_patrol_level(self, max_steps=10) -> bool:
+        """Get to the simplified map that still shows resource points and armies:
+        scroll out from the 3D view, back in if it went too far (globe button shows)."""
         for _ in range(max_steps):
             v = self.look()
-            if v.simple:
+            level = screen.zoom_level(v.frame, v.texts)
+            if level == "patrol":
                 return True
             H, W = v.frame.shape[:2]
-            self.b.wheel(W // 2, H // 2, 400)
+            self.b.wheel(W // 2, H // 2, 300 if level == "close" else -200)
             self.wait(0.8)
-        return self.look().simple
+        v = self.look()
+        return screen.zoom_level(v.frame, v.texts) == "patrol"
+
+    zoom_out_to_simple = zoom_to_patrol_level  # old name
 
     # ---------------------------------------------------------------- troops
     def troops(self, view: View | None = None):

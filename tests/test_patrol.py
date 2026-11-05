@@ -43,12 +43,21 @@ def test_reads_camera_and_jumps(game):
     assert game.goto(162, 374)
     assert js(game, "[sim.state.cam.x, sim.state.cam.y]") == [162, 374]
     assert js(game, "sim.state.dialog") is None  # search box closed again
+    assert js(game, "sim.state.typed") == "162374"
 
 
-def test_zoom_out(game):
-    assert not game.look().simple
-    assert game.zoom_out_to_simple()
-    assert js(game, "sim.state.simple")
+def test_zoom_out_to_patrol_level(game):
+    assert game.zoom() == "close"
+    assert game.zoom_to_patrol_level()
+    assert js(game, "sim.state.zoom") == 1
+
+
+def test_zoom_back_in_when_too_far(game):
+    js(game, "sim.state.zoom = 2; sim.state.simple = true")
+    time.sleep(0.2)
+    assert game.zoom() == "far"
+    assert game.zoom_to_patrol_level()
+    assert js(game, "sim.state.zoom") == 1
 
 
 def test_troop_panel_and_location(game):

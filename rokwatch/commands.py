@@ -41,8 +41,9 @@ def patrol_loop(gb, cfg, notifier, max_rounds=None):
     p = cfg.get("patrol", {})
     game = make_game(gb, cfg)
     patrol = Patrol(game, sites_from(cfg), p, p.get("activity_log", "activity.csv"))
-    if p.get("zoom_out", True) and not game.zoom_out_to_simple():
-        log.warning("Couldn't switch to the zoomed-out map; carrying on as it is.")
+    if p.get("zoom_out", True) and not game.zoom_to_patrol_level():
+        log.warning("Couldn't get to the right zoom (simplified map with resource points); "
+                    "carrying on as it is.")
     names = ", ".join(s.name for s in patrol.sites)
     log.info("Patrolling: %s. Auto-recall is %s.", names, "ON" if patrol.auto_recall else "off")
     notifier.send("start", "RoK patrol started", f"Watching {names}.")
@@ -85,7 +86,7 @@ def one_off(cfg, cfg_path, what, args, prompt=True):
             print(f"Saved map directions to setup.yaml: {m}")
         elif what == "look":
             v = game.look()
-            print(f"camera={v.camera} zoomed_out={v.simple}")
+            print(f"camera={v.camera} zoom={game.zoom(v)}")
             print("troops:", game.troops(v))
             from .screen import find_march_lines
             for ln in find_march_lines(v.frame):

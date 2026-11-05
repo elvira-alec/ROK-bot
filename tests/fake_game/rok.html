@@ -18,7 +18,7 @@
   const ctx = cv.getContext('2d');
   const img = n => { const i = new Image(); i.src = 'real/' + n + '.png'; return i; };
   const A = { grass: img('grass'), panel: img('panel'), recall: img('recall_button'),
-              city: img('city_tower'), res: img('resource_icon'), army: img('army_icon') };
+              city: img('city_tower'), res: img('resource_icon'), army: img('army_icon'), globe: img('globe') };
   const owner = { enemy: '[P83L]JONH WICK', city: '[JONS]IronAR' };
 
   // map tile -> screen pixel mapping (deliberately not a plain grid)
@@ -26,7 +26,7 @@
   const det = M[0][0] * M[1][1] - M[0][1] * M[1][0];
   const Minv = [[M[1][1] / det, -M[0][1] / det], [-M[1][0] / det, M[0][0] / det]];
   const state = {
-    cam: { x: 209, y: 418 }, simple: false, dialog: null, box: null,
+    cam: { x: 209, y: 418 }, zoom: 0, simple: false, dialog: null, box: null,  // zoom: 0 close, 1 patrol, 2 far
     troops: [ { at: [205, 424], recalled: false }, { at: [200, 410], recalled: false },
               { at: [215, 430], recalled: false } ],
     marches: [], clicks: [], typed: '',
@@ -41,9 +41,10 @@
   const coordBar = () => state.simple ? { x: 75, y: 0, w: 160, h: 28 } : { x: 285, y: 0, w: 160, h: 28 };
   const portrait = i => ({ x: 1339 - 26, y: 168 + 60 * i - 26, w: 52, h: 52 });
   const badge = i => [1357, 191 + 60 * i];
-  const dlg = { x: 517, y: 200, w: 400, h: 230 };
-  const fields = { x: { x: 610, y: 280, w: 110, h: 36 }, y: { x: 790, y: 280, w: 110, h: 36 } };
-  const goBtn = { x: 657, y: 360, w: 120, h: 44 };
+  // the real search bar: '#: 4183  X: [   ]  Y: [   ]  (blue search button)', boxes empty
+  const dlg = { x: 462, y: 106, w: 510, h: 50 };
+  const fields = { x: { x: 667, y: 112, w: 96, h: 38 }, y: { x: 806, y: 112, w: 100, h: 38 } };
+  const goBtn = { x: 921, y: 110, w: 42, h: 38 };
   const box = { x: 785, y: 162, w: 440, h: 330 };
   const recallBtn = { x: 915, y: 412, w: 180, h: 62 };
   const inside = (r, x, y) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
@@ -78,6 +79,7 @@
     for (const [name, [tx, ty]] of Object.entries(state.sites)) {
       const [x, y] = toScreen(tx, ty);
       if (x < -100 || y < -100 || x > W + 100 || y > H + 100) continue;
+      if (state.zoom === 2 && !owner[name]) continue;  // too far out: no resource points
       const im = owner[name] ? A.city : A.res;
       if (im.complete) ctx.drawImage(im, x - im.width / 2, y - im.height / 2);
       if (owner[name]) {
@@ -94,7 +96,7 @@
       // known yet, so green marches get none.)
       const k = Math.max(0.02, Math.min(0.98, m.progress + (t - m.t0) * m.speed));
       const ax = p[0] + (q[0] - p[0]) * k, ay = p[1] + (q[1] - p[1]) * k;
-      if (m.color !== 'green' && A.army.complete) ctx.drawImage(A.army, ax - A.army.width / 2, ay - A.army.height / 2);
+      if (m.color !== 'green' && state.zoom < 2 && A.army.complete) ctx.drawImage(A.army, ax - A.army.width / 2, ay - A.army.height / 2);
     }
     // HUD
     const cb = coordBar();
@@ -124,21 +126,22 @@
       if (!tr.recalled && A.recall.complete) ctx.drawImage(A.recall, recallBtn.x, recallBtn.y);
       if (tr.recalled) text('Returning', box.x + 170, box.y + 290, 20, '#555', false);
     }
-    // coordinate search box
+    // coordinate search bar
     if (state.dialog) {
-      ctx.fillStyle = '#efe6d2'; ctx.fillRect(dlg.x, dlg.y, dlg.w, dlg.h);
-      ctx.strokeStyle = '#8a6d3b'; ctx.lineWidth = 3; ctx.strokeRect(dlg.x, dlg.y, dlg.w, dlg.h);
-      text('Coordinates', dlg.x + 135, dlg.y + 36, 20, '#5a3d1b', false);
+      ctx.fillStyle = 'rgba(25,30,40,0.82)'; ctx.fillRect(dlg.x, dlg.y, dlg.w, dlg.h);
+      text('#:', dlg.x + 8, dlg.y + 33, 19, '#eee', false); text('4183', dlg.x + 38, dlg.y + 33, 19, '#eee', false);
+      text('X:', fields.x.x - 36, dlg.y + 35, 19, '#eee', false); text('Y:', fields.y.x - 30, dlg.y + 35, 19, '#eee', false);
       for (const k of ['x', 'y']) {
         const f = fields[k];
-        text(k.toUpperCase(), f.x - 30, f.y + 26, 22, '#5a3d1b', false);
-        ctx.fillStyle = state.dialog.focus === k ? '#fff' : '#f8f8f8'; ctx.fillRect(f.x, f.y, f.w, f.h);
-        ctx.strokeStyle = '#555'; ctx.lineWidth = 1; ctx.strokeRect(f.x, f.y, f.w, f.h);
-        text(state.dialog[k], f.x + 10, f.y + 26, 20, '#222', false);
+        ctx.fillStyle = 'rgba(10,14,20,0.55)'; ctx.fillRect(f.x, f.y, f.w, f.h);
+        text(state.dialog[k], f.x + 8, f.y + 27, 19, '#fff', false);
       }
-      ctx.fillStyle = '#2a8de0'; ctx.fillRect(goBtn.x, goBtn.y, goBtn.w, goBtn.h);
-      text('Go', goBtn.x + 45, goBtn.y + 30, 22, '#fff', false);
+      ctx.fillStyle = '#0fb4f0'; ctx.fillRect(goBtn.x, goBtn.y, goBtn.w, goBtn.h);
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(goBtn.x + 19, goBtn.y + 17, 8, 0, 7); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(goBtn.x + 25, goBtn.y + 23); ctx.lineTo(goBtn.x + 32, goBtn.y + 31); ctx.stroke();
     }
+    // zoomed out too far: the globe button appears bottom right
+    if (state.zoom === 2 && A.globe.complete) ctx.drawImage(A.globe, W - 85, H - 70);
     requestAnimationFrame(draw);
   }
   requestAnimationFrame(draw);
@@ -170,7 +173,7 @@
     }
     const cb = coordBar();
     if (inside({ x: cb.x, y: cb.y, w: cb.w + 30, h: cb.h }, x, y)) {
-      state.dialog = { x: String(state.cam.x), y: String(state.cam.y), focus: null, all: false };
+      state.dialog = { x: '', y: '', focus: null, all: false };
       return;
     }
     if (state.box !== null) {
@@ -197,7 +200,10 @@
     if (e.key === 'Backspace') { D[D.focus] = D.all ? '' : D[D.focus].slice(0, -1); D.all = false; return; }
     if (/^\d$/.test(e.key)) { if (D.all) { D[D.focus] = ''; D.all = false; } D[D.focus] += e.key; state.typed += e.key; }
   });
-  cv.addEventListener('wheel', e => { state.simple = e.deltaY > 0; e.preventDefault(); }, { passive: false });
+  cv.addEventListener('wheel', e => {
+    state.zoom = Math.max(0, Math.min(2, state.zoom + (e.deltaY > 0 ? 1 : -1)));
+    state.simple = state.zoom > 0; e.preventDefault();
+  }, { passive: false });
 
   window.sim = {
     state,

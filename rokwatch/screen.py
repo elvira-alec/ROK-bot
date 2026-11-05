@@ -291,12 +291,59 @@ def find_army_icons(frame: np.ndarray) -> list[tuple]:
 
 # ---------------------------------------------------------------- your troops
 
+BADGE_DIR = __import__("pathlib").Path(__file__).with_name("badges")
+_BADGE_SIZE = 32
+
+
+def badge_glyph(frame, centre, h):
+    """The white symbol inside a status badge, as a 32x32 0/1 mask."""
+    r = int(0.017 * h)
+    x, y = centre
+    crop = frame[max(0, y - r):y + r, max(0, x - r):x + r]
+    if crop.size == 0:
+        return None
+    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+    white = cv2.inRange(hsv, np.array((0, 0, 190), np.uint8), np.array((180, 70, 255), np.uint8))
+    white = cv2.resize(white, (_BADGE_SIZE, _BADGE_SIZE), interpolation=cv2.INTER_AREA)
+    # keep only the inside of the circle (the ring around it is white-ish too)
+    yy, xx = np.mgrid[:_BADGE_SIZE, :_BADGE_SIZE]
+    inside = (xx - 15.5) ** 2 + (yy - 15.5) ** 2 < (0.72 * 16) ** 2
+    return ((white > 100) & inside).astype(np.float32)
+
+
+_glyphs = None
+
+
+def _badge_templates():
+    global _glyphs
+    if _glyphs is None:
+        _glyphs = {}
+        for p in sorted(BADGE_DIR.glob("*.png")):
+            m = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+            _glyphs.setdefault(p.stem.split("-")[0], []).append((m > 127).astype(np.float32))
+    return _glyphs
+
+
+def classify_badge(glyph) -> str | None:
+    """Which symbol (gathering pickaxe, marching footprints...) a green badge shows."""
+    if glyph is None or glyph.sum() < 8:
+        return None
+    best, score = None, 0.0
+    for name, temps in _badge_templates().items():
+        for t in temps:
+            inter = float((glyph * t).sum())
+            union = float(np.maximum(glyph, t).sum())
+            iou = inter / union if union else 0.0
+            if iou > score:
+                best, score = name, iou
+    return best if score >= 0.4 else None
+
 @dataclass
 class TroopSlot:
     index: int
     badge: tuple      # centre of the small status badge
     portrait: tuple   # where to click to select this troop
-    state: str        # "gathering", "scout", "other"
+    state: str        # "gathering" (pickaxe), "marching" (footprints), "scout", "other"
 
 
 def troop_panel(frame: np.ndarray, texts: list[Text]):
@@ -349,8 +396,11 @@ def troop_panel(frame: np.ndarray, texts: list[Text]):
         if not dedup or c[1] - dedup[-1][0][1] > 0.02 * h:
             dedup.append((c, st))
     slots = dedup
-    out = [TroopSlot(i, c, (int(c[0] - 0.027 * h), int(c[1] - 0.034 * h)), st)
-           for i, (c, st) in enumerate(slots)]
+    out = []
+    for i, (c, st) in enumerate(slots):
+        if st == "gathering":  # any green badge: tell the symbols apart
+            st = classify_badge(badge_glyph(frame, c, h)) or "other"
+        out.append(TroopSlot(i, c, (int(c[0] - 0.027 * h), int(c[1] - 0.034 * h)), st))
     if not anchor and len(out) < 2:
         return None  # not convincing without the counter
     if not anchor and out:
@@ -366,3 +416,110 @@ def troop_panel(frame: np.ndarray, texts: list[Text]):
                     used, total = int(m.group(1)), int(m.group(2))
                     break
     return used, total, out
+
+
+# ---------------------------------------------------------------- coordinate search bar
+
+@dataclass
+class SearchBar:
+    x_field: tuple
+    y_field: tuple
+    button: tuple
+
+
+def find_search_bar(frame: np.ndarray, texts: list[Text]) -> SearchBar | None:
+    """The bar that opens when you tap the coordinates: '#: 4183  X: [ ]  Y: [ ]  (search)'.
+    The X and Y boxes start empty, so they're placed between the labels / anchors:
+    the kingdom number on the left and the blue search button on the right."""
+    H, W = frame.shape[:2]
+    body = [t for t in texts if H * 0.1 < t.box[1] < H * 0.45]
+    # the kingdom number, read either alone ("4183") or merged with its label ("#:4183")
+    kingdom = []
+    for t in body:
+        m = re.fullmatch(r"(#\s*[:：]?\s*)?(\d{3,5})", t.text.strip())
+        if m and t.box[0] > W * 0.2:
+            frac = len(m.group(2)) / len(t.text.strip())   # share of the box that is digits
+            kingdom.append((t, int(t.box[0] + t.box[2] * (1 - frac / 2))))
+    if not kingdom:
+        return None
+    k, k_centre = kingdom[0]
+    row = k.center[1]
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    blue = cv2.inRange(hsv, np.array((93, 170, 190), np.uint8), np.array((110, 255, 255), np.uint8))
+    n, _, stats, cents = cv2.connectedComponentsWithStats(blue)
+    button = None
+    for i in range(1, n):
+        x, y, w, h, a = stats[i]
+        if (0.04 * H <= w <= 0.09 * H and 0.04 * H <= h <= 0.09 * H and a > 0.6 * w * h
+                and abs(cents[i][1] - row) < 0.04 * H and x > k.box[0]):
+            if button is None or x < button[0]:
+                button = (int(x), int(cents[i][0]), int(cents[i][1]))
+    if not button:
+        return None
+    left = k_centre
+    span = button[1] - left
+    # positions measured on the real bar, as a share of kingdom->button distance
+    xf = left + 0.454 * span
+    yf = left + 0.797 * span
+    labels = {t.text.strip().upper().rstrip(":："): t for t in body if abs(t.center[1] - row) < 0.04 * H}
+    if "X" in labels and "Y" in labels:  # cross-check with the labels when OCR sees them
+        lx, ly = labels["X"], labels["Y"]
+        xf = (lx.box[0] + lx.box[2] + ly.box[0]) / 2
+        yf = (ly.box[0] + ly.box[2] + button[0]) / 2
+    return SearchBar((int(xf), row), (int(yf), row), (button[1], button[2]))
+
+
+# ---------------------------------------------------------------- zoom level
+
+def count_level_tags(frame: np.ndarray) -> int:
+    """Small light tags with a dark number under resource points / cities / barbarians.
+    Lots of them = the zoom level you want; none = zoomed out too far."""
+    H, W = frame.shape[:2]
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    light = cv2.inRange(hsv, np.array((0, 0, 165), np.uint8), np.array((180, 60, 245), np.uint8))
+    dark = cv2.inRange(hsv, np.array((0, 0, 0), np.uint8), np.array((180, 255, 95), np.uint8))
+    # close the digit holes so a tag is one blob
+    blob = cv2.morphologyEx(light, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+    n, _, stats, _ = cv2.connectedComponentsWithStats(blob)
+    count = 0
+    for i in range(1, n):
+        x, y, w, h, a = stats[i]
+        if not (0.008 * H <= h <= 0.03 * H and 0.016 * H <= w <= 0.05 * H):
+            continue
+        if not (1.1 <= w / h <= 3.2) or a < 0.5 * w * h:
+            continue
+        if not (0.05 * W < x < 0.88 * W and 0.08 * H < y < 0.86 * H):
+            continue  # skip the HUD around the edges
+        inner = dark[y:y + h, x:x + w]
+        if 0.06 <= inner.mean() / 255 <= 0.5:
+            count += 1
+    return count
+
+
+_globe = None
+
+
+def has_world_button(frame: np.ndarray) -> float:
+    """The globe button (bottom right) only shows when zoomed out too far.
+    Returns the best match score (0-1)."""
+    global _globe
+    if _globe is None:
+        _globe = cv2.imread(str(__import__("pathlib").Path(__file__).with_name("hud") / "globe.png"))
+    H, W = frame.shape[:2]
+    region = frame[int(0.75 * H):, int(0.75 * W):]
+    best = 0.0
+    for k in (0.9, 1.0, 1.1):  # small size differences between screens
+        sc = H / 1320.0 * k
+        t = cv2.resize(_globe, None, fx=sc, fy=sc, interpolation=cv2.INTER_AREA)
+        if t.shape[0] >= region.shape[0] or t.shape[1] >= region.shape[1]:
+            continue
+        best = max(best, float(cv2.matchTemplate(region, t, cv2.TM_CCOEFF_NORMED).max()))
+    return best
+
+
+def zoom_level(frame, texts) -> str:
+    """'close' (3D view), 'patrol' (simplified map with resource points), or 'far'
+    (zoomed out so far that resource points and armies are hidden)."""
+    if not is_simple_view(texts, frame):
+        return "close"
+    return "far" if has_world_button(frame) > 0.8 else "patrol"
