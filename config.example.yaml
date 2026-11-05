@@ -1,5 +1,6 @@
-# Copy this file to config.yaml, then run:  python -m rokwatch
-# The first run walks you through setup and fills in the screen positions for you (game_area, enemy_city, home).
+# Copy this file to config.yaml, edit game_url and notify, then run:  python -m rokwatch
+# The first run walks you through setup (where his city and your spots are)
+# and saves that to setup.yaml + calibration.png.
 
 # The page where you play Rise of Kingdoms in the browser
 # (for example the BlueStacks X "Play on Cloud" page for RoK).
@@ -8,24 +9,40 @@ game_url: "https://www.bluestacks.com/apps/strategy/rise-of-kingdoms-on-pc.html"
 # Where the browser keeps your login, so you only sign in once.
 browser_profile: "./browser-profile"
 
-# Browser size. Keep it the same after calibrating, or positions shift.
+# Browser size. Keep it the same after setup, or positions shift.
 viewport: [1600, 900]
+
+# Leave false: you need to see the window to log in and set up.
+headless: false
+# Which browser to open. "chrome" = your installed Google Chrome (best: it can
+# play the game's video stream). If it's not installed, the built-in one is used.
+browser_channel: "chrome"
+browser_executable: ""
+# If the site or Google won't let you log in from the browser the watcher opens:
+# start Chrome yourself with start_chrome.bat, log in there, and set this to
+# "http://localhost:9222". The watcher then uses that window.
+connect_to_chrome: ""
 
 # How often to screenshot the game.
 check_every_seconds: 3
+
+# With --no-prompt (auto start), how long to let the game load before watching.
+startup_wait_seconds: 60
 
 notify:
   # Install the free "ntfy" app on your phone and subscribe to this topic.
   # Pick something long and random so nobody else can read your alerts.
   ntfy_topic: "rok-alerts-change-me-8f3k2"
   ntfy_server: "https://ntfy.sh"
-  # Optional: a Discord channel webhook URL to post alerts to as well.
+  # Optional: Discord channel webhook URL.
   discord_webhook: ""
-  # Don't repeat the same alert more often than this.
+  # Optional: Telegram bot (token from @BotFather, chat id from @userinfobot).
+  telegram_bot_token: ""
+  telegram_chat_id: ""
+  # Don't repeat the same kind of alert (attack, lost map...) more often than this.
   cooldown_seconds: 90
 
-# Part of the page that shows the game, as [x, y, width, height].
-# null = use the whole page.
+# Part of the page that shows the game, as [x, y, width, height]. Set by setup.
 game_area: null
 
 # 1) Alert when YOU are attacked (red flashing screen edges / warning icon).
@@ -33,31 +50,39 @@ attack_alert:
   enabled: true
   # How thick the screen edge strip is, as a fraction of the screen.
   edge_width: 0.04
-  # Alert when this fraction of the edge strip is red.
+  # Alert when this fraction of the edge strip is red...
   red_fraction: 0.30
+  # ...and it's at least this much redder than usual for this spot.
+  min_jump: 0.15
   # Must be seen this many checks in a row (stops false alarms).
   confirm_frames: 2
   # Screenshots of the warning icon. Drop crops in templates/attack/ to use them.
   template_dir: "templates/attack"
   template_threshold: 0.82
 
-# 2) Watch the bully's city for marches heading your way.
-#    Park the map so you can see his city and your city (or your gathering area).
+# 2) Watch the bully's city for marches heading toward you.
+#    Park the map so you can see his city and your city / gathering spots.
 enemy_watch:
   enabled: true
-  # Screen position of his city and of your city/area, inside game_area.
+  # Set by setup: his city and the spots you want to protect.
   enemy_city: [0, 0]
-  home: [0, 0]
-  # A march line counts as "his" if it starts within this many pixels of his city.
+  protect_points: []
+  # A line counts as "his march" if it starts within this many pixels of his city.
   start_radius: 70
-  # How close to "straight at you" the march must point to count as heading your way.
+  # Within this many degrees of pointing at one of your spots = "heading your way".
   angle_tolerance_degrees: 35
+  # A line ending within this many pixels of one of your spots also counts.
+  arrive_radius: 60
   # Ignore lines shorter than this (pixels).
   min_line_length: 35
   # Also tell you about his marches going somewhere else.
   report_other_marches: true
-  # March line colors to look for, as HSV ranges (OpenCV: H 0-180, S/V 0-255).
-  # Hostile marches show red; other players' marches are pale/white.
+  # Treat a march in the same direction within this many minutes as the same march.
+  same_march_minutes: 10
+  # Catch new straight lines of ANY color (recommended). Higher threshold = less sensitive.
+  detect_any_new_line: true
+  change_threshold: 45
+  # Also look for these march line colors, as HSV ranges (H 0-180, S/V 0-255).
   line_colors:
     red:
       - [[0, 120, 120], [10, 255, 255]]
@@ -65,8 +90,20 @@ enemy_watch:
     white:
       - [[0, 0, 215], [180, 40, 255]]
 
+# 3) Follow the map if it gets nudged, and warn if it can't be lined up
+#    (menu open, map moved far away).
+map_tracking:
+  enabled: true
+  # Lost = line-up score below lost_ratio x the normal score for your screen
+  # (learned at start), and never below min_confidence.
+  min_confidence: 0.08
+  lost_ratio: 0.4
+  # Checks in a row that can't line up before warning you (20 x 3s = 1 minute).
+  lost_after_checks: 20
+  follow_threshold_px: 4
+
 # Warn you if the game picture stops changing (disconnected / logged out).
 frozen_alert_minutes: 5
 
-# Save a screenshot for every alert into debug/ (useful for tuning).
+# Save a marked-up screenshot for every alert into debug/ (sent with the alert too).
 save_alert_screenshots: true

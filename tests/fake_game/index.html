@@ -1,0 +1,185 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Fake RoK (test page)</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #111; overflow: hidden; font-family: sans-serif; }
+  #bar { height: 40px; background: #222; color: #ccc; line-height: 40px; padding-left: 12px; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<div id="bar">Cloud player - fake Rise of Kingdoms test page</div>
+<canvas id="c"></canvas>
+<script>
+// A stand-in for the streamed game, used by the automated tests.
+// It's not the real game: it imitates what matters to the watcher
+// (busy animated map, HUD, march lines, red attack flash, stream noise).
+(() => {
+  const params = new URLSearchParams(location.hash.slice(1));
+  let seed = 12345;
+  const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+  const W = innerWidth, H = innerHeight - 40;
+  const cv = document.getElementById('c');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+
+  // ---------- world (drawn once)
+  const WW = 3600, WH = 2600;
+  const world = document.createElement('canvas');
+  world.width = WW; world.height = WH;
+  const w = world.getContext('2d');
+  w.fillStyle = '#4f8c46'; w.fillRect(0, 0, WW, WH);
+  for (let i = 0; i < 3500; i++) {          // grass patches
+    const g = 110 + rand() * 60 | 0;
+    w.fillStyle = `rgba(${60 + rand() * 40 | 0},${g},${50 + rand() * 30 | 0},0.5)`;
+    w.beginPath(); w.arc(rand() * WW, rand() * WH, 8 + rand() * 40, 0, 7); w.fill();
+  }
+  for (let i = 0; i < 900; i++) {           // forests
+    w.fillStyle = `rgb(30,${70 + rand() * 30 | 0},35)`;
+    const x = rand() * WW, y = rand() * WH;
+    for (let k = 0; k < 6; k++) { w.beginPath(); w.arc(x + rand() * 30, y + rand() * 30, 6 + rand() * 6, 0, 7); w.fill(); }
+  }
+  for (let i = 0; i < 250; i++) {           // rocks
+    w.fillStyle = `rgb(${120 + rand() * 30 | 0},${115 + rand() * 30 | 0},110)`;
+    w.fillRect(rand() * WW, rand() * WH, 6 + rand() * 14, 5 + rand() * 10);
+  }
+  w.strokeStyle = '#3a6fb0'; w.lineWidth = 18;  // rivers
+  for (let r = 0; r < 4; r++) {
+    w.beginPath(); let x = rand() * WW, y = 0; w.moveTo(x, y);
+    while (y < WH) { x += (rand() - 0.5) * 160; y += 80; w.lineTo(x, y); } w.stroke();
+  }
+  w.strokeStyle = '#b39a6b'; w.lineWidth = 5;   // roads
+  for (let r = 0; r < 6; r++) { w.beginPath(); w.moveTo(rand() * WW, rand() * WH); w.lineTo(rand() * WW, rand() * WH); w.stroke(); }
+
+  const places = {
+    enemy: { x: 1500, y: 1100, banner: '#d01818' },
+    home: { x: 2050, y: 1420, banner: '#2050d0' },
+    farm: { x: 1250, y: 1500, resource: '#e8d040' },
+    wood: { x: 1950, y: 950, resource: '#7a4a20' },
+  };
+  function city(x, y, banner) {
+    w.fillStyle = '#8a7a66'; w.beginPath(); w.arc(x, y, 34, 0, 7); w.fill();
+    w.fillStyle = '#5b4b3a';
+    for (let k = 0; k < 7; k++) w.fillRect(x - 26 + k * 7, y - 20 + (k % 3) * 9, 10, 14);
+    w.fillStyle = banner; w.fillRect(x + 4, y - 44, 16, 11);
+    w.fillStyle = '#333'; w.fillRect(x + 2, y - 46, 2, 30);
+  }
+  for (const [k, p] of Object.entries(places)) {
+    if (p.banner) city(p.x, p.y, p.banner);
+    else { w.fillStyle = p.resource; for (let i = 0; i < 5; i++) { w.beginPath(); w.arc(p.x + i * 7 - 14, p.y + (i % 2) * 6, 8, 0, 7); w.fill(); } }
+  }
+  for (let i = 0; i < 40; i++) city(rand() * WW, rand() * WH, rand() < 0.3 ? '#d01818' : '#ddd');  // other cities
+
+  // ---------- state
+  let cam = { x: 1750 - W / 2, y: 1250 - H / 2 };
+  let attack = false, menu = false, frozen = false, t0 = performance.now();
+  const marches = [];
+  const clouds = Array.from({ length: 7 }, () => ({ x: rand() * WW, y: rand() * WH, r: 60 + rand() * 90, v: 4 + rand() * 6 }));
+  const noise = document.createElement('canvas'); noise.width = 256; noise.height = 256;
+  { const n = noise.getContext('2d'), d = n.createImageData(256, 256);
+    for (let i = 0; i < d.data.length; i += 4) { const v = rand() * 255; d.data[i] = d.data[i + 1] = d.data[i + 2] = v; d.data[i + 3] = 255; }
+    n.putImageData(d, 0, 0); }
+
+  function addMarch(from, to, color, opts = {}) {
+    const m = { from, to, color, start: performance.now(), dur: opts.duration || 600000 };
+    marches.push(m); return marches.length - 1;
+  }
+  // background traffic: other players marching far from the watched city
+  function randomTraffic() {
+    const ax = rand() * WW, ay = rand() * WH;
+    const far = Math.hypot(ax - places.enemy.x, ay - places.enemy.y) > 300;
+    if (far && !params.has('notraffic')) {
+      addMarch({ x: ax, y: ay }, { x: ax + (rand() - 0.5) * 700, y: ay + (rand() - 0.5) * 700 },
+               rand() < 0.5 ? '#f0f0f0' : '#3070ff', { duration: 15000 + rand() * 20000 });
+    }
+  }
+  for (let i = 0; i < 25; i++) randomTraffic();
+  setInterval(randomTraffic, 1500);
+
+  // ---------- drawing
+  function draw(now) {
+    if (frozen) return requestAnimationFrame(draw);
+    const t = (now - t0) / 1000;
+    ctx.drawImage(world, -cam.x, -cam.y);
+    // marches
+    for (let i = marches.length - 1; i >= 0; i--) {
+      const m = marches[i], p = (now - m.start) / m.dur;
+      if (p >= 1) { marches.splice(i, 1); continue; }
+      const fx = m.from.x - cam.x, fy = m.from.y - cam.y, tx = m.to.x - cam.x, ty = m.to.y - cam.y;
+      ctx.save();
+      ctx.strokeStyle = m.color; ctx.lineWidth = 3; ctx.setLineDash([14, 7]); ctx.lineDashOffset = -t * 30;
+      ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(tx, ty); ctx.stroke();
+      ctx.restore();
+      const px = fx + (tx - fx) * p, py = fy + (ty - fy) * p;   // troop icon
+      ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(px, py, 9, 0, 7); ctx.fill();
+      ctx.fillStyle = m.color; ctx.beginPath(); ctx.arc(px, py, 6, 0, 7); ctx.fill();
+    }
+    // clouds drifting
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    for (const c of clouds) {
+      const x = (c.x + t * c.v) % WW - cam.x, y = c.y - cam.y;
+      ctx.beginPath(); ctx.ellipse(x, y, c.r, c.r * 0.55, 0, 0, 7); ctx.fill();
+    }
+    // HUD (fixed to the screen)
+    ctx.fillStyle = 'rgba(20,20,30,0.85)'; ctx.fillRect(0, 0, W, 46);
+    ctx.fillStyle = '#e0c060'; ctx.font = '18px sans-serif';
+    ctx.fillText('Power 1,234,567    Food 2.1M  Wood 1.8M  Stone 900K  Gold 300K', 70, 29);
+    ctx.fillStyle = '#c33'; ctx.beginPath(); ctx.arc(30, 70, 26, 0, 7); ctx.fill();   // avatar
+    ctx.fillStyle = 'rgba(20,20,30,0.85)'; ctx.fillRect(0, H - 70, W, 70);
+    for (let i = 0; i < 7; i++) { ctx.fillStyle = '#887755'; ctx.fillRect(W - 80 - i * 85, H - 62, 70, 54); }
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(W - 230, 60, 220, 160);  // minimap
+    // menu covering the map
+    if (menu) { ctx.fillStyle = '#3b2a1a'; ctx.fillRect(W * 0.1, H * 0.08, W * 0.8, H * 0.84);
+      ctx.fillStyle = '#eee'; ctx.font = '30px sans-serif'; ctx.fillText('Alliance', W * 0.45, H * 0.2); }
+    // under attack: pulsing red edges
+    if (attack) {
+      const a = 0.65 + 0.3 * Math.sin(t * 6), e = Math.min(W, H) * 0.08;
+      const edges = [[0, 0, W, e, 0, 0, 0, e], [0, H - e, W, e, 0, H, 0, H - e],
+                     [0, 0, e, H, 0, 0, e, 0], [W - e, 0, e, H, W, 0, W - e, 0]];
+      for (const [x, y, ww, hh, gx0, gy0, gx1, gy1] of edges) {
+        const g = ctx.createLinearGradient(gx0, gy0, gx1, gy1);
+        g.addColorStop(0, `rgba(235,20,20,${a})`); g.addColorStop(1, 'rgba(235,20,20,0)');
+        ctx.fillStyle = g; ctx.fillRect(x, y, ww, hh);
+      }
+    }
+    // video-stream noise
+    ctx.globalAlpha = 0.05; ctx.drawImage(noise, -(Math.random() * 200 | 0), -(Math.random() * 200 | 0), W + 256, H + 256);
+    ctx.globalAlpha = 1;
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+
+  // ---------- control panel for tests
+  const P = n => (typeof n === 'string' ? places[n] : n);
+  window.sim = {
+    screenPos: name => [Math.round(P(name).x - cam.x), Math.round(P(name).y - cam.y)],
+    march: (from, to, color = '#e02020', ms) => addMarch(P(from), P(to), color, { duration: ms }),
+    marchAngle: (deg, len, color = '#f0f0f0', ms) => {
+      const f = places.enemy, r = deg * Math.PI / 180;
+      return addMarch(f, { x: f.x + Math.cos(r) * len, y: f.y + Math.sin(r) * len }, color, { duration: ms });
+    },
+    // someone else's march that passes right through his city area
+    passBy: (deg, len, color = '#f0f0f0', ms) => {
+      const f = places.enemy, r = deg * Math.PI / 180;
+      return addMarch({ x: f.x - Math.cos(r) * len, y: f.y - Math.sin(r) * len },
+                      { x: f.x + Math.cos(r) * len, y: f.y + Math.sin(r) * len }, color, { duration: ms });
+    },
+    clearMarches: () => { marches.length = 0; },
+    attack: on => { attack = !!on; },
+    menu: on => { menu = !!on; },
+    freeze: on => { frozen = !!on; },
+    pan: (dx, dy) => { cam.x += dx; cam.y += dy; },
+    places,
+  };
+
+  // scripted scenario for the command-line test:  index.html#scenario=attack
+  const sc = params.get('scenario');
+  if (sc === 'attack') setTimeout(() => sim.attack(true), +(params.get('after') || 4000));
+  if (sc === 'march') setTimeout(() => sim.march('enemy', 'home'), +(params.get('after') || 4000));
+})();
+</script>
+</body>
+</html>

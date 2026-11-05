@@ -6,3 +6,7 @@ calibration.png
 debug/
 .venv/
 .pytest_cache/
+setup.yaml
+rokwatch.log
+chrome-profile/
+recordings/
