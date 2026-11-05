@@ -119,6 +119,15 @@ def test_troop_panel(name, texts):
     assert max(xs) - min(xs) < 10
 
 
+@pytest.mark.parametrize("name", ALL)
+def test_troop_panel_without_counter(name, texts):
+    # if OCR misses the "3/3" counter, the troops are still found
+    no_counter = [t for t in texts[name] if not t.text.replace(" ", "").startswith("3/")]
+    used, total, slots = screen.troop_panel(load(name), no_counter)
+    assert used is None
+    assert [s.state for s in slots][:3] == ["gathering"] * 3
+
+
 def test_recall_button_and_location(texts):
     t = texts["recall_panel"]
     btn = screen.find_text(t, r"^RECALL$")

@@ -301,20 +301,26 @@ class TroopSlot:
 
 def troop_panel(frame: np.ndarray, texts: list[Text]):
     """Your armies in the column on the right (under the 'N/M' counter).
-    Returns (used, total, [TroopSlot]) or None if the panel isn't visible."""
+    Returns (used, total, [TroopSlot]) or None if the panel isn't visible.
+    used/total are None when the 'N/M' counter couldn't be read."""
     h, w = frame.shape[:2]
     anchor = None
     for t in texts:
-        m = re.fullmatch(r"(\d)/(\d)", t.text.replace(" ", ""))
-        if m and t.box[0] > w * 0.8:
+        # "3/3"; OCR sometimes reads the slash as 1, l, I or |
+        m = re.fullmatch(r"(\d)[/|lI1／](\d)", t.text.replace(" ", ""))
+        if m and t.box[0] > w * 0.8 and t.box[1] < h * 0.4:
             anchor = (t, int(m.group(1)), int(m.group(2)))
             break
-    if not anchor:
-        return None
-    t, used, total = anchor
-    cx = t.center[0]
-    x0, x1 = int(cx - 0.07 * h), int(min(w, cx + 0.07 * h))
-    y0, y1 = t.box[1] + t.box[3], int(h * 0.82)
+    if anchor:
+        t, used, total = anchor
+        cx = t.center[0]
+        x0, x1 = int(cx - 0.07 * h), int(min(w, cx + 0.07 * h))
+        y0, y1 = t.box[1] + t.box[3], int(h * 0.82)
+    else:
+        # counter not read: look for the badge column at the right edge anyway
+        used = total = None
+        x0, x1 = int(w - 0.3 * h), w
+        y0, y1 = int(h * 0.15), int(h * 0.82)
     hsv = cv2.cvtColor(frame[y0:y1, x0:x1], cv2.COLOR_BGR2HSV)
     r_lo, r_hi = 0.009 * h, 0.019 * h
     slots = []
@@ -345,4 +351,6 @@ def troop_panel(frame: np.ndarray, texts: list[Text]):
     slots = dedup
     out = [TroopSlot(i, c, (int(c[0] - 0.027 * h), int(c[1] - 0.034 * h)), st)
            for i, (c, st) in enumerate(slots)]
+    if not anchor and len(out) < 2:
+        return None  # not convincing without the counter
     return used, total, out
