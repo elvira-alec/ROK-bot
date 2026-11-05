@@ -46,6 +46,17 @@ class Sighting:
     far_end: tuple          # screen point of the end away from the site
     heading: float          # degrees on screen, from the site toward the far end
     toward: str | None = None   # name of one of your sites it points at (if known)
+    army_at: float | None = None  # where the army icon is: 0 = at the site, 1 = far end
+
+
+@dataclass
+class Track:
+    """One march line seen at a site, followed across visits."""
+    heading: float
+    first: float
+    last: float
+    army_at: float | None = None
+    direction: str | None = None   # "leaving" / "returning" (or "coming" / "going" at your spots)
 
 
 class ActivityLog:
@@ -110,7 +121,8 @@ class Patrol:
         self.looks = int(p.get("looks_per_site", 2))
         self.axes = np.array(p["axes"], float) if p.get("axes") else None  # tiles per pixel
         self.activity = ActivityLog(self.log_path)
-        self._seen: dict[str, list] = {}       # site -> [(heading, time)]
+        self._seen: dict[str, list] = {}       # chat coords already logged
+        self._tracks: dict[str, list] = {}     # site -> [Track]
         self._troops = None
         self._last_recall = 0.0
 
@@ -122,6 +134,33 @@ class Patrol:
             seen.append((heading, now))
         self._seen[key] = seen
         return fresh
+
+    def _track(self, key, s: "Sighting", now):
+        """Find (or start) the track for this line. Returns (track, is_new)."""
+        tracks = [t for t in self._tracks.get(key, []) if now - t.last < self.repeat]
+        self._tracks[key] = tracks
+        for t in tracks:
+            if _hdiff(t.heading, s.heading) < 15:
+                t.last = now
+                return t, False
+        t = Track(s.heading, now, now, s.army_at)
+        tracks.append(t)
+        return t, True
+
+    def _direction(self, site, track: "Track", s: "Sighting"):
+        """Compare where the army icon is now with last visit. Returns the newly
+        worked-out direction (once), else None."""
+        if s.army_at is None:
+            return None
+        before, track.army_at = track.army_at, s.army_at
+        if before is None or track.direction or abs(s.army_at - before) < 0.015:
+            return None
+        away = s.army_at > before
+        if site.kind == "enemy":
+            track.direction = "leaving" if away else "returning"
+        else:
+            track.direction = "going" if away else "coming"
+        return track.direction
 
     def _toward(self, site: Site, heading_deg: float):
         """Which of your sites does a march leaving `site` in this screen direction point at?
@@ -161,17 +200,36 @@ class Patrol:
         for frame in frames:
             h, w = frame.shape[:2]
             centre = (w / 2, h / 2)
+            armies = screen.find_army_icons(frame)
             for ln in screen.find_march_lines(frame):
-                if ln.color == "green" and site.kind == "mine":
-                    continue  # your own / alliance marches to your own spots
+                if ln.color == "green":
+                    # Yours or your alliance's: going to your own spots, or you
+                    # attacking him. Never his march.
+                    continue
                 if not ln.end_near(centre, self.radius * h):
                     continue
-                far = ln.p2 if math.dist(ln.p1, centre) < math.dist(ln.p2, centre) else ln.p1
+                near = ln.p1 if math.dist(ln.p1, centre) < math.dist(ln.p2, centre) else ln.p2
+                far = ln.p2 if near == ln.p1 else ln.p1
                 hd = _heading(centre, far)
                 if any(_hdiff(hd, o.heading) < 10 for o in out):
                     continue
-                out.append(Sighting(site, ln, far, hd, self._toward(site, hd)))
+                out.append(Sighting(site, ln, far, hd, self._toward(site, hd),
+                                    self._army_along(ln, near, far, armies, h)))
         return out
+
+    @staticmethod
+    def _army_along(ln, near, far, armies, h):
+        """Position (0..1 from the site end) of an army icon sitting on the line."""
+        a, b = np.array(near, float), np.array(far, float)
+        ab = b - a
+        L2 = float(ab @ ab)
+        best = None
+        for c in armies:
+            if ln.distance_to(c) > 0.03 * h or not L2:
+                continue
+            t = float(np.clip((np.array(c, float) - a) @ ab / L2, 0, 1))
+            best = t if best is None else best
+        return best
 
     def visit(self, site: Site, now=None) -> list[Alert]:
         now = time.time() if now is None else now
@@ -191,33 +249,48 @@ class Patrol:
             frames.append(view.frame)
         self._check_troops(view, alerts)
         for s in self.sightings(site, frames):
-            if not self._new(site.name, s.heading, now):
-                continue
-            color = {"white": "", "red": "red (hostile) ", "green": "alliance "}[s.line.color]
+            track, is_new = self._track(site.name, s, now)
+            moved = self._direction(site, track, s)
+            color = {"white": "", "red": "red (hostile) "}.get(s.line.color, "")
+            img = None
             if site.kind == "enemy":
                 where = f" toward {s.toward}" if s.toward else ""
-                self.activity.add(site.name, "enemy", "march",
-                                  f"{color}line heading {s.heading:.0f}deg{where}")
-                img = self._snapshot(view.frame, "enemy-march", [s.line])
-                if s.toward:
-                    alerts.append(Alert(f"enemy-{now}-{s.heading:.0f}",
-                                        "ENEMY MARCH HEADING YOUR WAY",
-                                        f"{site.name}: march line toward {s.toward}.",
-                                        urgent=True, image=img, cooldown=False))
-                    alerts += self._maybe_recall(s.toward)
-                else:
-                    alerts.append(Alert(f"enemy-{now}-{s.heading:.0f}", "He has troops moving",
-                                        f"{color}march line at {site.name} (leaving or "
-                                        f"coming back).", image=img, cooldown=False))
+                if is_new:
+                    self.activity.add(site.name, "enemy", "march",
+                                      f"{color}line heading {s.heading:.0f}deg{where}")
+                    img = self._snapshot(view.frame, "enemy-march", [s.line])
+                    if s.toward:
+                        alerts.append(Alert(f"enemy-{now}-{s.heading:.0f}",
+                                            "ENEMY MARCH HEADING YOUR WAY",
+                                            f"{site.name}: march line toward {s.toward}.",
+                                            urgent=True, image=img, cooldown=False))
+                        alerts += self._maybe_recall(s.toward)
+                    else:
+                        alerts.append(Alert(f"enemy-{now}-{s.heading:.0f}",
+                                            "He has troops moving",
+                                            f"{color}march line at {site.name}. Checking if "
+                                            f"it's leaving or coming back.", image=img,
+                                            cooldown=False))
+                if moved:
+                    self.activity.add(site.name, "enemy", moved, f"heading {s.heading:.0f}deg{where}")
+                    if moved == "leaving":
+                        img = img or self._snapshot(view.frame, "enemy-leaving", [s.line])
+                        alerts.append(Alert(f"leave-{now}-{s.heading:.0f}",
+                                            "He sent troops OUT" + (f" toward {s.toward}" if s.toward else ""),
+                                            f"The army is moving away from {site.name}.",
+                                            urgent=bool(s.toward), image=img, cooldown=False))
             else:
-                self.activity.add(site.name, "mine", "incoming",
-                                  f"{color}line from heading {s.heading:.0f}deg")
-                img = self._snapshot(view.frame, "incoming", [s.line])
-                alerts.append(Alert(f"incoming-{site.name}-{now}", "MARCH COMING AT YOUR SPOT",
-                                    f"A {color}march line ends at {site.name} "
-                                    f"({site.x},{site.y}).", urgent=True, image=img,
-                                    cooldown=False))
-                alerts += self._maybe_recall(site.name)
+                if is_new:
+                    self.activity.add(site.name, "mine", "incoming",
+                                      f"{color}line from heading {s.heading:.0f}deg")
+                    img = self._snapshot(view.frame, "incoming", [s.line])
+                    alerts.append(Alert(f"incoming-{site.name}-{now}", "MARCH COMING AT YOUR SPOT",
+                                        f"A {color}march line ends at {site.name} "
+                                        f"({site.x},{site.y}).", urgent=True, image=img,
+                                        cooldown=False))
+                    alerts += self._maybe_recall(site.name)
+                if moved:
+                    self.activity.add(site.name, "mine", moved, f"heading {s.heading:.0f}deg")
         for c in coords_in_chat(view.texts):
             if self._new(f"chat-{c}", 0, now):
                 self.activity.add("chat", "info", "coords_posted", f"{c[0]},{c[1]}")

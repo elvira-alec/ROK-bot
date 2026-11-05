@@ -18,7 +18,8 @@
   const ctx = cv.getContext('2d');
   const img = n => { const i = new Image(); i.src = 'real/' + n + '.png'; return i; };
   const A = { grass: img('grass'), panel: img('panel'), recall: img('recall_button'),
-              city: img('enemy_city_icon'), res: img('resource_icon') };
+              city: img('city_tower'), res: img('resource_icon'), army: img('army_icon') };
+  const owner = { enemy: '[P83L]JONH WICK', city: '[JONS]IronAR' };
 
   // map tile -> screen pixel mapping (deliberately not a plain grid)
   const M = [[24, 10], [-8, 20]];
@@ -77,18 +78,23 @@
     for (const [name, [tx, ty]] of Object.entries(state.sites)) {
       const [x, y] = toScreen(tx, ty);
       if (x < -100 || y < -100 || x > W + 100 || y > H + 100) continue;
-      const im = name === 'enemy' || name === 'city' ? A.city : A.res;
+      const im = owner[name] ? A.city : A.res;
       if (im.complete) ctx.drawImage(im, x - im.width / 2, y - im.height / 2);
+      if (owner[name]) {
+        ctx.font = '11px Arial'; const tw = ctx.measureText(owner[name]).width;
+        ctx.fillStyle = 'rgba(30,30,30,0.75)'; ctx.fillRect(x - tw / 2 - 6, y + 22, tw + 12, 14);
+        ctx.fillStyle = name === 'city' ? '#7dff7d' : '#ddd'; ctx.fillText(owner[name], x - tw / 2, y + 33);
+      }
     }
     // marches: dotted line over the whole route, army icon part way along
     for (const m of state.marches) {
       const p = toScreen(...m.from), q = toScreen(...m.to);
       dotted(p, q, m.color, t);
-      const k = Math.min(0.95, m.progress + (t - m.t0) * 0.002);
+      // Other players' armies show as the grey diamond. (Your own army icon isn't
+      // known yet, so green marches get none.)
+      const k = Math.max(0.02, Math.min(0.98, m.progress + (t - m.t0) * m.speed));
       const ax = p[0] + (q[0] - p[0]) * k, ay = p[1] + (q[1] - p[1]) * k;
-      ctx.save(); ctx.translate(ax, ay); ctx.rotate(Math.PI / 4);
-      ctx.fillStyle = '#556'; ctx.fillRect(-11, -11, 22, 22); ctx.strokeStyle = '#222'; ctx.strokeRect(-11, -11, 22, 22);
-      ctx.restore();
+      if (m.color !== 'green' && A.army.complete) ctx.drawImage(A.army, ax - A.army.width / 2, ay - A.army.height / 2);
     }
     // HUD
     const cb = coordBar();
@@ -195,9 +201,10 @@
 
   window.sim = {
     state,
-    march: (from, to, color = 'white', progress = 0.3) => {
+    // speed: fraction of the route per second (negative = coming back toward `from`)
+    march: (from, to, color = 'white', progress = 0.3, speed = 0.004) => {
       const P = v => (typeof v === 'string' ? state.sites[v] : v);
-      state.marches.push({ from: P(from), to: P(to), color, progress, t0: performance.now() / 1000 });
+      state.marches.push({ from: P(from), to: P(to), color, progress, speed, t0: performance.now() / 1000 });
     },
     clear: () => { state.marches.length = 0; },
     ready: () => Object.values(A).every(i => i.complete && i.naturalWidth > 0),

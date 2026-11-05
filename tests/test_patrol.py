@@ -127,3 +127,29 @@ def test_activity_report(tmp_path):
                     "2026-11-06 21:06:00,camp,mine,incoming,x\n")
     rep = activity_report(str(path))
     assert "3 over 2 day(s)" in rep and "Most active around: 04:00" in rep
+
+
+def test_your_attack_on_him_is_not_his_march(game, tmp_path):
+    # green = you / alliance. A green line into his city means YOU are attacking HIM.
+    js(game, "sim.march('city', 'enemy', 'green', 0.6)")
+    p = Patrol(game, SITES, {}, str(tmp_path / "a.csv"), str(tmp_path / "d"))
+    alerts = p.visit(SITES[0])
+    assert alerts == [], [a.title for a in alerts]
+    assert ",march," not in (tmp_path / "a.csv").read_text()
+
+
+def test_tells_leaving_from_returning(game, tmp_path):
+    js(game, "sim.march('enemy', 'camp', 'white', 0.08, 0.012)")     # going out
+    js(game, "sim.march('enemy', [120, 400], 'white', 0.3, -0.012)")  # coming back home
+    p = Patrol(game, SITES, {}, str(tmp_path / "a.csv"), str(tmp_path / "d"))
+    first = p.visit(SITES[0])
+    assert [a.title for a in first].count("He has troops moving") == 2, [a.title for a in first]
+    time.sleep(4)
+    second = p.visit(SITES[0])
+    titles = [a.title for a in second]
+    assert titles == ["He sent troops OUT"], titles
+    log = (tmp_path / "a.csv").read_text()
+    assert ",leaving," in log and ",returning," in log, log
+    # once worked out, it isn't reported again
+    time.sleep(2)
+    assert p.visit(SITES[0]) == []

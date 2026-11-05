@@ -53,6 +53,21 @@ def test_works_at_other_sizes():
 
 
 @pytest.mark.parametrize("name", ALL)
+def test_army_icon(name):
+    # Other players' armies are a grey diamond, only in the zoomed-out view.
+    img = load(name)
+    found = screen.find_army_icons(img)
+    if name == "march_simple_view":
+        assert len(found) == 1 and abs(found[0][0] - 1540) < 15 and abs(found[0][1] - 621) < 15
+        small = screen.find_army_icons(cv2.resize(img, None, fx=0.5, fy=0.5))
+        assert len(small) == 1
+        line = screen.find_march_lines(img)[0]
+        assert line.distance_to(found[0]) < 15  # it sits on its march line
+    else:
+        assert found == []
+
+
+@pytest.mark.parametrize("name", ALL)
 def test_red_territory_border_is_not_an_attack(name):
     det = AttackAlertDetector()
     img = load(name)

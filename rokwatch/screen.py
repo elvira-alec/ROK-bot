@@ -253,6 +253,42 @@ def _merge_lines(lines, H):
     return out
 
 
+# ---------------------------------------------------------------- army icons
+
+def find_army_icons(frame: np.ndarray) -> list[tuple]:
+    """Other players' armies on the zoomed-out map: a grey-lavender diamond with
+    a white troop symbol. Returns centre points."""
+    H = frame.shape[0]
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    fill = cv2.inRange(hsv, np.array((95, 12, 120), np.uint8), np.array((130, 60, 215), np.uint8))
+    glyph = cv2.inRange(hsv, np.array((0, 0, 215), np.uint8), np.array((180, 40, 255), np.uint8))
+    m = cv2.morphologyEx(fill | glyph, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+    n, labels, stats, cents = cv2.connectedComponentsWithStats(m)
+    s = H / 1320.0
+    lo, hi = 45 * s, 110 * s
+    out = []
+    for i in range(1, n):
+        x, y, w, h, a = stats[i]
+        if not (lo <= w <= hi and lo <= h <= hi and 0.75 < w / h < 1.33):
+            continue
+        comp = (labels[y:y + h, x:x + w] == i).astype(np.uint8)
+        filled = cv2.morphologyEx(comp, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+        area = filled.sum() / float(w * h)
+        if not 0.38 <= area <= 0.66:      # a diamond fills about half its box
+            continue
+        # the four corners of the box are empty for a diamond
+        k = max(2, int(0.2 * min(w, h)))
+        corners = [filled[:k, :k], filled[:k, -k:], filled[-k:, :k], filled[-k:, -k:]]
+        if max(c.mean() for c in corners) > 0.25:
+            continue
+        # needs both the grey fill and the white symbol
+        f = fill[y:y + h, x:x + w][comp > 0].mean() / 255
+        g = glyph[y:y + h, x:x + w][comp > 0].mean() / 255
+        if f > 0.35 and g > 0.05:
+            out.append((int(cents[i][0]), int(cents[i][1])))
+    return out
+
+
 # ---------------------------------------------------------------- your troops
 
 @dataclass
