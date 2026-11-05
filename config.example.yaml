@@ -1,0 +1,72 @@
+# Copy this file to config.yaml, then run:  python -m rokwatch
+# The first run walks you through setup and fills in the screen positions for you (game_area, enemy_city, home).
+
+# The page where you play Rise of Kingdoms in the browser
+# (for example the BlueStacks X "Play on Cloud" page for RoK).
+game_url: "https://www.bluestacks.com/apps/strategy/rise-of-kingdoms-on-pc.html"
+
+# Where the browser keeps your login, so you only sign in once.
+browser_profile: "./browser-profile"
+
+# Browser size. Keep it the same after calibrating, or positions shift.
+viewport: [1600, 900]
+
+# How often to screenshot the game.
+check_every_seconds: 3
+
+notify:
+  # Install the free "ntfy" app on your phone and subscribe to this topic.
+  # Pick something long and random so nobody else can read your alerts.
+  ntfy_topic: "rok-alerts-change-me-8f3k2"
+  ntfy_server: "https://ntfy.sh"
+  # Optional: a Discord channel webhook URL to post alerts to as well.
+  discord_webhook: ""
+  # Don't repeat the same alert more often than this.
+  cooldown_seconds: 90
+
+# Part of the page that shows the game, as [x, y, width, height].
+# null = use the whole page.
+game_area: null
+
+# 1) Alert when YOU are attacked (red flashing screen edges / warning icon).
+attack_alert:
+  enabled: true
+  # How thick the screen edge strip is, as a fraction of the screen.
+  edge_width: 0.04
+  # Alert when this fraction of the edge strip is red.
+  red_fraction: 0.30
+  # Must be seen this many checks in a row (stops false alarms).
+  confirm_frames: 2
+  # Screenshots of the warning icon. Drop crops in templates/attack/ to use them.
+  template_dir: "templates/attack"
+  template_threshold: 0.82
+
+# 2) Watch the bully's city for marches heading your way.
+#    Park the map so you can see his city and your city (or your gathering area).
+enemy_watch:
+  enabled: true
+  # Screen position of his city and of your city/area, inside game_area.
+  enemy_city: [0, 0]
+  home: [0, 0]
+  # A march line counts as "his" if it starts within this many pixels of his city.
+  start_radius: 70
+  # How close to "straight at you" the march must point to count as heading your way.
+  angle_tolerance_degrees: 35
+  # Ignore lines shorter than this (pixels).
+  min_line_length: 35
+  # Also tell you about his marches going somewhere else.
+  report_other_marches: true
+  # March line colors to look for, as HSV ranges (OpenCV: H 0-180, S/V 0-255).
+  # Hostile marches show red; other players' marches are pale/white.
+  line_colors:
+    red:
+      - [[0, 120, 120], [10, 255, 255]]
+      - [[170, 120, 120], [180, 255, 255]]
+    white:
+      - [[0, 0, 215], [180, 40, 255]]
+
+# Warn you if the game picture stops changing (disconnected / logged out).
+frozen_alert_minutes: 5
+
+# Save a screenshot for every alert into debug/ (useful for tuning).
+save_alert_screenshots: true
