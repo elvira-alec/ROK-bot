@@ -183,10 +183,10 @@ def test_no_search_bar_when_closed(name, texts):
 def test_search_bar_when_label_and_number_merge(texts):
     # OCR sometimes reads "#:" and "4183" as one piece: "#:4183"
     t = texts["search_bar_marching"]
-    k = next(x for x in t if x.text.strip() == "4183")
-    h = next(x for x in t if x.text.strip() == "#:")
-    merged = [x for x in t if x not in (k, h)] + [
-        screen.Text("#:4183", (h.box[0], k.box[1], k.box[0] + k.box[2] - h.box[0], k.box[3]), 0.8)]
+    k = next(x for x in t if x.text.strip().endswith("4183") and x.box[1] > 150)
+    left = k.box[0] + k.box[2] - 173   # "#:" label starts ~173px left of the number's end
+    merged = [x for x in t if x is not k and x.text.strip() != "#:"] + [
+        screen.Text("#:4183", (left, k.box[1], k.box[0] + k.box[2] - left, k.box[3]), 0.8)]
     bar = screen.find_search_bar(load("search_bar_marching"), merged)
     assert bar and 1340 < bar.x_field[0] < 1520 and 1620 < bar.y_field[0] < 1820
 
