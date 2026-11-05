@@ -2,6 +2,10 @@
 
     python -m rokwatch                  watch the game (first run does setup)
     python -m rokwatch --calibrate      redo setup
+    python -m rokwatch --patrol         visit his city + your spots in turn (full bot)
+    python -m rokwatch --look / --goto X Y / --recall-now / --learn-axes
+                                        try one action on your screen
+    python -m rokwatch --report         when is he active? (from activity.csv)
     python -m rokwatch --test-notify    send a test alert to your phone
     python -m rokwatch --record         also save every screenshot to recordings/
     python -m rokwatch --check recordings      (or a.png b.png ...)
@@ -170,6 +174,15 @@ def main(argv=None):
     ap.add_argument("--check", nargs="+", metavar="PNG", help="run checks on screenshots")
     ap.add_argument("--record", nargs="?", const="recordings", metavar="FOLDER",
                     help="save every screenshot (to replay later with --check)")
+    ap.add_argument("--patrol", action="store_true",
+                    help="visit each site in patrol.sites in turn (the full bot)")
+    ap.add_argument("--goto", nargs=2, type=int, metavar=("X", "Y"),
+                    help="test: jump the map to X Y")
+    ap.add_argument("--recall-now", action="store_true", help="test: recall all gathering troops")
+    ap.add_argument("--learn-axes", action="store_true",
+                    help="work out the map directions (lets patrol tell where marches go)")
+    ap.add_argument("--look", action="store_true", help="test: print what the bot sees now")
+    ap.add_argument("--report", action="store_true", help="when is he active? (from the log)")
     ap.add_argument("--max-checks", type=int, help=argparse.SUPPRESS)  # for tests
     args = ap.parse_args(argv)
     setup_logging()
@@ -183,6 +196,17 @@ def main(argv=None):
             n.send("test", "RoK watcher test", "If you see this, alerts work.")
         elif args.check:
             check_images(cfg, args.config, args.check)
+        elif args.report:
+            from .patrol import activity_report
+            print(activity_report(cfg.get("patrol", {}).get("activity_log", "activity.csv")))
+        elif args.goto or args.recall_now or args.learn_axes or args.look:
+            from .commands import one_off
+            what = ("goto" if args.goto else "recall" if args.recall_now else
+                    "axes" if args.learn_axes else "look")
+            return one_off(cfg, args.config, what, args.goto, not args.no_prompt)
+        elif args.patrol or cfg.get("patrol", {}).get("enabled"):
+            from .commands import run_patrol
+            run_patrol(cfg, not args.no_prompt, args.max_checks)
         else:
             run(cfg, args.config, args.calibrate, not args.no_prompt, args.max_checks,
                 args.record)

@@ -1,0 +1,129 @@
+"""Patrol, coordinate jumps and recall, against the real-UI test page (tests/fake_game/rok.html)."""
+
+import time
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+pytest.importorskip("playwright")
+pytest.importorskip("rapidocr_onnxruntime")
+
+from rokwatch.browser import GameBrowser  # noqa: E402
+from rokwatch.game import Game  # noqa: E402
+from rokwatch.patrol import Patrol, Site, activity_report, learn_axes  # noqa: E402
+from test_end_to_end import EXE  # noqa: E402
+
+PAGE = (Path(__file__).resolve().parent / "fake_game/rok.html").as_uri()
+SITES = [Site("his city", 162, 374, "enemy"), Site("logging camp", 205, 424, "mine"),
+         Site("stone", 200, 410, "mine")]
+
+
+@pytest.fixture(scope="module")
+def browser(tmp_path_factory):
+    with GameBrowser(PAGE, str(tmp_path_factory.mktemp("p")), (1434, 660), headless=True,
+                     executable_path=EXE) as gb:
+        yield gb
+
+
+@pytest.fixture
+def game(browser):
+    browser.page.reload()
+    browser.page.wait_for_function("window.sim && sim.ready()")
+    time.sleep(0.3)
+    return Game(browser, settle=0.4)
+
+
+def js(game, expr):
+    return game.b.page.evaluate(expr)
+
+
+def test_reads_camera_and_jumps(game):
+    assert game.look().camera == (4183, 209, 418)
+    assert game.goto(162, 374)
+    assert js(game, "[sim.state.cam.x, sim.state.cam.y]") == [162, 374]
+    assert js(game, "sim.state.dialog") is None  # search box closed again
+
+
+def test_zoom_out(game):
+    assert not game.look().simple
+    assert game.zoom_out_to_simple()
+    assert js(game, "sim.state.simple")
+
+
+def test_troop_panel_and_location(game):
+    used, total, slots = game.troops()
+    assert (used, total) == (3, 3)
+    gathering = [s for s in slots if s.state == "gathering"]
+    assert len(gathering) == 3
+    assert game.troop_location(gathering[1]) == (200, 410)
+    game.close_popups()
+
+
+def test_recall_only_threatened(game):
+    report = game.recall_all(near=[(205, 424)])
+    assert report == ["troop 1: recalled"], report
+    assert js(game, "sim.state.troops.map(t => t.recalled)") == [True, False, False]
+
+
+def test_recall_everything(game):
+    report = game.recall_all()
+    assert report == [f"troop {i}: recalled" for i in (1, 2, 3)], report
+    assert js(game, "sim.state.troops.every(t => t.recalled)")
+
+
+def test_learn_axes(game):
+    m = learn_axes(game, px=240)
+    truth = np.linalg.inv(np.array([[24, 10], [-8, 20]], float))
+    assert m is not None and np.allclose(m, truth, atol=0.012), (m, truth)
+
+
+def test_patrol_his_march_without_axes(game, tmp_path):
+    js(game, "sim.march('enemy', 'camp', 'white', 0.2)")
+    p = Patrol(game, SITES, {}, str(tmp_path / "a.csv"), str(tmp_path / "d"))
+    alerts = p.visit(SITES[0])
+    assert [a.title for a in alerts] == ["He has troops moving"], [a.title for a in alerts]
+    assert "march" in (tmp_path / "a.csv").read_text()
+    # same march next visit: no repeat
+    assert [a for a in p.visit(SITES[0]) if "moving" in a.title] == []
+
+
+def test_patrol_his_march_toward_you_recalls(game, tmp_path):
+    js(game, "sim.march('enemy', 'camp', 'white', 0.2)")
+    axes = np.linalg.inv(np.array([[24, 10], [-8, 20]], float)).tolist()
+    p = Patrol(game, SITES, {"axes": axes, "auto_recall": True}, str(tmp_path / "a.csv"),
+               str(tmp_path / "d"))
+    alerts = p.visit(SITES[0])
+    titles = [a.title for a in alerts]
+    assert "ENEMY MARCH HEADING YOUR WAY" in titles, titles
+    assert "logging camp" in alerts[titles.index("ENEMY MARCH HEADING YOUR WAY")].message
+    rec = [a for a in alerts if a.title == "Auto-recall"]
+    assert rec and "recalled" in rec[0].message, titles
+    assert js(game, "sim.state.troops.map(t => t.recalled)") == [True, False, False]
+
+
+def test_patrol_incoming_at_your_spot(game, tmp_path):
+    js(game, "sim.march('enemy', 'camp', 'white', 0.5); sim.march('city', 'stone', 'green', 0.5)")
+    p = Patrol(game, SITES, {}, str(tmp_path / "a.csv"), str(tmp_path / "d"))
+    camp = p.visit(SITES[1])
+    assert [a.title for a in camp] == ["MARCH COMING AT YOUR SPOT"], [a.title for a in camp]
+    stone = p.visit(SITES[2])  # only your own green march goes there
+    assert stone == [], [a.title for a in stone]
+
+
+def test_patrol_quiet(game, tmp_path):
+    js(game, "sim.march([100, 300], [140, 320], 'white', 0.5)")  # someone far away
+    p = Patrol(game, SITES, {}, str(tmp_path / "a.csv"), str(tmp_path / "d"))
+    alerts = p.round()
+    assert alerts == [], [a.title for a in alerts]
+
+
+def test_activity_report(tmp_path):
+    path = tmp_path / "a.csv"
+    path.write_text("time_utc,site,kind,event,detail\n"
+                    "2026-11-05 04:10:00,his city,enemy,march,x\n"
+                    "2026-11-05 04:40:00,his city,enemy,march,x\n"
+                    "2026-11-06 21:05:00,his city,enemy,march,x\n"
+                    "2026-11-06 21:06:00,camp,mine,incoming,x\n")
+    rep = activity_report(str(path))
+    assert "3 over 2 day(s)" in rep and "Most active around: 04:00" in rep

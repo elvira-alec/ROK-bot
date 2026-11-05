@@ -101,3 +101,48 @@ def test_command_line_march_record_and_replay(tmp_path):
     assert replay.returncode == 0, replay.stdout + replay.stderr
     assert "ENEMY MARCH HEADING YOUR WAY" in replay.stdout, replay.stdout
     assert "map line-up" in replay.stdout
+
+
+def test_command_line_patrol_alerts_and_recalls(tmp_path):
+    """--patrol: finds his march, works out it's heading for your camp, alerts, recalls."""
+    pytest.importorskip("rapidocr_onnxruntime")
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    got = []
+
+    class Inbox(BaseHTTPRequestHandler):
+        def _rec(self):
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            got.append(self.headers.get("Title", ""))
+            self.send_response(200)
+            self.end_headers()
+        do_POST = do_PUT = _rec
+
+        def log_message(self, *a):
+            pass
+
+    srv = HTTPServer(("127.0.0.1", 0), Inbox)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    page = (ROOT / "tests/fake_game/rok.html").as_uri() + "#march=enemy,camp,white"
+    cfg = copy.deepcopy(BASE_CFG)
+    cfg.update(game_url=page, headless=True, viewport=[1434, 660],
+               browser_profile=str(tmp_path / "prof"), browser_executable=EXE or "",
+               browser_channel="", startup_wait_seconds=1)
+    cfg["notify"].update(ntfy_server=f"http://127.0.0.1:{srv.server_port}", ntfy_topic="t")
+    cfg["patrol"].update(auto_recall=True, settle_seconds=0.5, pause_between_rounds=0)
+    (tmp_path / "config.yaml").write_text(yaml.safe_dump(cfg))
+    import numpy as np
+    axes = np.linalg.inv(np.array([[24, 10], [-8, 20]], float)).round(5).tolist()
+    (tmp_path / "setup.yaml").write_text(yaml.safe_dump({"patrol": {"axes": axes}}))
+    proc = subprocess.run([sys.executable, "-m", "rokwatch", "--config", "config.yaml",
+                           "--patrol", "--no-prompt", "--max-checks", "1"], cwd=tmp_path,
+                          env={**os.environ, "PYTHONPATH": str(ROOT)},
+                          capture_output=True, text=True, timeout=300)
+    time.sleep(2)
+    srv.shutdown()
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "RoK patrol started" in got, (got, proc.stdout)
+    assert "ENEMY MARCH HEADING YOUR WAY" in got, (got, proc.stdout)
+    assert "Auto-recall" in got, (got, proc.stdout)
+    log = (tmp_path / "activity.csv").read_text()
+    assert "his city,enemy,march" in log and "auto_recall" in log, log

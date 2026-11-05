@@ -107,3 +107,37 @@ frozen_alert_minutes: 5
 
 # Save a marked-up screenshot for every alert into debug/ (sent with the alert too).
 save_alert_screenshots: true
+
+# ============================================================================
+# PATROL MODE (the full bot):  run.bat --patrol
+# Jumps between the sites below using the game's coordinate search, looks for
+# march lines at each, logs his activity, alerts you, and can recall troops.
+# Use the zoomed-out (simplified) map: it shows march lines across a wider area.
+# ============================================================================
+patrol:
+  enabled: false          # true = run.bat always patrols (no --patrol needed)
+  sites:
+    - {name: "his city", x: 162, y: 374, kind: enemy}
+    - {name: "my city", x: 209, y: 418, kind: mine}
+    - {name: "logging camp", x: 205, y: 424, kind: mine}
+  # Zoom out to the simplified map when starting.
+  zoom_out: true
+  # Seconds to wait for the map after each jump / click.
+  settle_seconds: 1.5
+  looks_per_site: 2
+  pause_between_rounds: 5
+  # How close to the middle of the screen a march line has to end to count as
+  # "at this site" (fraction of screen height).
+  site_radius: 0.09
+  same_march_minutes: 10
+  # Recall troops automatically when a march heads for one of your spots.
+  # Clicking for you is botting: higher ban risk. Off unless you turn it on.
+  auto_recall: false
+  # "threatened" = only troops at the spot under threat, "all" = every gathering troop.
+  recall_scope: "threatened"
+  activity_log: "activity.csv"
+
+# Only if jumping to coordinates doesn't work on your screen: where the X box,
+# Y box and Go button of the coordinate search are, as fractions of the game
+# screen (0-1). Example: x_field: [0.43, 0.45]
+goto_dialog: {}

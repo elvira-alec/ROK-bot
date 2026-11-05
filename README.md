@@ -1,6 +1,6 @@
 # ROK-bot: attack watcher for Rise of Kingdoms
 
-Keeps the browser version of Rise of Kingdoms open on a PC, watches it, and sends your phone a notification when:
+Keeps the browser version of Rise of Kingdoms open on a PC, watches it, and sends your phone a notification. **Simple mode** watches one map view; **patrol mode** (below) moves around the map for you. Simple mode alerts when:
 
 | Alert | When |
 |---|---|
@@ -12,6 +12,40 @@ Keeps the browser version of Rise of Kingdoms open on a PC, watches it, and send
 Every alert comes with a screenshot, with arrows drawn on the marches it saw.
 
 > **Alerts only.** It never clicks in the game or moves troops, so it's much less likely to get you banned than a bot. Any third-party tool is still against Lilith's rules, so use it at your own risk.
+
+## Patrol mode (the full bot)
+
+`run.bat --patrol` makes the bot move around the map for you, like a player checking in:
+
+1. It jumps to each site in `patrol.sites` using the game's coordinate search: his city, your city, your gathering spots.
+2. At each site it reads the screen and looks for **dotted march lines** that start or end there.
+3. **At his city:** it logs every march to `activity.csv`. If it knows the map directions (see `--learn-axes` below), it works out whether the march points at one of your spots. If so, you get an urgent alert and, with `auto_recall: true`, the bot recalls the troops there.
+4. **At your spots:** a march line ending there that isn't green (green is yours or your alliance's) triggers an urgent alert, plus a recall if that's turned on.
+5. It also reads your troop list each time and alerts you if a troop stops gathering. Attack coordinates posted in alliance chat get logged.
+
+`run.bat --report` shows **when he's active**: his march sightings by hour of day.
+
+Try each piece on your own screen first:
+
+| Command | What it does |
+|---|---|
+| `run.bat --look` | Prints what the bot sees: camera coordinates, your troops, march lines, all text |
+| `run.bat --goto 162 374` | Jumps the map to those coordinates |
+| `run.bat --learn-axes` | Drags the map a little to learn which way X/Y run on screen, so it can tell where a march is heading |
+| `run.bat --recall-now` | Recalls all gathering troops |
+
+### What's checked on real game screens and what isn't yet
+
+Checked against real screenshots (`tests/real_screens/`):
+- Reads the camera coordinates, zoomed-out vs close view, your troop list and which troops are gathering, the RECALL button, the coordinates in a troop's info box, player names, and coordinates in chat.
+- Finds white (other player) and green (alliance) dotted march lines, at different screen sizes. Trees, flowers, resource icons and red territory borders aren't mistaken for marches or attacks.
+
+Built from my best guess, not seen on a real screen yet. Send a screenshot of each if it doesn't work:
+- **The coordinate search box** (after tapping the coordinates at the top). The bot finds the X/Y boxes by their filled-in numbers. If it can't, set `goto_dialog` positions in `config.yaml`.
+- Whether **tapping a troop portrait** opens its info box with RECALL. It looks that way from your screenshot.
+- **Zooming with the mouse wheel** in the browser version.
+- How a **hostile march aimed at you** looks. Probably red dots, which are supported.
+- How the **"under attack" warning** looks.
 
 ## What you need
 

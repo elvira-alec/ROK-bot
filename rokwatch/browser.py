@@ -100,6 +100,33 @@ class GameBrowser:
         except Exception:
             return False
 
+    # ---- input. Positions are in screenshot pixels of the game area.
+    def set_area(self, area):
+        self._area = area
+
+    def _abs(self, x, y):
+        ax, ay = (self._area[0], self._area[1]) if getattr(self, "_area", None) else (0, 0)
+        return x + ax, y + ay
+
+    def click(self, x, y):
+        self.page.mouse.click(*self._abs(x, y))
+
+    def press(self, key):
+        self.page.keyboard.press(key)
+
+    def type(self, text):
+        self.page.keyboard.type(str(text), delay=60)
+
+    def wheel(self, x, y, dy):
+        self.page.mouse.move(*self._abs(x, y))
+        self.page.mouse.wheel(0, dy)
+
+    def drag(self, x0, y0, x1, y1, steps=15):
+        self.page.mouse.move(*self._abs(x0, y0))
+        self.page.mouse.down()
+        self.page.mouse.move(*self._abs(x1, y1), steps=steps)
+        self.page.mouse.up()
+
     def screenshot(self, area=None) -> np.ndarray:
         if self.page.is_closed():
             # The tab was closed: use another one (or reopen the game).
