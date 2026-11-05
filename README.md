@@ -28,7 +28,7 @@ Before the first real patrol, use **"Check it works on your screen"** in the pan
 - **Jump there** with his coordinates. The map should move to his city.
 - **Learn map directions** (once). This lets it tell whether a march from him is aimed at your spots.
 
-It needs Windows 10/11 with **Google Chrome or Microsoft Edge** (Edge comes with Windows). Nothing else to install. It's a large download (about 300 MB zipped) because it includes the text-reading engine.
+It needs Windows 10/11 with **Google Chrome or Microsoft Edge** (Edge comes with Windows). Nothing else to install. It's a large download (about 150 MB zipped, 500 MB unzipped) because it includes the text-reading engine.
 
 Windows may warn about an unknown app the first time. Click **More info → Run anyway**: the exe isn't code-signed. It's built automatically from this repo's code on GitHub, and the build log is under **Actions → windows-exe**.
 
