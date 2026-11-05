@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RoK Watcher</title>
+<style>
+  :root {
+    --bg: #0f1420; --panel: #171e2d; --panel2: #1e2739; --line: #2a3550;
+    --text: #e8ecf4; --muted: #95a1b8; --accent: #3aa0ff; --good: #35c46a;
+    --warn: #f0b429; --bad: #ef4d5a; --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: center; gap: 14px; padding: 14px 22px;
+           background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 2; }
+  header h1 { font-size: 18px; margin: 0; letter-spacing: .3px; }
+  .pill { padding: 3px 10px; border-radius: 99px; font-size: 12px; font-weight: 600;
+          background: var(--panel2); color: var(--muted); text-transform: uppercase; }
+  .pill.patrolling { background: rgba(53,196,106,.18); color: var(--good); }
+  .pill.ready { background: rgba(58,160,255,.18); color: var(--accent); }
+  .pill.opening, .pill.busy { background: rgba(240,180,41,.18); color: var(--warn); }
+  .pill.error { background: rgba(239,77,90,.18); color: var(--bad); }
+  #msg { color: var(--muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; padding: 18px 22px; max-width: 1300px; margin: 0 auto; }
+  @media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); padding: 14px 16px; } }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; min-width: 0; }
+  section h2 { font-size: 14px; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+  .step { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+          background: var(--accent); color: #fff; font-size: 12px; }
+  label { display: block; color: var(--muted); font-size: 12px; margin: 10px 0 4px; }
+  input, select { width: 100%; background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+                  border-radius: 7px; padding: 8px 10px; font: inherit; }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 7px;
+           padding: 8px 14px; font: inherit; font-weight: 600; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.go { background: var(--good); border-color: var(--good); color: #062; }
+  button.danger { background: transparent; color: var(--bad); border-color: rgba(239,77,90,.5); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+  .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+  table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+  th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px; padding: 4px 4px; }
+  td { padding: 3px 4px; }
+  td input, td select { padding: 6px 8px; }
+  td.num { width: 76px; } td.kind { width: 110px; } td.del { width: 34px; }
+  .x { background: none; border: none; color: var(--muted); font-size: 18px; padding: 0 6px; }
+  .toggle { display: flex; align-items: center; gap: 8px; margin-top: 12px; color: var(--text); font-size: 13px; }
+  .toggle input { width: auto; }
+  .alerts { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; max-height: 300px; overflow: auto; }
+  .alerts li { background: var(--panel2); border-left: 3px solid var(--accent); border-radius: 6px; padding: 8px 10px; }
+  .alerts li.urgent { border-left-color: var(--bad); }
+  .alerts b { display: block; }
+  .alerts small { color: var(--muted); }
+  pre { background: #0b0f18; border: 1px solid var(--line); border-radius: 7px; padding: 10px; margin: 0;
+        max-height: 260px; overflow: auto; font: 12px/1.45 ui-monospace, Consolas, monospace; color: #c9d3e6; white-space: pre-wrap; }
+  .view img { width: 100%; border-radius: 7px; border: 1px solid var(--line); margin-top: 10px; }
+  .facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin-top: 10px; font-size: 13px; }
+  .facts span:nth-child(odd) { color: var(--muted); }
+  .wide { grid-column: 1 / -1; }
+  .empty { color: var(--muted); font-style: italic; }
+</style>
+</head>
+<body>
+<header>
+  <h1>RoK Watcher</h1>
+  <span class="pill" id="phase">stopped</span>
+  <span id="msg">Loading...</span>
+</header>
+<main>
+  <section>
+    <h2><span class="step">1</span> Alerts and game page</h2>
+    <label for="game_url">Page where you play Rise of Kingdoms in the browser</label>
+    <input id="game_url" placeholder="https://...">
+    <label for="ntfy_topic">ntfy topic (subscribe to the same name in the ntfy phone app)</label>
+    <input id="ntfy_topic" placeholder="rok-alerts-something-random">
+    <label for="discord_webhook">Discord webhook (optional)</label>
+    <input id="discord_webhook" placeholder="https://discord.com/api/webhooks/...">
+    <div class="row">
+      <button class="primary" onclick="save()">Save</button>
+      <button onclick="post('test_alert')">Send test alert</button>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="step">2</span> Places to watch</h2>
+    <table>
+      <thead><tr><th>Name</th><th>X</th><th>Y</th><th>Type</th><th></th></tr></thead>
+      <tbody id="sites"></tbody>
+    </table>
+    <div class="row">
+      <button onclick="addSite()">+ Add place</button>
+      <button class="primary" onclick="save()">Save</button>
+    </div>
+    <p class="hint"><b>Enemy</b> = his city (marches there get logged). <b>Mine</b> = your city and gathering spots (any march heading there alerts you).</p>
+    <label class="toggle"><input type="checkbox" id="auto_recall"> Recall my troops automatically when a march heads for them <span class="hint">(clicks in the game: higher ban risk)</span></label>
+    <label for="recall_scope">Which troops to recall</label>
+    <select id="recall_scope">
+      <option value="threatened">Only the ones at the threatened spot</option>
+      <option value="all">All gathering troops</option>
+    </select>
+  </section>
+
+  <section>
+    <h2><span class="step">3</span> Run it</h2>
+    <div class="row">
+      <button class="primary" id="b-open" onclick="post('open')">Open game window</button>
+      <button class="go" id="b-start" onclick="post('start')">Start patrol</button>
+      <button class="danger" id="b-stop" onclick="post('stop')">Stop</button>
+    </div>
+    <p class="hint">Open the game window, log in, go to the map and close any menus. Then press Start patrol. Leave both windows open.</p>
+    <div class="facts" id="progress"></div>
+  </section>
+
+  <section>
+    <h2>Recent alerts</h2>
+    <ul class="alerts" id="alerts"><li class="empty">No alerts yet</li></ul>
+  </section>
+
+  <section class="view">
+    <h2>Check it works on your screen</h2>
+    <div class="row">
+      <button onclick="post('look')">What do you see?</button>
+      <input id="gx" placeholder="X" style="width:80px"> <input id="gy" placeholder="Y" style="width:80px">
+      <button onclick="jump()">Jump there</button>
+      <button onclick="post('axes')" title="Drags the map a little to learn which way X and Y run">Learn map directions</button>
+      <button class="danger" onclick="if (confirm('Recall all gathering troops now?')) post('recall')">Recall all now</button>
+    </div>
+    <div class="facts" id="look"><span class="empty">Press "What do you see?" with the game open</span></div>
+    <img id="view" alt="" hidden>
+  </section>
+
+  <section>
+    <h2>When is he active?</h2>
+    <pre id="report">-</pre>
+  </section>
+
+  <section class="wide">
+    <h2>Log</h2>
+    <pre id="log"></pre>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+let sites = [];
+
+async function post(cmd, body = {}) {
+  await fetch('/api/' + cmd, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  refresh();
+}
+function jump() { post('goto', { x: $('gx').value, y: $('gy').value }); }
+
+function siteRow(s, i) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td><input value="${esc(s.name)}" data-k="name"></td>
+    <td class="num"><input value="${esc(s.x)}" data-k="x" inputmode="numeric"></td>
+    <td class="num"><input value="${esc(s.y)}" data-k="y" inputmode="numeric"></td>
+    <td class="kind"><select data-k="kind"><option value="enemy">Enemy</option><option value="mine">Mine</option></select></td>
+    <td class="del"><button class="x" title="Remove">&times;</button></td>`;
+  tr.querySelector('select').value = s.kind === 'enemy' ? 'enemy' : 'mine';
+  tr.querySelectorAll('[data-k]').forEach(el => el.oninput = () => { sites[i][el.dataset.k] = el.value; });
+  tr.querySelector('.x').onclick = () => { sites.splice(i, 1); drawSites(); };
+  return tr;
+}
+function drawSites() { const tb = $('sites'); tb.innerHTML = ''; sites.forEach((s, i) => tb.appendChild(siteRow(s, i))); }
+function addSite() { sites.push({ name: '', x: '', y: '', kind: 'mine' }); drawSites(); }
+
+async function loadSettings() {
+  const s = await (await fetch('/api/settings')).json();
+  for (const k of ['game_url', 'ntfy_topic', 'discord_webhook']) $(k).value = s[k] || '';
+  $('auto_recall').checked = !!s.auto_recall;
+  $('recall_scope').value = s.recall_scope === 'all' ? 'all' : 'threatened';
+  sites = (s.sites || []).map(x => ({ ...x }));
+  drawSites();
+}
+async function save() {
+  await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ game_url: $('game_url').value, ntfy_topic: $('ntfy_topic').value,
+      discord_webhook: $('discord_webhook').value, sites, auto_recall: $('auto_recall').checked,
+      recall_scope: $('recall_scope').value }) });
+  await loadSettings(); refresh();
+}
+
+function facts(el, pairs) { el.innerHTML = pairs.map(([k, v]) => `<span>${esc(k)}</span><span>${esc(v)}</span>`).join(''); }
+let lastLook = null;
+async function refresh() {
+  let st;
+  try { st = await (await fetch('/api/state')).json(); } catch { $('msg').textContent = 'Panel not running'; return; }
+  $('phase').textContent = st.phase; $('phase').className = 'pill ' + st.phase; $('msg').textContent = st.message;
+  const running = st.phase === 'patrolling';
+  $('b-start').disabled = running || st.phase === 'stopped' || st.phase === 'opening';
+  $('b-stop').disabled = !running;
+  facts($('progress'), [['Rounds done', st.round], ['Last place checked', st.last_site || '-']]);
+  $('alerts').innerHTML = st.alerts.length ? st.alerts.map(a =>
+    `<li class="${a.urgent ? 'urgent' : ''}"><b>${esc(a.title)}</b>${esc(a.message)}<br><small>${esc(a.time)}</small></li>`).join('')
+    : '<li class="empty">No alerts yet</li>';
+  $('report').textContent = st.report;
+  const lg = $('log'), atEnd = lg.scrollTop + lg.clientHeight >= lg.scrollHeight - 5;
+  lg.textContent = st.log.join('\n'); if (atEnd) lg.scrollTop = lg.scrollHeight;
+  if (st.look && st.look.time !== lastLook) {
+    lastLook = st.look.time; const L = st.look;
+    facts($('look'), [['Camera at', L.camera ? `#${L.camera[0]} X:${L.camera[1]} Y:${L.camera[2]}` : 'not found'],
+      ['Zoom', { close: 'close 3D view', patrol: 'patrol level (good)', far: 'too far out' }[L.zoom] || L.zoom],
+      ['Your troops', L.troops ? L.troops.join(', ') : 'troop list not found'],
+      ['March lines', L.marches.length ? L.marches.join('; ') : 'none'], ['Other armies', L.armies]]);
+    $('view').src = '/view.png?' + Date.now(); $('view').hidden = false;
+  }
+}
+loadSettings(); refresh(); setInterval(refresh, 1500);
+</script>
+</body>
+</html>

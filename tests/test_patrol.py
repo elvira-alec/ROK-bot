@@ -136,6 +136,7 @@ def test_activity_report(tmp_path):
                     "2026-11-06 21:06:00,camp,mine,incoming,x\n")
     rep = activity_report(str(path))
     assert "3 over 2 day(s)" in rep and "Most active around: 04:00" in rep
+    assert "  21:00" in rep and "  13:00" not in rep  # only hours he was seen
 
 
 def test_your_attack_on_him_is_not_his_march(game, tmp_path):

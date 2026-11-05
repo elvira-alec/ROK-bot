@@ -51,15 +51,15 @@ def test_falls_back_when_chrome_missing(tmp_path, monkeypatch):
 
     def fake_launch(self, channel):
         calls.append(channel)
-        if channel == "chrome":
-            raise RuntimeError("Chromium distribution 'chrome' is not found")
+        if channel in ("chrome", "msedge"):
+            raise RuntimeError(f"Chromium distribution '{channel}' is not found")
         self.executable_path = EXE
         return real(self, None)
 
     monkeypatch.setattr(GameBrowser, "_launch", fake_launch)
     with GameBrowser(PAGE, str(tmp_path / "p"), VIEW, headless=True, channel="chrome") as gb:
         assert gb.screenshot() is not None
-    assert calls == ["chrome", None]
+    assert calls == ["chrome", "msedge", None]
 
 
 def test_command_line_march_record_and_replay(tmp_path):

@@ -11,3 +11,6 @@ rokwatch.log
 chrome-profile/
 recordings/
 activity.csv
+build/
+dist/
+*.spec

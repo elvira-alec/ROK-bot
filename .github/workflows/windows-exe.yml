@@ -1,0 +1,42 @@
+name: windows-exe
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -r requirements.txt pyinstaller
+      - name: Build RoKWatcher.exe
+        run: python build_exe.py
+      - name: Test the exe (self-test + control panel driving the test game in Edge)
+        run: python tests/exe_smoke.py dist/RoKWatcher msedge
+      - name: Zip
+        shell: pwsh
+        run: |
+          Remove-Item dist/RoKWatcher/config.yaml -ErrorAction SilentlyContinue
+          Remove-Item dist/RoKWatcher/setup.yaml, dist/RoKWatcher/rokwatch.log -ErrorAction SilentlyContinue
+          Remove-Item dist/RoKWatcher/debug, dist/RoKWatcher/browser-profile -Recurse -ErrorAction SilentlyContinue
+          Compress-Archive -Path dist/RoKWatcher -DestinationPath RoKWatcher-windows.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RoKWatcher-windows
+          path: RoKWatcher-windows.zip
+      - name: Publish as the "latest" download
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest -y --cleanup-tag || true
+          gh release create latest RoKWatcher-windows.zip --target "$GITHUB_SHA" --prerelease \
+            --title "RoKWatcher for Windows (latest)" \
+            --notes "Download RoKWatcher-windows.zip, unzip it, double-click RoKWatcher.exe. Built from $GITHUB_SHA."

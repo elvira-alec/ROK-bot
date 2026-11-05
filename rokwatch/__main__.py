@@ -164,6 +164,27 @@ def check_images(cfg, cfg_path, paths):
     print("Marked-up screenshots for any alerts are in debug/check/")
 
 
+def selftest(path):
+    """Read one screenshot with everything the bot uses and print it as JSON."""
+    import json
+    from . import screen
+    frame = cv2.imread(path)
+    if frame is None:
+        print(json.dumps({"error": f"can't read {path}"}))
+        return 1
+    texts = screen.read_text(frame)
+    cam = screen.camera_coords(frame, texts)
+    panel = screen.troop_panel(frame, texts)
+    print(json.dumps({
+        "camera": list(cam[:3]) if cam else None,
+        "zoom": screen.zoom_level(frame, texts),
+        "troops": [s.state for s in panel[2]] if panel else None,
+        "lines": [ln.color for ln in screen.find_march_lines(frame)],
+        "recall_button": bool(screen.find_text(texts, r"^RECALL$")),
+    }))
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Rise of Kingdoms attack watcher")
     ap.add_argument("--config", default=config.DEFAULT_PATH)
@@ -183,9 +204,17 @@ def main(argv=None):
                     help="work out the map directions (lets patrol tell where marches go)")
     ap.add_argument("--look", action="store_true", help="test: print what the bot sees now")
     ap.add_argument("--report", action="store_true", help="when is he active? (from the log)")
+    ap.add_argument("--panel", action="store_true", help="open the control panel")
+    ap.add_argument("--selftest", metavar="PNG", help=argparse.SUPPRESS)  # checks the build
     ap.add_argument("--max-checks", type=int, help=argparse.SUPPRESS)  # for tests
     args = ap.parse_args(argv)
     setup_logging()
+    if args.selftest:
+        return selftest(args.selftest)
+    if args.panel:
+        from .panel import serve
+        serve(args.config)
+        return 0
     cfg = config.load(args.config)
     try:
         if args.test_notify:

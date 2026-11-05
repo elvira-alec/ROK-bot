@@ -13,6 +13,25 @@ Every alert comes with a screenshot, with arrows drawn on the marches it saw.
 
 > **Alerts only.** It never clicks in the game or moves troops, so it's much less likely to get you banned than a bot. Any third-party tool is still against Lilith's rules, so use it at your own risk.
 
+## Quick start (Windows, no installing)
+
+1. On GitHub, open **Releases → "RoKWatcher for Windows (latest)"** and download **`RoKWatcher-windows.zip`**.
+2. Unzip it anywhere, open the folder, and double-click **`RoKWatcher.exe`**. A black window opens (leave it open), then the **control panel** opens in your browser.
+3. In the panel:
+   1. **Alerts and game page:** paste the page where you play RoK in the browser and your ntfy topic. Press **Save**, then **Send test alert**. Your phone should buzz.
+   2. **Places to watch:** add his city as **Enemy** (e.g. 162, 374), and your city and gathering spots as **Mine**. Press **Save**.
+   3. **Run it:** press **Open game window**. Log in, go to the map, and close any menus. Then press **Start patrol**.
+4. Leave the game window and the black window open. Alerts go to your phone, and the panel shows them too.
+
+Before the first real patrol, use **"Check it works on your screen"** in the panel:
+- **What do you see?** It should show your camera coordinates, your troops (gathering / marching) and any march lines.
+- **Jump there** with his coordinates. The map should move to his city.
+- **Learn map directions** (once). This lets it tell whether a march from him is aimed at your spots.
+
+It needs Windows 10/11 with **Google Chrome or Microsoft Edge** (Edge comes with Windows). Nothing else to install. It's a large download (about 300 MB zipped) because it includes the text-reading engine.
+
+Windows may warn about an unknown app the first time. Click **More info → Run anyway**: the exe isn't code-signed. It's built automatically from this repo's code on GitHub, and the build log is under **Actions → windows-exe**.
+
 ## Patrol mode (the full bot)
 
 `run.bat --patrol` makes the bot move around the map for you, like a player checking in:
@@ -56,7 +75,7 @@ Not seen on a real screen yet. Send a screenshot if it doesn't work:
 - **Google Chrome** (recommended: it plays the game's video stream best)
 - The free **ntfy** app on your phone ([Android](https://play.google.com/store/apps/details?id=io.heckel.ntfy) / [iPhone](https://apps.apple.com/app/ntfy/id1625396347)). Discord and Telegram also work.
 
-## Setup (Windows)
+## Setup without the exe (Python)
 
 1. Download this repo (green **Code** button → **Download ZIP**) and unzip it.
 2. Double-click **`install.bat`**. When it opens `config.yaml`, change:

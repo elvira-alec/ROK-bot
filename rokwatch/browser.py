@@ -55,14 +55,19 @@ class GameBrowser:
                 self._ctx = self._browser.contexts[0]
                 self.page = self._find_game_tab()
             else:
-                try:
-                    self._ctx = self._launch(self.channel)
-                except Exception as e:
-                    if not self.channel or self.executable_path:
-                        raise
-                    log.warning("Couldn't start %s (%s). Using the built-in browser.",
-                                self.channel, str(e).splitlines()[0])
-                    self._ctx = self._launch(None)
+                # Chrome if you have it, else Edge (comes with Windows), else the
+                # browser Playwright downloaded.
+                tries = [self.channel] if self.executable_path or not self.channel else \
+                    list(dict.fromkeys([self.channel, "msedge", None]))
+                for i, ch in enumerate(tries):
+                    try:
+                        self._ctx = self._launch(ch)
+                        break
+                    except Exception as e:
+                        if i == len(tries) - 1:
+                            raise
+                        log.warning("Couldn't start %s (%s). Trying %s.", ch,
+                                    str(e).splitlines()[0], tries[i + 1] or "the built-in browser")
                 self.page = self._ctx.pages[0] if self._ctx.pages else self._ctx.new_page()
                 if self.page.url in ("", "about:blank"):
                     self.page.goto(self.url)

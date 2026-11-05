@@ -86,11 +86,15 @@ def activity_report(path="activity.csv") -> str:
     hours = Counter(int(r["time_utc"][11:13]) for r in his)
     days = sorted({r["time_utc"][:10] for r in his})
     top = max(hours.values())
-    lines = [f"His march sightings: {len(his)} over {len(days)} day(s). "
-             f"Last: {his[-1]['time_utc']} UTC", "Hour (UTC)  activity"]
-    for h in range(24):
-        n = hours.get(h, 0)
-        lines.append(f"  {h:02d}:00   {'#' * round(20 * n / top):<20} {n}")
+    out = his[-1]
+    lines = [f"His march sightings: {len(his)} over {len(days)} day(s).",
+             f"Last seen: {out['time_utc']} UTC", "", "Hour (UTC)  activity"]
+    for h in sorted(hours):  # only the hours he was seen
+        n = hours[h]
+        lines.append(f"  {h:02d}:00   {'#' * max(1, round(20 * n / top)):<20} {n}")
+    quiet = [h for h in range(24) if h not in hours]
+    if quiet and len(days) >= 3:
+        lines.append(f"Never seen at: {', '.join(f'{h:02d}' for h in quiet)} (UTC hours)")
     busiest = ", ".join(f"{h:02d}:00" for h, _ in hours.most_common(3))
     lines.append(f"Most active around: {busiest} UTC")
     return "\n".join(lines)

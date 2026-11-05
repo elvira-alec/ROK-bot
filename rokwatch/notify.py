@@ -60,7 +60,10 @@ class Notifier:
                     fn(title, message, urgent, image_path)
                     break
                 except Exception as e:
-                    log.error("%s send failed (try %d): %s", name, attempt + 1, e)
+                    if attempt == 2:
+                        reason = ("can't reach the internet / the alert server"
+                                  if isinstance(e, requests.ConnectionError) else str(e)[:120])
+                        log.error("Couldn't send the alert to %s (%s). Tried 3 times.", name, reason)
                     time.sleep(2 * (attempt + 1))
 
     def _ntfy(self, title, message, urgent, image_path):
