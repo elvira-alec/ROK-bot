@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import cv2
+import numpy as np
 import pytest
 
 from rokwatch import screen
@@ -188,3 +189,36 @@ def test_search_bar_when_label_and_number_merge(texts):
         screen.Text("#:4183", (h.box[0], k.box[1], k.box[0] + k.box[2] - h.box[0], k.box[3]), 0.8)]
     bar = screen.find_search_bar(load("search_bar_marching"), merged)
     assert bar and 1340 < bar.x_field[0] < 1520 and 1620 < bar.y_field[0] < 1820
+
+
+@pytest.mark.parametrize("name", ALL)
+def test_red_border_on_screen_edge_never_alerts(name):
+    """Slide a window over the screenshot so the red alliance borders land on the
+    screen edges (top, bottom, sides, corners) in every position."""
+    img = load(name)
+    H, W = img.shape[:2]
+    h, w = int(H * 0.7), int(W * 0.7)
+    for y in range(0, H - h + 1, 20):
+        for x in range(0, W - w + 1, 60):
+            crop = img[y:y + h, x:x + w]
+            det = AttackAlertDetector()
+            assert all(det.check(crop) is None for _ in range(3)), (name, x, y)
+
+
+def test_border_hugging_two_edges_is_not_an_attack():
+    # worst case: thick red territory lines along the top and left edges (a corner)
+    img = load("search_bar_marching").copy()
+    img[:60, :] = (40, 20, 220)
+    img[:, :60] = (40, 20, 220)
+    det = AttackAlertDetector()
+    assert all(det.check(img) is None for _ in range(5))
+
+
+def test_real_attack_glow_still_alerts():
+    # red glow on all four edges over a real map
+    img = load("search_bar_marching").copy()
+    e = 60
+    for sl in (np.s_[:e, :], np.s_[-e:, :], np.s_[:, :e], np.s_[:, -e:]):
+        img[sl] = (img[sl] * 0.3 + np.array((30, 20, 230)) * 0.7).astype(np.uint8)
+    det = AttackAlertDetector()
+    assert [det.check(img) for _ in range(3)][-1] is not None

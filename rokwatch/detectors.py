@@ -32,7 +32,7 @@ class AttackAlertDetector:
 
     def __init__(self, edge_width=0.04, red_fraction=0.30, confirm_frames=2,
                  template_dir=None, template_threshold=0.82, min_jump=0.15,
-                 steady_frames=10):
+                 steady_frames=10, side_min=0.15):
         self.edge_width = edge_width
         self.red_fraction = red_fraction
         self.confirm_frames = confirm_frames
@@ -45,9 +45,18 @@ class AttackAlertDetector:
                 if img is not None:
                     self.templates.append((p.name, img))
         self.steady_frames = steady_frames
+        self.side_min = side_min
         self._streak = 0
         self._normal = None  # usual red level at the edges
         self._recent = []    # red levels during the current hit streak
+
+    def side_red_fractions(self, frame: np.ndarray):
+        """Share of red in the top, bottom, left and right edge strips."""
+        h, w = frame.shape[:2]
+        e = max(2, int(min(h, w) * self.edge_width))
+        mask = color_mask(frame, RED_RANGES) > 0
+        return [float(mask[:e, :].mean()), float(mask[-e:, :].mean()),
+                float(mask[:, :e].mean()), float(mask[:, -e:].mean())]
 
     def edge_red_fraction(self, frame: np.ndarray) -> float:
         h, w = frame.shape[:2]
@@ -72,7 +81,11 @@ class AttackAlertDetector:
         """Return a reason string when an attack is detected, else None."""
         frac = self.edge_red_fraction(frame)
         normal = self._normal if self._normal is not None else 0.0
-        edge_hit = frac >= self.red_fraction and frac - normal >= self.min_jump
+        # The attack warning glows on ALL four edges. A red alliance territory
+        # border is a line that can hug one or two edges at most, so it can't pass.
+        sides = self.side_red_fractions(frame)
+        edge_hit = (frac >= self.red_fraction and frac - normal >= self.min_jump
+                    and min(sides) >= self.side_min)
         tpl = self.match_template(frame) if self.templates else None
         hit = edge_hit or tpl is not None
         # Red that sits perfectly still for a while is part of the map (e.g.
