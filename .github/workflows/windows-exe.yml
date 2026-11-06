@@ -22,6 +22,9 @@ jobs:
       - name: Zip
         shell: pwsh
         run: |
+          # the smoke test's Edge window may still hold files in the profile folder
+          Stop-Process -Name msedge, RoKWatcher -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 3
           Remove-Item dist/RoKWatcher/config.yaml -ErrorAction SilentlyContinue
           Remove-Item dist/RoKWatcher/setup.yaml, dist/RoKWatcher/rokwatch.log -ErrorAction SilentlyContinue
           Remove-Item dist/RoKWatcher/debug, dist/RoKWatcher/browser-profile -Recurse -ErrorAction SilentlyContinue
