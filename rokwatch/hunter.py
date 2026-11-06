@@ -330,7 +330,7 @@ class Hunter:
         out = []
         for lb in labels:
             body = (lb.pos[0], lb.pos[1] + int(0.03 * H))   # troops are just under the name
-            tile = to_tile(cam, self.axes, body, frame.shape)
+            tile = to_tile(cam, self.axes_close, body, frame.shape)
             # the name floats a little above (and to the side of) the troops: check a
             # few points under it for a march line
             probes = [(lb.pos[0], lb.pos[1] + int(k * H)) for k in (0.0, 0.03, 0.06)]
@@ -341,7 +341,7 @@ class Hunter:
             moving = bool(line and gap(line) < 0.06 * H)
             ends = None
             if moving:
-                ends = tuple(to_tile(cam, self.axes, p, frame.shape) for p in (line.p1, line.p2))
+                ends = tuple(to_tile(cam, self.axes_close, p, frame.shape) for p in (line.p1, line.p2))
             out.append(ArmySeen(tile, moving, ends, time.time(), owner="him"))
         return out
 
@@ -355,10 +355,10 @@ class Hunter:
         lines = [ln for ln in screen.find_march_lines(frame) if ln.color != "green"]
         out = []
         for d, kind in screen.find_map_icons(frame):
-            tile = to_tile(cam, self.axes, d, frame.shape)
+            tile = to_tile(cam, self.axes_out, d, frame.shape)
             line = min(lines, key=lambda ln: ln.distance_to(d), default=None)
             moving = bool(line and line.distance_to(d) < 0.05 * H)  # the icon hides the first dots
-            ends = (tuple(to_tile(cam, self.axes, p, frame.shape) for p in (line.p1, line.p2))
+            ends = (tuple(to_tile(cam, self.axes_out, p, frame.shape) for p in (line.p1, line.p2))
                     if moving else None)
             out.append(ArmySeen(tile, moving, ends, time.time(), kind=kind))
         return out
