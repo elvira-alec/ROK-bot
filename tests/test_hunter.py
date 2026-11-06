@@ -183,7 +183,7 @@ def test_zoomed_out_finds_diamonds_and_checks_names(game, tmp_path):
              "sim.farmer('[XX]Someone Else', [166, 384])")
     h = hunter(game, tmp_path, method="zoomed_out")
     assert h.round() == []
-    owners = sorted((a.owner, round(a.tile[0]), round(a.tile[1])) for a in h.tracker.armies)
+    owners = sorted((a.owner or "?", round(a.tile[0]), round(a.tile[1])) for a in h.tracker.armies)
     assert [o[0] for o in owners] == ["him", "him", "other"], owners
     his = [a for a in h.tracker.summary() if a["his"]]
     assert len(his) == 2

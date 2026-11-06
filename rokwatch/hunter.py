@@ -356,7 +356,7 @@ class Hunter:
             def gap(ln):
                 return min(ln.distance_to(q) for q in probes)
             line = min(lines, key=gap, default=None)
-            moving = bool(line and gap(line) < 0.06 * H)
+            moving = bool(line and gap(line) < 0.075 * H)
             ends = None
             if moving:
                 ends = tuple(to_tile(cam, self.axes_close, p, frame.shape) for p in (line.p1, line.p2))
@@ -402,15 +402,19 @@ class Hunter:
             if not self.game.goto(int(round(a.tile[0])), int(round(a.tile[1]))):
                 continue
             self.game.wait()
-            v = self.game.look()
-            H, W = v.frame.shape[:2]
-            centre = (W / 2, H / 2)
-            near = [lb for lb in screen.find_player(v.frame, v.texts, self.name)
-                    if lb.kind == "army" and math.dist(lb.pos, centre) < 0.3 * H]
-            if near:
-                a.owner = "him"
-            elif self._other_army_label_near(v, centre, H):
-                a.owner = "other"
+            for attempt in range(2):          # a name can be missed on one look
+                v = self.game.look()
+                H, W = v.frame.shape[:2]
+                centre = (W / 2, H / 2)
+                near = [lb for lb in screen.find_player(v.frame, v.texts, self.name)
+                        if lb.kind == "army" and math.dist(lb.pos, centre) < 0.3 * H]
+                if near:
+                    a.owner = "him"
+                elif self._other_army_label_near(v, centre, H):
+                    a.owner = "other"
+                if a.owner:
+                    break
+                self.game.wait(0.6)
             done += 1
             log.info("hunt: army #%d at %.0f,%.0f is %s", a.id, a.tile[0], a.tile[1],
                      a.owner or "unclear")
