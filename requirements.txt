@@ -3,4 +3,6 @@ opencv-python>=4.9
 numpy>=1.26
 pyyaml>=6.0
 requests>=2.31
-rapidocr_onnxruntime>=1.3
+# pinned: these read the screen. The bot is tuned and tested on these exact versions.
+rapidocr_onnxruntime==1.2.3
+onnxruntime==1.29.0
