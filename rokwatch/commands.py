@@ -13,9 +13,31 @@ from .patrol import Patrol, Site, learn_axes
 log = logging.getLogger("rokwatch")
 
 
+def game_area(gb, cfg):
+    """The game picture on the page. Set game_area in config.yaml to override;
+    otherwise it's found automatically (the page may have menus around it)."""
+    if cfg.get("game_area"):
+        return cfg["game_area"]
+    finder = getattr(gb, "find_game_area", None)
+    if not finder:
+        return None
+    try:
+        area, clipped = finder()
+    except Exception as e:
+        log.warning("Couldn't look for the game picture: %s", e)
+        return None
+    if area is None:
+        log.warning("Couldn't find the game picture on the page; using the whole window.")
+        return None
+    if clipped:
+        log.warning("The game picture doesn't fit in the browser window. Make the window "
+                    "bigger (or maximise it) so the bot can see the whole map.")
+    return area
+
+
 def make_game(gb, cfg) -> Game:
     p = cfg.get("patrol", {})
-    return Game(gb, cfg.get("game_area"), float(p.get("settle_seconds", 1.5)),
+    return Game(gb, game_area(gb, cfg), float(p.get("settle_seconds", 1.5)),
                 cfg.get("goto_dialog") or {})
 
 

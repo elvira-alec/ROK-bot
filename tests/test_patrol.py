@@ -109,6 +109,9 @@ def test_patrol_his_march_toward_you_recalls(game, tmp_path):
     rec = [a for a in alerts if a.title == "Auto-recall"]
     assert rec and "recalled" in rec[0].message, titles
     assert js(game, "sim.state.troops.map(t => t.recalled)") == [True, False, False]
+    # the bot recalled it itself, so no "stopped gathering" warning about its own action
+    later = p.visit(SITES[1])
+    assert "One of your troops stopped gathering" not in [a.title for a in later]
 
 
 def test_patrol_incoming_at_your_spot(game, tmp_path):

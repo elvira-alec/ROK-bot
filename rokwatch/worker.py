@@ -117,12 +117,27 @@ class Worker:
         self._set("ready", "Game window open. Log in, go to the map, close menus, "
                            "then press Start patrol.")
 
+    def _area_warning(self) -> str:
+        """A message if the game picture can't be found or doesn't fit, else ''."""
+        try:
+            found, clipped = self.gb.find_game_area()
+        except Exception:
+            return ""
+        if found is None:
+            return ("Can't find the game picture on the page (still loading?). "
+                    "Using the whole window.")
+        if clipped:
+            return ("The game picture doesn't fit in the window: make the browser window "
+                    "bigger (or maximise it), then try again.")
+        return ""
+
     def _do_close(self):
         self._close()
         self._set("stopped", "Game window closed")
 
     def _do_look(self):
         game = self._game()
+        warn = self._area_warning()
         self._set("busy", "Looking at the screen...")
         from .screen import find_army_icons, find_march_lines
         v = game.look()
@@ -139,8 +154,9 @@ class Worker:
             "marches": [f"{ln.color} line, {ln.dots} dots" for ln in lines],
             "armies": len(find_army_icons(v.frame)),
             "time": time.strftime("%H:%M:%S"),
+            "area": game.area,
         }
-        self._set("ready", "Here's what I see")
+        self._set("ready", warn or "Here's what I see")
 
     def _do_goto(self, x, y):
         game = self._game()
@@ -189,6 +205,8 @@ class Worker:
         patrol = Patrol(game, sites_from(cfg), p, p.get("activity_log", "activity.csv"))
         notifier = Notifier.from_config(cfg.get("notify", {}))
         self.stop_patrol.clear()
+        if (warn := self._area_warning()):
+            log.warning(warn)
         self._set("patrolling", "Getting the right zoom...")
         if p.get("zoom_out", True) and not game.zoom_to_patrol_level():
             log.warning("Couldn't get to the patrol zoom level; carrying on as it is")

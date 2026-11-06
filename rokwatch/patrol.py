@@ -306,7 +306,9 @@ class Patrol:
             return
         used, total, slots = panel
         states = [s.state for s in slots if s.state != "scout"]
-        if self._troops is not None and states.count("gathering") < self._troops.count("gathering"):
+        recalled_by_me = time.time() - self._last_recall < 180  # we just pulled it back
+        if (self._troops is not None and not recalled_by_me
+                and states.count("gathering") < self._troops.count("gathering")):
             self.activity.add("you", "mine", "troop_state",
                               f"gathering {self._troops.count('gathering')} -> "
                               f"{states.count('gathering')}")

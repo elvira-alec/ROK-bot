@@ -79,9 +79,10 @@ class GameBrowser:
     def _find_game_tab(self):
         """In your own Chrome: use the tab showing the game, or open one."""
         pages = self._ctx.pages
+        want = self.url.split("#")[0]
         host = self.url.split("/")[2] if "//" in self.url else self.url
         for p in pages:
-            if host and host in p.url:
+            if p.url.split("#")[0] == want or (host and host in p.url):
                 return p
         page = self._ctx.new_page()
         page.goto(self.url)
@@ -97,6 +98,36 @@ class GameBrowser:
             pass
         finally:
             self._pw.stop()
+
+    def find_game_area(self):
+        """Where the game picture is on the page: the biggest <canvas> or <video>
+        (also inside frames, as cloud-gaming sites use). Returns
+        ([x, y, w, h], clipped) in page pixels, or (None, False) if not found.
+        clipped = the picture doesn't fully fit in the window."""
+        best, best_area = None, 0
+        for frame in self.page.frames:
+            try:
+                els = frame.query_selector_all("canvas, video")
+            except Exception:
+                continue
+            for el in els:
+                try:
+                    box = el.bounding_box()   # page coordinates, even inside frames
+                except Exception:
+                    box = None
+                if not box or box["width"] < 300 or box["height"] < 200:
+                    continue
+                area = box["width"] * box["height"]
+                if area > best_area:
+                    best, best_area = box, area
+        if not best:
+            return None, False
+        vw, vh = self.page.evaluate("[innerWidth, innerHeight]")
+        x0, y0 = max(0, best["x"]), max(0, best["y"])
+        x1, y1 = min(vw, best["x"] + best["width"]), min(vh, best["y"] + best["height"])
+        clipped = (x0 > best["x"] + 1 or y0 > best["y"] + 1 or
+                   x1 < best["x"] + best["width"] - 1 or y1 < best["y"] + best["height"] - 1)
+        return [int(x0), int(y0), int(x1 - x0), int(y1 - y0)], clipped
 
     @property
     def alive(self) -> bool:
