@@ -687,3 +687,95 @@ def label_kind(frame, t: Text) -> str:
                 and a > 0.45 * bw * bh and 0.05 <= dark[by:by + bh, bx:bx + bw].mean() / 255 <= 0.55):
             return "city"
     return "army"
+
+
+
+# ---------------------------------------------------------------- map icons: armies vs scouts
+
+def _dark_outline_ratio(frame, centre, size):  # (kept for reference; not used)
+    """How much of a diamond's border (just inside its outline) is dark."""
+    x, y = centre
+    r = size / 2
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    H, W = frame.shape[:2]
+    pts = []
+    for t in np.linspace(0, 1, 40, endpoint=False):
+        # walk round the diamond's four edges, a little inside the tip-to-tip size
+        k = 0.88 * r
+        corners = [(x, y - k), (x + k, y), (x, y + k), (x - k, y), (x, y - k)]
+        seg = int(t * 4)
+        f = t * 4 - seg
+        (ax, ay), (bx, by) = corners[seg], corners[seg + 1]
+        pts.append((int(ax + (bx - ax) * f), int(ay + (by - ay) * f)))
+    dark = 0
+    for px, py in pts:
+        if 0 <= px < W and 0 <= py < H:
+            win = hsv[max(0, py - 2):py + 3, max(0, px - 2):px + 3]
+            if (win[..., 2] < 95).any():
+                dark += 1
+    return dark / len(pts)
+
+
+def icon_kind(frame, c) -> str:
+    """'scout' or 'army' for a diamond at c.
+    A scout is a plain 3D pyramid: one face clearly darker than the other and each
+    face flat (measured on real screens: ~100 brightness apart, spread under 10).
+    An army is a flat diamond with a white troop symbol (spread 30+ on both halves)."""
+    H = frame.shape[0]
+    x, y = c
+    r = max(4, int(0.012 * H))                 # just the middle of the icon
+    hsv = cv2.cvtColor(frame[max(0, y - r):y + r + 1, max(0, x - r):x + r + 1], cv2.COLOR_BGR2HSV)
+    v = hsv[..., 2].astype(float)
+    hh, ww = v.shape
+    yy, xx = np.mgrid[:hh, :ww]
+    xx = xx - (x - max(0, x - r))
+    yy = yy - (y - max(0, y - r))
+    inside = (np.abs(xx) + np.abs(yy)) < r
+    left, right = v[inside & (xx < -1)], v[inside & (xx > 1)]
+    if len(left) < 5 or len(right) < 5:
+        return "army"
+    diff = abs(float(np.median(left)) - float(np.median(right)))
+    spread = max(float(left.std()), float(right.std()))
+    return "scout" if diff >= 50 and spread <= 20 else "army"
+
+
+def find_map_icons(frame: np.ndarray):
+    """Other players' marches on the zoomed-out map: [(centre, kind)], kind is
+    "army" (diamond with a troop symbol: horse, catapult, flag...) or "scout"."""
+    H = frame.shape[0]
+    s = H / 1320.0
+    found = [(c, icon_kind(frame, c)) for c in find_army_icons(frame)]
+    # armies whose symbol sticks out of the diamond (e.g. a flag) fail the diamond
+    # shape test; find those by their outline: a dark ring with light grey inside
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    W = frame.shape[1]
+    dark = cv2.inRange(hsv, np.array((0, 0, 0), np.uint8), np.array((180, 110, 150), np.uint8))
+    n, lab, st, ce = cv2.connectedComponentsWithStats(dark)
+    for i in range(1, n):
+        x, y, w, h, a = st[i]
+        if not (40 * s <= w <= 120 * s and 40 * s <= h <= 120 * s and 0.75 < w / h < 1.33):
+            continue
+        if y < 0.08 * H or y + h > 0.88 * H or x > 0.9 * W:
+            continue                          # HUD: resource bar, troop panel, chat
+        if not (0.1 <= a / (w * h) <= 0.45):
+            continue
+        cx, cy = x + w // 2, y + h // 2
+        inner = hsv[cy - h // 5:cy + h // 5, cx - w // 5:cx + w // 5]
+        if inner.size == 0 or np.median(inner[..., 2]) < 140 or np.median(inner[..., 1]) > 60:
+            continue
+        if ((inner[..., 2] > 235) & (inner[..., 1] < 30)).mean() < 0.08:
+            continue                          # needs a white symbol inside
+        if all(np.hypot(cx - f[0][0], cy - f[0][1]) > 0.5 * max(w, h) for f in found):
+            found.append(((int(cx), int(cy)), "army"))
+    return found
+
+
+def _icon_size(frame, c):
+    """Tip-to-tip size of the diamond at c (light pixels along the horizontal axis)."""
+    H = frame.shape[0]
+    x, y = c
+    hsv = cv2.cvtColor(frame[max(0, y - 2):y + 3, max(0, x - int(0.06 * H)):x + int(0.06 * H)],
+                       cv2.COLOR_BGR2HSV)
+    light = ((hsv[..., 2] > 120) & (hsv[..., 1] < 70)).any(axis=0)
+    idx = np.nonzero(light)[0]
+    return float(idx.max() - idx.min() + 1) if len(idx) else 0.05 * H

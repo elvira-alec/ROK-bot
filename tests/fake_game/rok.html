@@ -18,7 +18,7 @@
   const ctx = cv.getContext('2d');
   const img = n => { const i = new Image(); i.src = 'real/' + n + '.png'; return i; };
   const A = { grass: img('grass'), panel: img('panel'), recall: img('recall_button'),
-              city: img('city_tower'), res: img('resource_icon'), army: img('army_icon'), globe: img('globe') };
+              city: img('city_tower'), res: img('resource_icon'), army: img('army_icon'), scout: img('scout_icon'), globe: img('globe') };
   const owner = { enemy: '[P83L]JONH WICK', city: '[JONS]IronAR' };
 
   // map tile -> screen pixel mapping (deliberately not a plain grid)
@@ -109,8 +109,9 @@
       // known yet, so green marches get none.)
       const k = Math.max(0.02, Math.min(0.98, m.progress + (t - m.t0) * m.speed));
       const ax = p[0] + (q[0] - p[0]) * k, ay = p[1] + (q[1] - p[1]) * k;
+      const icon = m.kind === 'scout' ? A.scout : A.army;   // plain pyramid = scout
       if (m.owner && state.zoom === 0) troops(ax, ay, m.owner);
-      else if (m.color !== 'green' && state.zoom < 2 && A.army.complete) ctx.drawImage(A.army, ax - A.army.width / 2, ay - A.army.height / 2);
+      else if (m.color !== 'green' && state.zoom < 2 && icon.complete) ctx.drawImage(icon, ax - icon.width / 2, ay - icon.height / 2);
     }
     // armies standing still (e.g. gathering on a resource point)
     for (const f of state.farmers) {
@@ -228,9 +229,9 @@
   window.sim = {
     state,
     // speed: fraction of the route per second (negative = coming back toward `from`)
-    march: (from, to, color = 'white', progress = 0.3, speed = 0.004, owner = null) => {
+    march: (from, to, color = 'white', progress = 0.3, speed = 0.004, owner = null, kind = 'army') => {
       const P = v => (typeof v === 'string' ? state.sites[v] : v);
-      state.marches.push({ from: P(from), to: P(to), color, progress, speed, owner, t0: performance.now() / 1000 });
+      state.marches.push({ from: P(from), to: P(to), color, progress, speed, owner, kind, t0: performance.now() / 1000 });
     },
     // an army standing still at a tile (gathering), with its owner's name
     farmer: (owner, at) => { state.farmers.push({ owner, at }); },

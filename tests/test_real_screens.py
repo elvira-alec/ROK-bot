@@ -289,3 +289,27 @@ def test_scout_lines_and_diamonds():
     for name in ("scouted_simple_3", "scouted_simple_4"):
         assert len(screen.find_army_icons(load(name))) == 2
         assert any(ln.color == "white" for ln in screen.find_march_lines(load(name)))
+
+
+# ---------------------------------------------------------------- armies vs scouts on the map
+
+ICONS = {"march_simple_view": ["army"], "my_armies_simple": ["army"],
+         "scouted_simple_2": ["scout"], "scouted_simple_3": ["scout", "scout"],
+         "scouted_simple_4": ["scout", "scout"], "scouted_simple_5": ["scout"]}
+CROPS = {"army_cavalry": "army", "army_siege": "army", "army_flag": "army", "scout_plain": "scout"}
+
+
+@pytest.mark.parametrize("name", ALL)
+def test_map_icon_kinds(name):
+    found = screen.find_map_icons(load(name))
+    assert sorted(k for _, k in found) == sorted(ICONS.get(name, [])), found
+
+
+@pytest.mark.parametrize("name", sorted(CROPS))
+def test_map_icon_kinds_on_crops(name):
+    # cropped screenshots, placed on a plain background at the original size
+    crop = cv2.imread(str(DIR / "crops" / f"{name}.jpg"))
+    canvas = np.full((1320, 2868, 3), (70, 150, 110), np.uint8)
+    canvas[400:400 + crop.shape[0], 1000:1000 + crop.shape[1]] = crop
+    found = screen.find_map_icons(canvas)
+    assert [k for _, k in found] == [CROPS[name]], found

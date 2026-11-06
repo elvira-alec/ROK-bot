@@ -73,6 +73,21 @@ def test_tracker_events_in_order():
     assert [e[0] for e in ev] == ["army_out"] and ev[0][2]["target"] is None
 
 
+def test_tracker_scouts_are_not_troops():
+    tr = Tracker(CITY, SITES)
+    s0 = ArmySeen((163, 375), False, None, 0, kind="scout")
+    tr.match([s0], 0)
+    assert tr.events() == []
+    # his scout heading for your camp
+    ev = tr.update([ArmySeen((168, 381), True, (CITY, (205, 424)), 1, kind="scout")], 1)
+    assert [e[0] for e in ev] == ["scout_at"] and ev[0][2]["target"] == "logging camp"
+    # a scout doesn't make "all home" / "pulling back" happen
+    tr2 = Tracker(CITY, SITES)
+    tr2.update([ArmySeen((150, 390), False, None, 0, kind="scout"),
+                ArmySeen((180, 360), False, None, 0, kind="scout")], 0)
+    assert tr2.update([], 1) == []
+
+
 # ---------------------------------------------------------------- on the test page
 
 @pytest.fixture
@@ -178,3 +193,13 @@ def test_zoomed_out_ignores_other_players_marching(game, tmp_path):
     alerts = h.round()
     assert alerts == [], [a.title for a in alerts]       # heading for your camp, but not him
     assert [a.owner for a in h.tracker.armies] == ["other"]
+
+
+
+def test_zoomed_out_his_scout_coming(game, tmp_path):
+    js(game, f"sim.march('enemy', 'camp', 'white', 0.15, 0.002, '{NAME}', 'scout')")
+    h = hunter(game, tmp_path, method="zoomed_out")
+    alerts = h.round()
+    debug = [(a.kind, a.owner, a.tile, a.moving, a.ends) for a in h.tracker.armies]
+    assert [a.title for a in alerts] == ["HE'S SCOUTING YOU"], ([a.title for a in alerts], debug)
+    assert [a["kind"] for a in h.tracker.summary()] == ["scout"]

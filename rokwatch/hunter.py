@@ -72,6 +72,7 @@ class ArmySeen:
     ends: tuple | None          # map coordinates of both ends of its march line
     seen: float                 # time
     owner: str | None = None    # "him" when his name was read right there
+    kind: str = "army"          # "army" or "scout" (plain diamond)
 
 
 @dataclass
@@ -87,6 +88,7 @@ class Army:
     history: list = field(default_factory=list)
     alerted: set = field(default_factory=set)
     owner: str | None = None       # "him", "other", or None (not checked yet)
+    kind: str = "army"             # "army" or "scout"
     checks: int = 0                # how many times we zoomed in to read its name
 
 
@@ -152,7 +154,8 @@ class Tracker:
         unmatched = list(self.armies)
         current = []
         for s in sorted(sightings, key=lambda s: s.tile):
-            best = min(unmatched, key=lambda a: math.dist(a.tile, s.tile), default=None)
+            same = [a for a in unmatched if a.kind == getattr(s, "kind", "army")]
+            best = min(same, key=lambda a: math.dist(a.tile, s.tile), default=None)
             if best and math.dist(best.tile, s.tile) <= self.match_dist:
                 unmatched.remove(best)
                 a, prev_tile, prev_moving = best, best.tile, best.moving
@@ -163,6 +166,7 @@ class Tracker:
                 if getattr(s, "owner", None):
                     a.owner = s.owner
             a.tile, a.last_seen, a.moving, a.ends = s.tile, now, s.moving, s.ends
+            a.kind = getattr(s, "kind", "army")
             a.history.append((now, s.tile))
             if s.moving and s.ends:
                 a.direction, a.dest = self._direction(a, prev_tile, prev_moving, s)
@@ -174,10 +178,11 @@ class Tracker:
     def events(self, include=None) -> list[tuple[str, str, dict]]:
         """What changed, counting only the armies `include` accepts (default: all)."""
         include = include or (lambda a: True)
-        mine = [a for a in self.armies if include(a)]
+        his = [a for a in self.armies if include(a)]
         events = []
-        for a in mine:
-            events += self._army_events(a)
+        for a in his:
+            events += self._scout_events(a) if a.kind == "scout" else self._army_events(a)
+        mine = [a for a in his if a.kind == "army"]     # scouts don't count as troops
         home = [a for a in mine if a.direction == "home"]
         if len(home) >= 2 and self._last_home_count < 2:
             events.append(("pulling_back", f"He's pulling troops back to his city "
@@ -212,6 +217,20 @@ class Tracker:
             dest = f" (heading for about {a.dest[0]:.0f},{a.dest[1]:.0f})" if a.dest else ""
             out.append(("army_out", f"He sent an army out{dest}.", {"target": None, "id": a.id}))
         return out
+
+    def _scout_events(self, a: Army):
+        """His scout on a route to (or pointing at) one of your spots."""
+        if not a.moving or not a.ends:
+            return []
+        hit = next((self._site_near(e) for e in a.ends if self._site_near(e)), None)
+        hit = hit or self._route_points_at(a.ends)
+        if a.direction == "out" and a.dest is not None:
+            hit = self._site_near(a.dest) or self.target_of(a) or hit
+        if a.direction == "home" or not hit or ("scout", hit) in a.alerted:
+            return []
+        a.alerted.add(("scout", hit))
+        return [("scout_at", f"His scout is on its way to {hit}. An attack often follows.",
+                 {"target": hit, "id": a.id})]
 
     def _route_points_at(self, ends):
         """Name of your spot that a march line points at from his city's end
@@ -250,11 +269,13 @@ class Tracker:
         def state(a):
             if a.moving:
                 return {"home": "going home", "out": "marching out"}.get(a.direction, "marching")
+            if a.kind == "scout":
+                return "scout"
             return "at his city" if self.at_home(a.tile) else "parked / gathering"
         return [{"id": a.id, "x": round(a.tile[0]), "y": round(a.tile[1]), "state": state(a),
                  "dest": [round(a.dest[0]), round(a.dest[1])] if a.dest else None,
                  "last_seen": datetime.fromtimestamp(a.last_seen).strftime("%H:%M:%S"),
-                 "his": a.owner == "him"}
+                 "his": a.owner == "him", "kind": a.kind}
                 for a in self.armies if include(a)]
 
 
@@ -333,13 +354,13 @@ class Hunter:
         H = frame.shape[0]
         lines = [ln for ln in screen.find_march_lines(frame) if ln.color != "green"]
         out = []
-        for d in screen.find_army_icons(frame):
+        for d, kind in screen.find_map_icons(frame):
             tile = to_tile(cam, self.axes, d, frame.shape)
             line = min(lines, key=lambda ln: ln.distance_to(d), default=None)
             moving = bool(line and line.distance_to(d) < 0.05 * H)  # the icon hides the first dots
             ends = (tuple(to_tile(cam, self.axes, p, frame.shape) for p in (line.p1, line.p2))
                     if moving else None)
-            out.append(ArmySeen(tile, moving, ends, time.time()))
+            out.append(ArmySeen(tile, moving, ends, time.time(), kind=kind))
         return out
 
     def identify(self, armies) -> int:
@@ -438,13 +459,14 @@ class Hunter:
             alerts.append(Alert("warning", "YOU'RE BEING SCOUTED OR ATTACKED",
                                 "The red warning is flashing in the game.", urgent=True))
         for kind, msg, info in events:
-            urgent = kind == "army_out" and bool(info.get("target"))
+            urgent = kind in ("army_out", "scout_at") and bool(info.get("target"))
             title = {"army_out": "HE SENT AN ARMY OUT" + (" AT YOU" if urgent else ""),
+                     "scout_at": "HE'S SCOUTING YOU",
                      "pulling_back": "He's pulling his troops back",
                      "all_home": "All his troops are home"}[kind]
             alerts.append(Alert(f"hunt-{kind}-{now}-{info.get('id', '')}", title, msg,
                                 urgent=urgent, cooldown=False))
-            if urgent and self.auto_recall:
+            if urgent and kind == "army_out" and self.auto_recall:
                 pos = dict(self.my_sites).get(info["target"])
                 report = self.game.recall_all([pos] if pos else None)
                 alerts.append(Alert(f"recall-{now}", "Auto-recall", "; ".join(report),
