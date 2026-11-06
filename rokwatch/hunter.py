@@ -8,6 +8,7 @@ from __future__ import annotations
 import csv
 import logging
 import math
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -433,9 +434,13 @@ class Hunter:
     @staticmethod
     def _other_army_label_near(view, centre, H):
         for t in view.texts:
-            if "[" in t.text and ":" not in t.text and math.dist(t.center, centre) < 0.3 * H:
-                if screen.label_kind(view.frame, t) == "army":
-                    return True
+            txt = t.text.strip()
+            # a player name: letters in it, not chat ("x: y"), not coordinates or numbers.
+            # OCR often garbles the [TAG] brackets, so they aren't required.
+            if (len(re.sub(r"[^A-Za-z]", "", txt)) >= 4 and ":" not in txt and "#" not in txt
+                    and math.dist(t.center, centre) < 0.3 * H
+                    and screen.label_kind(view.frame, t) == "army"):
+                return True
         return False
 
     def sweep(self, stop=None) -> tuple[list[ArmySeen], int]:
