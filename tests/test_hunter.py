@@ -88,6 +88,20 @@ def test_tracker_scouts_are_not_troops():
     assert tr2.update([], 1) == []
 
 
+def test_tracker_picks_the_spot_it_is_really_aimed_at():
+    # your city and camp are close together: the alert must name the one it heads for
+    tr = Tracker(CITY, SITES)
+    ev = tr.update([ArmySeen((168, 381), True, (CITY, (205, 424)), 0)], 0)
+    assert ev[0][2]["target"] == "logging camp", ev
+    tr2 = Tracker(CITY, SITES)
+    ev = tr2.update([ArmySeen((168, 380), True, (CITY, (209, 418)), 0)], 0)
+    assert ev[0][2]["target"] == "my city", ev
+    # line cut off by the screen edge: judged by direction
+    tr3 = Tracker(CITY, SITES)
+    ev = tr3.update([ArmySeen((168, 381), True, (CITY, (183, 398)), 0)], 0)
+    assert ev[0][2]["target"] == "logging camp", ev
+
+
 def test_tracker_pulling_back_even_if_lines_missed():
     tr = Tracker(CITY, SITES)
     tr.update([ArmySeen((150, 390), False, None, 0), ArmySeen((180, 360), False, None, 0)], 0)

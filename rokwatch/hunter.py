@@ -115,9 +115,10 @@ class Tracker:
         return math.dist(tile, self.city) <= self.near_city
 
     def _site_near(self, tile):
-        for name, pos in self.my_sites:
-            if math.dist(tile, pos) <= self.near_site:
-                return name
+        """Your spot closest to tile, if within near_site tiles."""
+        best = min(self.my_sites, key=lambda sp: math.dist(tile, sp[1]), default=None)
+        if best and math.dist(tile, best[1]) <= self.near_site:
+            return best[0]
         return None
 
     def _direction(self, a: Army, prev_tile, prev_moving, s: ArmySeen):
@@ -252,13 +253,17 @@ class Tracker:
             if not self.at_home(a_):
                 continue                      # only routes leaving his city
             v = np.subtract(b_, a_)
+            best, best_off = None, 15.0
             for name, pos in self.my_sites:
                 u = np.subtract(pos, a_)
                 nv, nu = np.linalg.norm(v), np.linalg.norm(u)
                 if nv < 2 or nu < nv - 1:
                     continue
-                if float(v @ u) / (nv * nu) > math.cos(math.radians(15)):
-                    return name
+                off = math.degrees(math.acos(max(-1.0, min(1.0, float(v @ u) / (nv * nu)))))
+                if off < best_off:             # the spot the line points at most directly
+                    best, best_off = name, off
+            if best:
+                return best
         return None
 
     def target_of(self, a: Army):
@@ -266,13 +271,15 @@ class Tracker:
         if not a.dest:
             return None
         v = np.subtract(a.dest, a.tile)
+        best, best_off = None, 15.0
         for name, pos in self.my_sites:
             u = np.subtract(pos, a.tile)
-            if np.linalg.norm(v) and np.linalg.norm(u):
+            if np.linalg.norm(v) and np.linalg.norm(u) and np.linalg.norm(u) <= np.linalg.norm(v) + 15:
                 cos = float(v @ u / (np.linalg.norm(v) * np.linalg.norm(u)))
-                if cos > math.cos(math.radians(15)) and np.linalg.norm(u) <= np.linalg.norm(v) + 15:
-                    return name
-        return None
+                off = math.degrees(math.acos(max(-1.0, min(1.0, cos))))
+                if off < best_off:
+                    best, best_off = name, off
+        return best
 
     def summary(self, include=None):
         include = include or (lambda a: a.owner in (None, "him"))
@@ -482,7 +489,9 @@ class Hunter:
                 report = self.game.recall_all([pos] if pos else None)
                 alerts.append(Alert(f"recall-{now}", "Auto-recall", "; ".join(report),
                                     urgent=True, cooldown=False))
-        log.info("Hunt sweep: %d stops, %d of his armies seen", visited, len(sightings))
+        his = [a for a in self.tracker.armies if self.is_his(a) or (self.method == "close")]
+        log.info("Hunt sweep: %d stops, %d marches on the map, %d of them his",
+                 visited, len(sightings), len(his))
         return alerts
 
     def _log(self):
