@@ -184,7 +184,7 @@ def test_zoomed_out_finds_diamonds_and_checks_names(game, tmp_path):
     h = hunter(game, tmp_path, method="zoomed_out")
     assert h.round() == []
     owners = sorted((a.owner or "?", round(a.tile[0]), round(a.tile[1])) for a in h.tracker.armies)
-    assert [o[0] for o in owners] == ["him", "him", "other"], owners
+    assert [o[0] for o in owners] == ["him", "him", "other"], (owners, h.seen_text)
     his = [a for a in h.tracker.summary() if a["his"]]
     assert len(his) == 2
     assert js(game, "sim.state.zoom") == 1       # back to the zoomed-out view afterwards

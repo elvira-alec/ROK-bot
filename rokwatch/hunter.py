@@ -320,6 +320,7 @@ class Hunter:
         self.log_path = Path(log_path)
         self.debug_dir = debug_dir
         self.auto_recall = bool(cfg.get("patrol", {}).get("auto_recall", False))
+        self.seen_text: dict = {}     # army id -> text read when we zoomed in (for checking)
         self.warning = AttackAlertDetector()
         self.warned = False
         if not self.log_path.exists():
@@ -409,6 +410,9 @@ class Hunter:
                 centre = (W / 2, H / 2)
                 near = [lb for lb in screen.find_player(v.frame, v.texts, self.name)
                         if lb.kind == "army" and math.dist(lb.pos, centre) < 0.3 * H]
+                self.seen_text[a.id] = [(t.text, screen.label_kind(v.frame, t),
+                                         round(math.dist(t.center, centre) / H, 2))
+                                        for t in v.texts if math.dist(t.center, centre) < 0.4 * H]
                 if near:
                     a.owner = "him"
                 elif self._other_army_label_near(v, centre, H):
