@@ -50,10 +50,13 @@ attack_alert:
   enabled: true
   # How thick the screen edge strip is, as a fraction of the screen.
   edge_width: 0.04
-  # Alert when this fraction of the edge strip is red...
-  red_fraction: 0.30
+  # The warning (same for being scouted or attacked) is a red glow pulsing on
+  # all four edges: 15-65% of the edge strip on real screens, under 5% normally.
+  # Alert when this fraction of the edge strip is red (and every side has some)...
+  red_fraction: 0.10
+  side_min: 0.08
   # ...and it's at least this much redder than usual for this spot.
-  min_jump: 0.15
+  min_jump: 0.08
   # Must be seen this many checks in a row (stops false alarms).
   confirm_frames: 2
   # Screenshots of the warning icon. Drop crops in templates/attack/ to use them.

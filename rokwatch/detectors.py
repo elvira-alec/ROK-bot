@@ -30,9 +30,9 @@ class AttackAlertDetector:
     so a map that's always a bit red at the edges doesn't keep alerting.
     """
 
-    def __init__(self, edge_width=0.04, red_fraction=0.30, confirm_frames=2,
-                 template_dir=None, template_threshold=0.82, min_jump=0.15,
-                 steady_frames=10, side_min=0.15):
+    def __init__(self, edge_width=0.04, red_fraction=0.10, confirm_frames=2,
+                 template_dir=None, template_threshold=0.82, min_jump=0.08,
+                 steady_frames=10, side_min=0.08, strong_fraction=0.30):
         self.edge_width = edge_width
         self.red_fraction = red_fraction
         self.confirm_frames = confirm_frames
@@ -46,6 +46,8 @@ class AttackAlertDetector:
                     self.templates.append((p.name, img))
         self.steady_frames = steady_frames
         self.side_min = side_min
+        self.strong_fraction = strong_fraction
+        self._hits: list = []
         self._streak = 0
         self._normal = None  # usual red level at the edges
         self._recent = []    # red levels during the current hit streak
@@ -100,12 +102,12 @@ class AttackAlertDetector:
             self._recent = []
         if not hit:
             self._normal = frac if self._normal is None else self._normal * 0.9 + frac * 0.1
-        # The warning pulses, so allow one missed frame inside a streak.
-        if hit:
-            self._streak += 1
-        else:
-            self._streak = max(0, self._streak - 1) if self._streak >= self.confirm_frames else 0
-        if hit and self._streak >= self.confirm_frames:
+        # The warning pulses (measured on real frames: 15% to 65% red, sometimes
+        # almost nothing). Alert on one strong frame, or `confirm_frames` hits
+        # among the last few checks.
+        self._hits = (self._hits + [hit])[-(self.confirm_frames + 1):]
+        strong = edge_hit and frac >= self.strong_fraction and min(sides) >= 2 * self.side_min
+        if hit and (strong or sum(self._hits) >= self.confirm_frames):
             if tpl:
                 return f"warning icon seen ({tpl})"
             return f"red warning on screen edges ({frac:.0%})"

@@ -19,6 +19,7 @@ import cv2
 import numpy as np
 
 from . import screen
+from .detectors import AttackAlertDetector
 from .game import Game, coords_in_chat
 from .watcher import Alert
 
@@ -125,6 +126,11 @@ class Patrol:
         self.looks = int(p.get("looks_per_site", 2))
         self.axes = np.array(p["axes"], float) if p.get("axes") else None  # tiles per pixel
         self.activity = ActivityLog(self.log_path)
+        a = p.get("attack_alert") or {}
+        # the red pulsing border: same for being scouted and being attacked
+        self.warning = AttackAlertDetector(red_fraction=a.get("red_fraction", 0.10),
+                                           side_min=a.get("side_min", 0.08),
+                                           min_jump=a.get("min_jump", 0.08))
         self._seen: dict[str, list] = {}       # chat coords already logged
         self._tracks: dict[str, list] = {}     # site -> [Track]
         self._troops = None
@@ -251,6 +257,12 @@ class Patrol:
                 self.game.wait(1.0)
             view = self.game.look()
             frames.append(view.frame)
+            if self.warning.check(view.frame):
+                self.activity.add("you", "mine", "warning", "red border: scouted or attacked")
+                alerts.append(Alert("warning", "YOU'RE BEING SCOUTED OR ATTACKED",
+                                    "The red warning is flashing in the game. Check your city "
+                                    "and troops!", urgent=True,
+                                    image=self._snapshot(view.frame, "warning")))
         self._check_troops(view, alerts)
         for s in self.sightings(site, frames):
             track, is_new = self._track(site.name, s, now)
@@ -306,6 +318,13 @@ class Patrol:
             return
         used, total, slots = panel
         states = [s.state for s in slots if s.state != "scout"]
+        before = self._troops or []
+        fighting = states.count("fighting")
+        if fighting > before.count("fighting"):
+            self.activity.add("you", "mine", "troop_state", f"{fighting} troop(s) fighting")
+            alerts.append(Alert("fighting", "YOUR TROOPS ARE FIGHTING",
+                                f"{fighting} of your troops are in a battle right now.",
+                                urgent=True, image=self._snapshot(view.frame, "fighting")))
         recalled_by_me = time.time() - self._last_recall < 180  # we just pulled it back
         if (self._troops is not None and not recalled_by_me
                 and states.count("gathering") < self._troops.count("gathering")):

@@ -55,18 +55,17 @@ Try each piece on your own screen first:
 
 ### What's checked on real game screens and what isn't yet
 
-Checked against real screenshots (`tests/real_screens/`, day and night):
-- Reads the camera coordinates and your troop list. Tells **gathering** (pickaxe), **marching** (footprints) and scout badges apart.
-- Finds the RECALL button, the coordinates in a troop's info box, player names, and coordinates posted in chat.
-- Finds the **coordinate search bar** and where to tap: the X box, the Y box and the search button. The boxes start empty.
-- Tells the 3 **zoom levels** apart: close 3D view, the patrol level (simplified map with resource points), and too far out (the globe button appears). The bot zooms to the patrol level.
-- Finds white (other player) and green (yours or alliance) dotted march lines, at any screen size and at night. Finds other players' army diamonds. Trees, flowers, icons and red territory borders aren't mistaken for marches or attacks.
-- Ignores green lines at his city, since those are you attacking him.
+Checked against real screenshots (`tests/real_screens/`, 19 of them, day and night):
+- **Being scouted or attacked:** the red warning pulsing on all four screen edges. It looks the same for both. A strong pulse alerts at once, a faint one on the next look. Red alliance territory borders never trigger it.
+- **Your troops:** read from the panel on the right as **gathering** (pickaxe), **marching** (footprints), **returning** (orange arrow), **fighting** (red swords) or **stopped** (red X). You get an urgent alert when a troop starts fighting.
+- **Navigation:** reads the camera coordinates and the **coordinate search bar** (X box, Y box, search button). Tells the 3 **zoom levels** apart and zooms to the patrol level.
+- **Recall:** finds the RECALL button and the coordinates in a troop's info box.
+- **Marches:** finds dotted march lines (white = other players, green = yours or your alliance's), his army in the close view, and other players' grey army diamonds. Green lines at his city are ignored, since those are you attacking him.
+- **Other text:** player names, and coordinates posted in alliance chat.
 
-Not seen on a real screen yet. Send a screenshot if it doesn't work:
-- Whether **tapping a troop portrait** opens its info box with RECALL. It looks that way from your screenshots.
-- **Mouse-wheel zoom** in the browser version.
-- How a **hostile march aimed at you** looks (probably red dots, which are supported), and how the **"under attack" warning** looks.
+Not yet:
+- **Exactly where a scout or attack will land.** The game marks it with a small red X at the end of a red dashed line. The bot can't reliably pick it out from red troops and icons yet, so it alerts on the warning border and your troops' state instead.
+- **On the real browser game:** whether tapping a troop portrait opens its RECALL box, and whether mouse-wheel zoom works.
 
 ## What you need
 

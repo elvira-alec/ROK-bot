@@ -66,9 +66,16 @@ def test_attack_border_needs_confirm():
     for sl in [np.s_[:e, :], np.s_[-e:, :], np.s_[:, :e], np.s_[:, -e:]]:
         alert[sl] = (20, 20, 230)
     assert det.check(fake_map()) is None
-    assert det.check(alert) is None       # first sighting
-    assert det.check(alert) is not None   # confirmed
+    assert det.check(alert) is not None   # a strong red border alerts straight away
     assert det.check(fake_map()) is None
+    # a faint one (pulse at its dimmest) needs a second sighting
+    det = AttackAlertDetector(confirm_frames=2)
+    faint = fake_map()
+    for sl in [np.s_[:e, :70], np.s_[-e:, :70], np.s_[:70, :e], np.s_[:70, -e:],
+               np.s_[:e, -70:], np.s_[-e:, -70:], np.s_[-70:, :e], np.s_[-70:, -e:]]:
+        faint[sl] = (20, 20, 230)   # red only near the corners: ~20%, like a dim pulse
+    assert det.check(faint) is None
+    assert det.check(faint) is not None
 
 
 def test_attack_template(tmp_path):

@@ -265,7 +265,7 @@ def find_army_icons(frame: np.ndarray) -> list[tuple]:
     m = cv2.morphologyEx(fill | glyph, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
     n, labels, stats, cents = cv2.connectedComponentsWithStats(m)
     s = H / 1320.0
-    lo, hi = 45 * s, 110 * s
+    lo, hi = 26 * s, 110 * s
     out = []
     for i in range(1, n):
         x, y, w, h, a = stats[i]
@@ -324,12 +324,15 @@ def _badge_templates():
     return _glyphs
 
 
-def classify_badge(glyph) -> str | None:
-    """Which symbol (gathering pickaxe, marching footprints...) a green badge shows."""
+def classify_badge(glyph, among=None) -> str | None:
+    """Which symbol a badge shows (pickaxe = gathering, footprints = marching, ...).
+    `among` limits the choice, e.g. to the symbols a green badge can have."""
     if glyph is None or glyph.sum() < 8:
         return None
     best, score = None, 0.0
     for name, temps in _badge_templates().items():
+        if among and name not in among:
+            continue
         for t in temps:
             inter = float((glyph * t).sum())
             union = float(np.maximum(glyph, t).sum())
@@ -343,11 +346,11 @@ class TroopSlot:
     index: int
     badge: tuple      # centre of the small status badge
     portrait: tuple   # where to click to select this troop
-    state: str        # "gathering" (pickaxe), "marching" (footprints), "scout", "other"
+    state: str        # gathering, marching, returning, fighting, stopped, idle, scout, other
 
 
-def troop_panel(frame: np.ndarray, texts: list[Text]):
-    """Your armies in the column on the right (under the 'N/M' counter).
+def _troop_panel_by_colour(frame: np.ndarray, texts: list[Text]):
+    """Fallback: find badges by colour (green / purple circles) in the right column.
     Returns (used, total, [TroopSlot]) or None if the panel isn't visible.
     used/total are None when the 'N/M' counter couldn't be read."""
     h, w = frame.shape[:2]
@@ -523,3 +526,88 @@ def zoom_level(frame, texts) -> str:
     if not is_simple_view(texts, frame):
         return "close"
     return "far" if has_world_button(frame) > 0.8 else "patrol"
+
+
+
+# ---------------------------------------------------------------- troop panel by layout
+
+# Measured on real screenshots: badge of commander i sits at
+# (counter_x + 0.023H, counter_y + 0.086H + i * 0.0913H).
+_BADGE_DX, _BADGE_DY, _BADGE_STEP = 0.023, 0.086, 0.0913
+
+
+def _best_glyph(frame, centre, h, among):
+    """Read the symbol, allowing the badge to be a pixel or two off from the
+    layout (small screens blur the symbol)."""
+    x, y = centre
+    step = max(1, int(round(h / 660)))
+    best, score = None, 0.0
+    temps = _badge_templates()
+    for dx in (-2 * step, -step, 0, step, 2 * step):
+        for dy in (-2 * step, -step, 0, step, 2 * step):
+            g = badge_glyph(frame, (x + dx, y + dy), h)
+            if g is None or g.sum() < 8:
+                continue
+            for name in among:
+                for t in temps.get(name, []):
+                    union = float(np.maximum(g, t).sum())
+                    iou = float((g * t).sum()) / union if union else 0.0
+                    if iou > score:
+                        best, score = name, iou
+    return best if score >= 0.4 else None
+
+
+def badge_state(frame, centre, h) -> str:
+    """What a commander's status badge says, from its colour and symbol."""
+    x, y = centre
+    R = max(4, int(0.016 * h))             # badge radius
+    crop = frame[max(0, y - R):y + R + 1, max(0, x - R):x + R + 1]
+    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+    yy, xx = np.mgrid[:crop.shape[0], :crop.shape[1]]
+    d = np.hypot(xx - (x - max(0, x - R)), yy - (y - max(0, y - R)))
+    p = hsv[(d > 0.45 * R) & (d < 0.85 * R)]   # the coloured ring around the white symbol
+    sat = p[(p[:, 1] > 120) & (p[:, 2] > 90)]
+    if len(sat) < 0.3 * len(p):
+        return "idle"                      # no coloured badge
+    hue = float(np.median(sat[:, 0]))
+    if 40 <= hue <= 80:                    # green
+        return _best_glyph(frame, centre, h, ("gathering", "marching")) or "other"
+    if 9 <= hue <= 25:                     # orange
+        return "returning"
+    if hue <= 8 or hue >= 170:             # red
+        return _best_glyph(frame, centre, h, ("fighting", "stopped")) or "fighting"
+    if 125 <= hue <= 165:
+        return "scout"
+    return "other"
+
+
+def troop_panel(frame: np.ndarray, texts: list[Text]):
+    """Your armies in the column on the right (under the 'N/M' counter).
+    Returns (used, total, [TroopSlot]) or None if the panel isn't visible.
+    used/total are None when the 'N/M' counter couldn't be read."""
+    h, w = frame.shape[:2]
+    anchor = None
+    for t in texts:
+        m = re.fullmatch(r"(\d)[/|lI1／](\d)", t.text.replace(" ", ""))
+        if m and t.box[0] > w * 0.8 and t.box[1] < h * 0.4:
+            anchor = (t, int(m.group(1)), int(m.group(2)))
+            break
+    if not anchor:
+        return _troop_panel_by_colour(frame, texts)
+    t, used, total = anchor
+    cx, cy = t.center
+    slots = []
+    for i in range(used):
+        badge = (int(cx + _BADGE_DX * h), int(cy + (_BADGE_DY + i * _BADGE_STEP) * h))
+        if badge[1] >= h:
+            break
+        slots.append(TroopSlot(i, badge, (int(badge[0] - 0.027 * h), int(badge[1] - 0.034 * h)),
+                               badge_state(frame, badge, h)))
+    # scouts sit below the commanders (purple badges); keep the colour finder for those
+    fallback = _troop_panel_by_colour(frame, texts)
+    last = slots[-1].badge[1] if slots else cy
+    if fallback:
+        for s2 in fallback[2]:
+            if s2.state == "scout" and s2.badge[1] > last + 0.05 * h:
+                slots.append(TroopSlot(len(slots), s2.badge, s2.portrait, "scout"))
+    return used, total, slots

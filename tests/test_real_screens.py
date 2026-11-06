@@ -61,22 +61,24 @@ def test_works_at_other_sizes():
         assert len(lines) == 1 and lines[0].length > 2500 * scale * 0.9, scale
 
 
+ARMIES = {"march_simple_view": 1, "my_armies_simple": 1, "scouted_simple_2": 1,
+          "scouted_simple_3": 2, "scouted_simple_4": 2, "scouted_simple_5": 1}
+
+
 @pytest.mark.parametrize("name", ALL)
 def test_army_icon(name):
     # Other players' armies are a grey diamond, only in the zoomed-out view.
     img = load(name)
     found = screen.find_army_icons(img)
+    assert len(found) == ARMIES.get(name, 0), found
     if name == "march_simple_view":
-        assert len(found) == 1 and abs(found[0][0] - 1540) < 15 and abs(found[0][1] - 621) < 15
-        small = screen.find_army_icons(cv2.resize(img, None, fx=0.5, fy=0.5))
-        assert len(small) == 1
+        assert abs(found[0][0] - 1540) < 15 and abs(found[0][1] - 621) < 15
+        assert len(screen.find_army_icons(cv2.resize(img, None, fx=0.5, fy=0.5))) == 1
         line = screen.find_march_lines(img)[0]
         assert line.distance_to(found[0]) < 15  # it sits on its march line
-    else:
-        assert found == []
 
 
-@pytest.mark.parametrize("name", ALL)
+@pytest.mark.parametrize("name", [n for n in ALL if not n.startswith("scouted")])
 def test_red_territory_border_is_not_an_attack(name):
     det = AttackAlertDetector()
     img = load(name)
@@ -95,14 +97,23 @@ def test_patrol_ignores_march_just_passing_by():
 
 ocr = pytest.importorskip("rapidocr_onnxruntime")
 
-CAMERA = {"search_bar_far_zoom": (187, 403), "search_bar_marching": (173, 378),
+STATES_NEW = {"battle_me_attacking", "my_armies_simple", "his_army_marching_close"} | {
+    n for n in ALL if n.startswith("scouted")}
+
+CAMERA = {"battle_me_attacking": (173, 375), "his_army_marching_close": (189, 384),
+          "my_armies_simple": (176, 380), "scouted_his_city": (164, 375),
+          "scouted_close_red_marker": (185, 395), "scouted_my_city": (210, 422),
+          **{f"scouted_simple_{i}": (185, 398) for i in range(1, 6)},
+          "search_bar_far_zoom": (187, 403), "search_bar_marching": (173, 378),
           "own_city_gathering": (209, 418), "enemy_city_close": (162, 374),
           "enemy_city_simple": (162, 375), "recall_panel": (205, 424),
           "march_simple_view": (417, 520), "march_close_view": (423, 521)}
-SIMPLE = {"enemy_city_simple", "march_simple_view", "search_bar_far_zoom", "search_bar_marching"}
+SIMPLE = {"enemy_city_simple", "march_simple_view", "search_bar_far_zoom", "search_bar_marching",
+          "my_armies_simple", *(f"scouted_simple_{i}" for i in range(1, 6))}
 ZOOM = {"search_bar_far_zoom": "far", "search_bar_marching": "patrol", "enemy_city_simple": "patrol",
-        "march_simple_view": "patrol"}
-MARCHING = {"search_bar_far_zoom", "search_bar_marching"}
+        "march_simple_view": "patrol", "my_armies_simple": "patrol",
+        **{f"scouted_simple_{i}": "patrol" for i in range(1, 6)}}
+MARCHING = {"search_bar_far_zoom", "search_bar_marching", "my_armies_simple"}
 
 
 @pytest.fixture(scope="module")
@@ -121,7 +132,10 @@ def test_simple_view_detected(name, texts):
     assert screen.is_simple_view(texts[name], load(name)) == (name in SIMPLE)
 
 
-@pytest.mark.parametrize("name", ALL)
+GATHER_OR_MARCH = [n for n in ALL if n not in STATES_NEW]
+
+
+@pytest.mark.parametrize("name", GATHER_OR_MARCH)
 def test_troop_panel(name, texts):
     used, total, slots = screen.troop_panel(load(name), texts[name])
     # the counter is a bonus (OCR can miss it); the troops themselves must be found
@@ -134,7 +148,7 @@ def test_troop_panel(name, texts):
     assert max(xs) - min(xs) < 10
 
 
-@pytest.mark.parametrize("name", ALL)
+@pytest.mark.parametrize("name", GATHER_OR_MARCH)
 def test_troop_panel_without_counter(name, texts):
     # if OCR misses the "3/3" counter, the troops are still found
     no_counter = [t for t in texts[name] if not t.text.replace(" ", "").startswith("3/")]
@@ -222,3 +236,56 @@ def test_real_attack_glow_still_alerts():
         img[sl] = (img[sl] * 0.3 + np.array((30, 20, 230)) * 0.7).astype(np.uint8)
     det = AttackAlertDetector()
     assert [det.check(img) for _ in range(3)][-1] is not None
+
+
+# ---------------------------------------------------------------- being scouted / attacked, battles
+
+WARNING_STRONG = ["scouted_close_red_marker", "scouted_his_city", "scouted_simple_4"]
+WARNING_FAINT = ["scouted_simple_1", "scouted_simple_2", "scouted_simple_5"]   # pulse dimmer
+NO_WARNING = [n for n in ALL if not n.startswith("scouted")]
+
+
+@pytest.mark.parametrize("name", WARNING_STRONG)
+def test_warning_border_strong_alerts_at_once(name):
+    assert AttackAlertDetector().check(load(name))
+
+
+@pytest.mark.parametrize("name", WARNING_FAINT)
+def test_warning_border_faint_alerts_on_second_look(name):
+    det = AttackAlertDetector()
+    assert det.check(load(name)) is None
+    assert det.check(load(name))
+
+
+def test_warning_pulse_with_a_dark_frame_between():
+    det = AttackAlertDetector()
+    seq = ["scouted_simple_1", "scouted_simple_3", "scouted_simple_2"]  # bright, off, bright
+    assert [bool(det.check(load(n))) for n in seq] == [False, False, True]
+
+
+@pytest.mark.parametrize("name", NO_WARNING)
+def test_no_warning_on_normal_screens(name):
+    det = AttackAlertDetector()
+    assert all(det.check(load(name)) is None for _ in range(4))
+
+
+STATES = {"battle_me_attacking": ["fighting", "fighting", "stopped"],
+          "my_armies_simple": ["marching"] * 3}
+STATES.update({n: ["returning"] * 3 for n in ALL if n.startswith("scouted")})
+
+
+@pytest.mark.parametrize("name", sorted(STATES))
+def test_troop_states_new(name, texts):
+    _, _, slots = screen.troop_panel(load(name), texts[name])
+    assert [s.state for s in slots][:3] == STATES[name]
+
+
+def test_his_march_close_view_found():
+    lines = screen.find_march_lines(load("his_army_marching_close"))
+    assert any(ln.color == "white" and ln.dots > 30 for ln in lines)
+
+
+def test_scout_lines_and_diamonds():
+    for name in ("scouted_simple_3", "scouted_simple_4"):
+        assert len(screen.find_army_icons(load(name))) == 2
+        assert any(ln.color == "white" for ln in screen.find_march_lines(load(name)))

@@ -45,9 +45,9 @@ class Watcher:
 
         a = cfg.get("attack_alert", {})
         self.attack = AttackAlertDetector(
-            a.get("edge_width", 0.04), a.get("red_fraction", 0.30), a.get("confirm_frames", 2),
+            a.get("edge_width", 0.04), a.get("red_fraction", 0.10), a.get("confirm_frames", 2),
             a.get("template_dir"), a.get("template_threshold", 0.82),
-            a.get("min_jump", 0.15)) if a.get("enabled", True) else None
+            a.get("min_jump", 0.08), side_min=a.get("side_min", 0.08)) if a.get("enabled", True) else None
 
         e = cfg.get("enemy_watch", {})
         self.e = e
