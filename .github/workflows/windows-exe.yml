@@ -26,10 +26,6 @@ jobs:
           Remove-Item dist/RoKWatcher/setup.yaml, dist/RoKWatcher/rokwatch.log -ErrorAction SilentlyContinue
           Remove-Item dist/RoKWatcher/debug, dist/RoKWatcher/browser-profile -Recurse -ErrorAction SilentlyContinue
           Compress-Archive -Path dist/RoKWatcher -DestinationPath RoKWatcher-windows.zip
-      - uses: actions/upload-artifact@v4
-        with:
-          name: RoKWatcher-windows
-          path: RoKWatcher-windows.zip
       - name: Publish as the "latest" download
         if: github.ref == 'refs/heads/main'
         shell: bash
