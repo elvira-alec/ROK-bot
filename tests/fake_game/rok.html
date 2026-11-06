@@ -29,7 +29,7 @@
     cam: { x: 209, y: 418 }, zoom: 0, simple: false, dialog: null, box: null,  // zoom: 0 close, 1 patrol, 2 far
     troops: [ { at: [205, 424], recalled: false }, { at: [200, 410], recalled: false },
               { at: [215, 430], recalled: false } ],
-    marches: [], clicks: [], typed: '',
+    marches: [], farmers: [], clicks: [], typed: '',
     sites: { enemy: [162, 374], city: [209, 418], camp: [205, 424], stone: [200, 410], farm: [215, 430] },
   };
   const toScreen = (tx, ty) => {
@@ -53,6 +53,15 @@
     ctx.font = `bold ${size}px Arial`;
     if (stroke) { ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.strokeText(s, x, y); }
     ctx.fillStyle = color; ctx.fillText(s, x, y);
+  }
+
+  function troops(x, y, name) {
+    for (let i = 0; i < 9; i++) {
+      const dx = (i % 3) * 7 - 7, dy = Math.floor(i / 3) * 6 - 6;
+      ctx.fillStyle = '#7a2a20'; ctx.fillRect(x + dx - 2, y + dy - 4, 5, 8);
+      ctx.fillStyle = '#d33'; ctx.fillRect(x + dx - 2, y + dy - 6, 5, 3);
+    }
+    if (name) text(name, x - ctx.measureText(name).width / 2 - 20, y - 18, 13, '#f0f0f0');
   }
 
   function dotted(p, q, color, t) {
@@ -83,9 +92,13 @@
       const im = owner[name] ? A.city : A.res;
       if (im.complete) ctx.drawImage(im, x - im.width / 2, y - im.height / 2);
       if (owner[name]) {
-        ctx.font = '11px Arial'; const tw = ctx.measureText(owner[name]).width;
-        ctx.fillStyle = 'rgba(30,30,30,0.75)'; ctx.fillRect(x - tw / 2 - 6, y + 22, tw + 12, 14);
-        ctx.fillStyle = name === 'city' ? '#7dff7d' : '#ddd'; ctx.fillText(owner[name], x - tw / 2, y + 33);
+        // city name on a dark plate, with the city level in a small light tag underneath
+        ctx.font = 'bold 13px Arial'; const tw = ctx.measureText(owner[name]).width;
+        ctx.fillStyle = 'rgba(30,30,30,0.8)'; ctx.fillRect(x - tw / 2 - 8, y + 22, tw + 16, 18);
+        ctx.fillStyle = name === 'city' ? '#7dff7d' : '#ddd'; ctx.fillText(owner[name], x - tw / 2, y + 36);
+        const lvl = name === 'city' ? '16' : '21';
+        ctx.fillStyle = '#e8e8e8'; ctx.fillRect(x - 11, y + 42, 22, 12);
+        ctx.fillStyle = '#111'; ctx.font = 'bold 10px Arial'; ctx.fillText(lvl, x - 6, y + 52);
       }
     }
     // marches: dotted line over the whole route, army icon part way along
@@ -96,7 +109,14 @@
       // known yet, so green marches get none.)
       const k = Math.max(0.02, Math.min(0.98, m.progress + (t - m.t0) * m.speed));
       const ax = p[0] + (q[0] - p[0]) * k, ay = p[1] + (q[1] - p[1]) * k;
-      if (m.color !== 'green' && state.zoom < 2 && A.army.complete) ctx.drawImage(A.army, ax - A.army.width / 2, ay - A.army.height / 2);
+      if (m.owner && state.zoom === 0) troops(ax, ay, m.owner);
+      else if (m.color !== 'green' && state.zoom < 2 && A.army.complete) ctx.drawImage(A.army, ax - A.army.width / 2, ay - A.army.height / 2);
+    }
+    // armies standing still (e.g. gathering on a resource point)
+    for (const f of state.farmers) {
+      const [x, y] = toScreen(...f.at);
+      if (state.zoom === 0) troops(x, y, f.owner);
+      else if (state.zoom === 1 && A.army.complete) ctx.drawImage(A.army, x - A.army.width / 2, y - A.army.height / 2);
     }
     // HUD
     const cb = coordBar();
@@ -208,16 +228,26 @@
   window.sim = {
     state,
     // speed: fraction of the route per second (negative = coming back toward `from`)
-    march: (from, to, color = 'white', progress = 0.3, speed = 0.004) => {
+    march: (from, to, color = 'white', progress = 0.3, speed = 0.004, owner = null) => {
       const P = v => (typeof v === 'string' ? state.sites[v] : v);
-      state.marches.push({ from: P(from), to: P(to), color, progress, speed, t0: performance.now() / 1000 });
+      state.marches.push({ from: P(from), to: P(to), color, progress, speed, owner, t0: performance.now() / 1000 });
     },
-    clear: () => { state.marches.length = 0; },
+    // an army standing still at a tile (gathering), with its owner's name
+    farmer: (owner, at) => { state.farmers.push({ owner, at }); },
+    // send a standing army somewhere (it turns into a march)
+    sendFarmer: (i, to, speed = 0.02) => {
+      const f = state.farmers.splice(i, 1)[0];
+      state.marches.push({ from: f.at, to, color: 'white', progress: 0.05, speed, owner: f.owner, t0: performance.now() / 1000 });
+    },
+    clear: () => { state.marches.length = 0; state.farmers.length = 0; },
     ready: () => Object.values(A).every(i => i.complete && i.naturalWidth > 0),
   };
   // for the command-line test:  rok.html#march=enemy,camp,white
   const mh = new URLSearchParams(location.hash.slice(1)).get('march');
   if (mh) { const [f, t, c] = mh.split(','); sim.march(f, t, c || 'white', 0.2); }
+  // rok.html#farmer=155,368  -> one of his armies parked there
+  const fm = new URLSearchParams(location.hash.slice(1)).get('farmer');
+  if (fm) { const [x, y] = fm.split(',').map(Number); sim.farmer('[P83L]JONH WICK', [x, y]); }
 })();
 </script>
 </body>

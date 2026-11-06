@@ -1,0 +1,355 @@
+"""Hunt one player's armies: sweep the map around his city, read his name over
+his troops, work out where each army is and where it's going, and turn changes
+between sweeps into alerts (farmers pulled back, armies sent out, ...).
+"""
+
+from __future__ import annotations
+
+import csv
+import logging
+import math
+import time
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+
+import numpy as np
+
+from . import screen
+from .detectors import AttackAlertDetector
+from .watcher import Alert
+
+log = logging.getLogger("rokwatch")
+
+
+# ---------------------------------------------------------------- screen <-> map
+
+def to_tile(camera, axes, point, frame_shape):
+    """Map coordinates of a screen point. camera = (x, y) at the screen centre,
+    axes = 2x2 tiles-per-pixel matrix learned at this zoom level."""
+    h, w = frame_shape[:2]
+    d = np.array([point[0] - w / 2, point[1] - h / 2], float)
+    t = np.array(camera, float) + np.array(axes, float) @ d
+    return float(t[0]), float(t[1])
+
+
+def view_size_tiles(axes, frame_shape):
+    """How many tiles the screen covers across and down (roughly)."""
+    h, w = frame_shape[:2]
+    a = np.abs(np.array(axes, float))
+    return float(a[0, 0] * w + a[0, 1] * h), float(a[1, 0] * w + a[1, 1] * h)
+
+
+def sweep_points(centre, radius, axes, frame_shape, overlap=0.8):
+    """Camera stops covering everything within `radius` tiles of centre, his city
+    first. Stops are one screen apart in the screen's own directions (the map is
+    drawn at an angle, so a square grid of tiles would leave gaps)."""
+    h, w = frame_shape[:2]
+    A = np.array(axes, float)
+    a = A @ np.array([w * overlap, 0.0])      # one screen to the right, in tiles
+    b = A @ np.array([0.0, h * overlap])      # one screen down, in tiles
+    step = min(np.linalg.norm(a), np.linalg.norm(b))
+    n = int(math.ceil(radius / max(step, 1e-6))) + 1
+    reach = radius + max(np.linalg.norm(a), np.linalg.norm(b)) / 2
+    c = np.array(centre, float)
+    pts = []
+    for i in range(-n, n + 1):
+        for j in range(-n, n + 1):
+            p = c + i * a + j * b
+            if np.linalg.norm(p - c) <= reach:
+                pts.append((int(round(p[0])), int(round(p[1]))))
+    pts = list(dict.fromkeys(pts))
+    pts.sort(key=lambda q: (q[0] - centre[0]) ** 2 + (q[1] - centre[1]) ** 2)
+    return pts
+
+
+# ---------------------------------------------------------------- what we know about him
+
+@dataclass
+class ArmySeen:
+    tile: tuple                 # map coordinates
+    moving: bool
+    ends: tuple | None          # map coordinates of both ends of its march line
+    seen: float                 # time
+
+
+@dataclass
+class Army:
+    id: int
+    tile: tuple
+    first_seen: float
+    last_seen: float
+    moving: bool = False
+    ends: tuple | None = None
+    direction: str | None = None   # "out" (leaving his city / heading somewhere) or "home"
+    dest: tuple | None = None
+    history: list = field(default_factory=list)
+    alerted: set = field(default_factory=set)
+
+
+class Tracker:
+    """Keeps his armies across sweeps and says what changed.
+
+    One look can't tell which way an army walks along its line, so the
+    direction comes from how it moved since the last sweep."""
+
+    def __init__(self, city, my_sites, near_city=6.0, match_dist=12.0, near_site=8.0):
+        self.city = tuple(city)
+        self.my_sites = my_sites          # [(name, (x, y))]
+        self.near_city = near_city
+        self.match_dist = match_dist
+        self.near_site = near_site
+        self.armies: list[Army] = []
+        self._next = 1
+        self.sweeps = 0
+        self._last_away = None
+        self._last_home_count = 0
+
+    def at_home(self, tile):
+        return math.dist(tile, self.city) <= self.near_city
+
+    def _site_near(self, tile):
+        for name, pos in self.my_sites:
+            if math.dist(tile, pos) <= self.near_site:
+                return name
+        return None
+
+    def _direction(self, a: Army, prev_tile, prev_moving, s: ArmySeen):
+        """Work out which way a moving army is going, and where to."""
+        e0, e1 = s.ends
+        city_end = next((e for e in (e0, e1) if self.at_home(e)), None)
+        if city_end is not None:
+            other = e1 if city_end is e0 else e0
+            if prev_tile is not None:
+                d_now, d_before = math.dist(s.tile, self.city), math.dist(prev_tile, self.city)
+                if not prev_moving and not self.at_home(prev_tile):
+                    return "home", city_end           # was parked out there, now on the way in
+                if not prev_moving and self.at_home(prev_tile):
+                    return "out", other               # was at his city, now leaving
+                if d_now < d_before - 0.5:
+                    return "home", city_end
+                if d_now > d_before + 0.5:
+                    return "out", other
+            return a.direction, (city_end if a.direction == "home" else other)
+        # a line that doesn't touch his city: the army heads for the end it moved toward
+        if prev_tile is not None and math.dist(prev_tile, s.tile) > 0.5:
+            v = np.subtract(s.tile, prev_tile)
+            dest = max((e0, e1), key=lambda e: float(np.subtract(e, s.tile) @ v))
+            return "out", dest
+        return a.direction, a.dest
+
+    def update(self, sightings: list[ArmySeen], now: float) -> list[tuple[str, str, dict]]:
+        """Fold one sweep's sightings in. Returns events: (kind, message, details)."""
+        events = []
+        self.sweeps += 1
+        unmatched = list(self.armies)
+        current = []
+        for s in sorted(sightings, key=lambda s: s.tile):
+            best = min(unmatched, key=lambda a: math.dist(a.tile, s.tile), default=None)
+            if best and math.dist(best.tile, s.tile) <= self.match_dist:
+                unmatched.remove(best)
+                a, prev_tile, prev_moving = best, best.tile, best.moving
+            else:
+                a = Army(self._next, s.tile, now, now)
+                self._next += 1
+                prev_tile, prev_moving = None, False
+            a.tile, a.last_seen, a.moving, a.ends = s.tile, now, s.moving, s.ends
+            a.history.append((now, s.tile))
+            if s.moving and s.ends:
+                a.direction, a.dest = self._direction(a, prev_tile, prev_moving, s)
+            else:
+                a.direction, a.dest = None, None
+            current.append(a)
+            events += self._army_events(a)
+        home = [a for a in current if a.direction == "home"]
+        if len(home) >= 2 and self._last_home_count < 2:
+            events.append(("pulling_back", f"He's pulling troops back to his city "
+                                           f"({len(home)} armies heading home).",
+                           {"armies": len(home)}))
+        self._last_home_count = len(home)
+        away = [a for a in current if not self.at_home(a.tile)]
+        if self._last_away and self._last_away >= 2 and not away:
+            events.append(("all_home", "All his armies are back home. He may be getting ready "
+                                       "to attack (or going offline).", {}))
+        self._last_away = len(away)
+        self.armies = current
+        return events
+
+    def _army_events(self, a: Army):
+        out = []
+        if not a.moving or not a.ends:
+            return out
+        # A line reaching (or pointing at, when it runs off the screen) one of your
+        # spots: tell you straight away, whichever way the army is walking.
+        hit = next((self._site_near(e) for e in a.ends if self._site_near(e)), None)
+        hit = hit or self._route_points_at(a.ends)
+        if a.direction == "out" and a.dest is not None:
+            hit = self._site_near(a.dest) or self.target_of(a) or hit
+        if a.direction == "home":
+            return out
+        if hit and ("at", hit) not in a.alerted:
+            a.alerted.add(("at", hit))
+            out.append(("army_out", f"He has an army on its way toward {hit}.",
+                        {"target": hit, "id": a.id}))
+        elif a.direction == "out" and "out" not in a.alerted and not hit:
+            a.alerted.add("out")
+            dest = f" (heading for about {a.dest[0]:.0f},{a.dest[1]:.0f})" if a.dest else ""
+            out.append(("army_out", f"He sent an army out{dest}.", {"target": None, "id": a.id}))
+        return out
+
+    def _route_points_at(self, ends):
+        """Name of your spot that a march line points at from his city's end
+        (the line may be cut off by the screen edge before it gets there)."""
+        e0, e1 = ends
+        starts = [(e0, e1), (e1, e0)]
+        for a_, b_ in starts:
+            if not self.at_home(a_):
+                continue                      # only routes leaving his city
+            v = np.subtract(b_, a_)
+            for name, pos in self.my_sites:
+                u = np.subtract(pos, a_)
+                nv, nu = np.linalg.norm(v), np.linalg.norm(u)
+                if nv < 2 or nu < nv - 1:
+                    continue
+                if float(v @ u) / (nv * nu) > math.cos(math.radians(15)):
+                    return name
+        return None
+
+    def target_of(self, a: Army):
+        """Which of your spots the army's line points at, from where it is now."""
+        if not a.dest:
+            return None
+        v = np.subtract(a.dest, a.tile)
+        for name, pos in self.my_sites:
+            u = np.subtract(pos, a.tile)
+            if np.linalg.norm(v) and np.linalg.norm(u):
+                cos = float(v @ u / (np.linalg.norm(v) * np.linalg.norm(u)))
+                if cos > math.cos(math.radians(15)) and np.linalg.norm(u) <= np.linalg.norm(v) + 15:
+                    return name
+        return None
+
+    def summary(self):
+        def state(a):
+            if a.moving:
+                return {"home": "going home", "out": "marching out"}.get(a.direction, "marching")
+            return "at his city" if self.at_home(a.tile) else "parked / gathering"
+        return [{"id": a.id, "x": round(a.tile[0]), "y": round(a.tile[1]), "state": state(a),
+                 "dest": [round(a.dest[0]), round(a.dest[1])] if a.dest else None,
+                 "last_seen": datetime.fromtimestamp(a.last_seen).strftime("%H:%M:%S")}
+                for a in self.armies]
+
+
+# ---------------------------------------------------------------- the hunter
+
+class Hunter:
+    def __init__(self, game, cfg: dict, my_sites, log_path="his_armies.csv", debug_dir="debug"):
+        h = cfg.get("hunt", {})
+        self.game = game
+        self.name = h.get("player_name", "")
+        self.city = tuple(h.get("city", (0, 0)))
+        self.radius = float(h.get("radius", 25))
+        self.axes = h.get("axes_close")         # tiles per pixel at the close zoom
+        self.my_sites = my_sites
+        self.tracker = Tracker(self.city, my_sites, h.get("near_city", 6),
+                               h.get("match_distance", 12), h.get("near_site", 8))
+        self.log_path = Path(log_path)
+        self.debug_dir = debug_dir
+        self.auto_recall = bool(cfg.get("patrol", {}).get("auto_recall", False))
+        self.warning = AttackAlertDetector()
+        self.warned = False
+        if not self.log_path.exists():
+            self.log_path.write_text("time_utc,army,x,y,state,dest_x,dest_y\n")
+
+    def ready(self):
+        problems = []
+        if not self.name:
+            problems.append("set hunt.player_name (his name as it shows in game)")
+        if not self.axes:
+            problems.append("learn the map directions at the close zoom first")
+        return problems
+
+    def read_view(self, view) -> list[ArmySeen]:
+        """His armies on this screen, in map coordinates."""
+        frame = view.frame
+        if not view.camera:
+            return []
+        cam = view.camera[1:3]
+        labels = [lb for lb in screen.find_player(frame, view.texts, self.name) if lb.kind == "army"]
+        if not labels:
+            return []
+        lines = [ln for ln in screen.find_march_lines(frame) if ln.color != "green"]
+        H = frame.shape[0]
+        out = []
+        for lb in labels:
+            body = (lb.pos[0], lb.pos[1] + int(0.03 * H))   # troops are just under the name
+            tile = to_tile(cam, self.axes, body, frame.shape)
+            # the name floats a little above (and to the side of) the troops: check a
+            # few points under it for a march line
+            probes = [(lb.pos[0], lb.pos[1] + int(k * H)) for k in (0.0, 0.03, 0.06)]
+
+            def gap(ln):
+                return min(ln.distance_to(q) for q in probes)
+            line = min(lines, key=gap, default=None)
+            moving = bool(line and gap(line) < 0.06 * H)
+            ends = None
+            if moving:
+                ends = tuple(to_tile(cam, self.axes, p, frame.shape) for p in (line.p1, line.p2))
+            out.append(ArmySeen(tile, moving, ends, time.time()))
+        return out
+
+    def sweep(self, stop=None) -> tuple[list[ArmySeen], int]:
+        """Visit every point of the sweep grid. Returns (sightings, points visited)."""
+        if self.ready():
+            raise RuntimeError("; ".join(self.ready()))
+        v0 = self.game.look()
+        seen: list[ArmySeen] = []
+        visited = 0
+        for pt in sweep_points(self.city, self.radius, self.axes, v0.frame.shape):
+            if stop and stop():
+                break
+            if not self.game.goto(*pt):
+                log.warning("hunt: couldn't jump to %s", pt)
+                continue
+            self.game.wait()
+            visited += 1
+            view = self.game.look()
+            if self.warning.check(view.frame):
+                self.warned = True
+            for s in self.read_view(view):
+                # the same army seen from two overlapping stops: keep one
+                if all(math.dist(s.tile, o.tile) > 4 for o in seen):
+                    seen.append(s)
+        return seen, visited
+
+    def round(self, stop=None) -> list[Alert]:
+        now = time.time()
+        self.warned = False
+        sightings, visited = self.sweep(stop)
+        events = self.tracker.update(sightings, now)
+        self._log()
+        alerts = []
+        if self.warned:
+            alerts.append(Alert("warning", "YOU'RE BEING SCOUTED OR ATTACKED",
+                                "The red warning is flashing in the game.", urgent=True))
+        for kind, msg, info in events:
+            urgent = kind == "army_out" and bool(info.get("target"))
+            title = {"army_out": "HE SENT AN ARMY OUT" + (" AT YOU" if urgent else ""),
+                     "pulling_back": "He's pulling his troops back",
+                     "all_home": "All his troops are home"}[kind]
+            alerts.append(Alert(f"hunt-{kind}-{now}-{info.get('id', '')}", title, msg,
+                                urgent=urgent, cooldown=False))
+            if urgent and self.auto_recall:
+                pos = dict(self.my_sites).get(info["target"])
+                report = self.game.recall_all([pos] if pos else None)
+                alerts.append(Alert(f"recall-{now}", "Auto-recall", "; ".join(report),
+                                    urgent=True, cooldown=False))
+        log.info("Hunt sweep: %d stops, %d of his armies seen", visited, len(sightings))
+        return alerts
+
+    def _log(self):
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        with self.log_path.open("a", newline="") as f:
+            w = csv.writer(f)
+            for a in self.tracker.summary():
+                d = a["dest"] or ["", ""]
+                w.writerow([stamp, a["id"], a["x"], a["y"], a["state"], d[0], d[1]])

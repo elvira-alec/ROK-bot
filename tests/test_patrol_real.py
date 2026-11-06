@@ -63,3 +63,23 @@ def test_fighting_alert_from_real_battle(tmp_path):
     p.visit(p.sites[0])                                 # troops gathering
     titles = [a.title for a in p.visit(p.sites[0])]     # now in a battle
     assert "YOUR TROOPS ARE FIGHTING" in titles, titles
+
+
+def test_hunter_reads_his_marching_armies_on_real_screen(tmp_path):
+    from rokwatch.hunter import Hunter
+    view = ScreenshotGame(["his_army_marching_close"]).look()
+    # map directions at this zoom aren't known for the real game yet; any will do to
+    # check that both of his armies are found and recognised as marching
+    cfg = {"hunt": {"player_name": "[P83L]JONH WICK", "city": [162, 374],
+                    "axes_close": [[0.01, -0.01], [0.01, 0.01]]}}
+    seen = Hunter(None, cfg, [], str(tmp_path / "h.csv")).read_view(view)
+    assert len(seen) == 2 and all(s.moving for s in seen), seen
+
+
+def test_hunter_ignores_his_city_label_on_real_screen(tmp_path):
+    from rokwatch.hunter import Hunter
+    cfg = {"hunt": {"player_name": "[P83L]JONH WICK", "city": [162, 374],
+                    "axes_close": [[0.01, -0.01], [0.01, 0.01]]}}
+    for name in ("enemy_city_close", "enemy_city_simple"):
+        view = ScreenshotGame([name]).look()
+        assert Hunter(None, cfg, [], str(tmp_path / "h.csv")).read_view(view) == []

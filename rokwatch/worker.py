@@ -41,6 +41,7 @@ class Status:
     last_site: str = ""
     alerts: list = field(default_factory=list)   # recent alerts for the panel
     look: dict | None = None                     # result of the last "what do you see"
+    armies: list = field(default_factory=list)   # his armies, from the last hunt sweep
 
 
 class Worker:
@@ -169,12 +170,16 @@ class Worker:
         from .patrol import learn_axes
         game = self._game()
         self._set("busy", "Learning map directions (dragging the map a little)...")
+        zoom = game.zoom()
         m = learn_axes(game)
         if m is None:
             self._set("ready", "Couldn't learn map directions. Is the coordinate readout visible?")
             return
-        config.save_fields({"patrol.axes": m}, self.cfg_path)
-        self._set("ready", "Learned the map directions. Patrol can now tell where marches go.")
+        # directions depend on the zoom level: keep one set per level
+        key = "hunt.axes_close" if zoom == "close" else "patrol.axes"
+        config.save_fields({key: m}, self.cfg_path)
+        what = "hunting (close zoom)" if zoom == "close" else "patrol (zoomed-out map)"
+        self._set("ready", f"Learned the map directions for {what}.")
 
     def _do_recall(self):
         game = self._game()
@@ -190,6 +195,40 @@ class Worker:
         n.send(f"test-{time.time()}", "RoK watcher test", "If you see this, alerts work.",
                cooldown=False)
         self._set(self.status.phase, "Test alert sent. Check your phone.")
+
+    def _do_hunt(self, max_rounds=None):
+        from .commands import sites_from
+        from .hunter import Hunter
+        cfg = self._cfg()
+        game = self._game()
+        h = cfg.get("hunt", {})
+        sites = sites_from(cfg)
+        if not h.get("city"):
+            enemy = next((s for s in sites if s.kind == "enemy"), None)
+            if enemy:
+                cfg.setdefault("hunt", {})["city"] = [enemy.x, enemy.y]
+        mine = [(s.name, (s.x, s.y)) for s in sites if s.kind == "mine"]
+        hunter = Hunter(game, cfg, mine, cfg.get("hunt", {}).get("log", "his_armies.csv"))
+        problems = hunter.ready()
+        if problems:
+            self._set("ready", "Can't hunt yet: " + "; ".join(problems))
+            return
+        self.hunter = hunter
+        notifier = Notifier.from_config(cfg.get("notify", {}))
+        self.stop_patrol.clear()
+        self.status.round = 0
+        self._set("patrolling", f"Hunting {hunter.name} around {hunter.city[0]},{hunter.city[1]}")
+        while not self.stop_patrol.is_set() and (max_rounds is None or self.status.round < max_rounds):
+            for a in hunter.round(stop=self.stop_patrol.is_set):
+                self._alert(notifier, a)
+            self.status.round += 1
+            self.status.armies = hunter.tracker.summary()
+            self.status.last_site = f"{len(self.status.armies)} of his armies seen"
+            end = time.time() + float(h.get("pause_between_sweeps", 5))
+            while time.time() < end and not self.stop_patrol.is_set():
+                time.sleep(0.2)
+        self.stop_patrol.clear()
+        self._set("ready", f"Hunting stopped after {self.status.round} sweep(s)")
 
     def _do_stop(self):
         self.stop_patrol.clear()

@@ -27,6 +27,8 @@ EDITABLE = {
     "sites": "patrol.sites",
     "auto_recall": "patrol.auto_recall",
     "recall_scope": "patrol.recall_scope",
+    "player_name": "hunt.player_name",
+    "hunt_radius": "hunt.radius",
 }
 
 
@@ -63,6 +65,7 @@ class Panel:
         cfg = config.load(self.cfg_path)
         out = {k: _get(cfg, v) for k, v in EDITABLE.items()}
         out["axes_learned"] = bool(_get(cfg, "patrol.axes"))
+        out["close_axes_learned"] = bool(_get(cfg, "hunt.axes_close"))
         return out
 
     def save(self, data: dict):
@@ -76,6 +79,11 @@ class Panel:
                     v = bool(v)
                 elif k == "recall_scope":
                     v = "all" if v == "all" else "threatened"
+                elif k == "hunt_radius":
+                    try:
+                        v = max(5, min(80, int(v)))
+                    except (TypeError, ValueError):
+                        v = 25
                 else:
                     v = str(v or "").strip()
                 updates[dotted] = v
@@ -88,6 +96,7 @@ class Panel:
         return {
             "phase": st.phase, "message": st.message, "round": st.round,
             "last_site": st.last_site, "alerts": st.alerts, "look": st.look,
+            "armies": st.armies,
             "log": list(self.memlog.lines)[-80:],
             "report": activity_report(_get(cfg, "patrol.activity_log") or "activity.csv"),
         }
@@ -135,7 +144,8 @@ def make_handler(panel: Panel):
                 return self._send(200, {"ok": True})
             cmds = {"/api/open": "open", "/api/close": "close", "/api/start": "start",
                     "/api/stop": "stop", "/api/look": "look", "/api/axes": "axes",
-                    "/api/recall": "recall", "/api/test_alert": "test_alert"}
+                    "/api/recall": "recall", "/api/test_alert": "test_alert",
+                    "/api/hunt": "hunt"}
             if path in cmds:
                 panel.worker.send(cmds[path])
                 return self._send(200, {"ok": True})

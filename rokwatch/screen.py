@@ -611,3 +611,79 @@ def troop_panel(frame: np.ndarray, texts: list[Text]):
             if s2.state == "scout" and s2.badge[1] > last + 0.05 * h:
                 slots.append(TroopSlot(len(slots), s2.badge, s2.portrait, "scout"))
     return used, total, slots
+
+
+# ---------------------------------------------------------------- player names on the map
+
+def _norm(s: str) -> str:
+    """Letters and digits only, upper case; common OCR mix-ups folded together."""
+    s = s.upper()
+    s = s.translate(str.maketrans({"0": "O", "1": "I", "L": "I", "|": "I", "5": "S", "8": "B"}))
+    return re.sub(r"[^A-Z0-9]", "", s)
+
+
+def name_score(text: str, name: str) -> float:
+    """How well an OCR'd label matches a player name like '[P83L]JONH WICK' (0-1).
+    The alliance tag is optional; OCR often garbles the brackets around it."""
+    from difflib import SequenceMatcher
+    t, full = _norm(text), _norm(name)
+    bare = _norm(re.sub(r"^\[[^\]]*\]", "", name))
+    best = 0.0
+    for target in {full, bare}:
+        if not target or len(t) < max(3, len(target) // 2):
+            continue
+        best = max(best, SequenceMatcher(None, t, target).ratio())
+        if target in t:                      # e.g. tag read wrong, name read right
+            best = max(best, 0.9)
+        # the name at the end of the label (after a garbled tag)
+        tail = t[-len(target):]
+        best = max(best, SequenceMatcher(None, tail, target).ratio())
+    return best
+
+
+@dataclass
+class NameLabel:
+    text: str
+    pos: tuple        # centre of the label in frame pixels
+    kind: str         # "city" (label on a dark plate) or "army" (floating over the map)
+    score: float
+
+
+def find_player(frame: np.ndarray, texts: list[Text], name: str, min_score=0.75):
+    """Labels on screen that carry this player's name: his city and his armies."""
+    H, W = frame.shape[:2]
+    out = []
+    for t in texts:
+        if t.box[1] > 0.88 * H or t.box[1] < 0.06 * H:   # chat at the bottom, HUD at the top
+            continue
+        if ":" in t.text or "#" in t.text:                # chat lines / coordinates
+            continue
+        sc = name_score(t.text, name)
+        if sc < min_score:
+            continue
+        out.append(NameLabel(t.text, t.center, label_kind(frame, t), sc))
+    return out
+
+
+def label_kind(frame, t: Text) -> str:
+    """A city's name has its level tag (small light hexagon with a dark number)
+    right underneath; an army's name doesn't."""
+    H = frame.shape[0]
+    x, y, w, h = t.box
+    cx = x + w // 2
+    x0, x1 = max(0, int(cx - 0.035 * H)), int(cx + 0.035 * H)
+    y0, y1 = y + h - int(0.004 * H), int(y + h + 0.035 * H)
+    region = frame[max(0, y0):y1, x0:x1]
+    if region.size == 0:
+        return "army"
+    hsv = cv2.cvtColor(region, cv2.COLOR_BGR2HSV)
+    light = cv2.inRange(hsv, np.array((0, 0, 165), np.uint8), np.array((180, 60, 255), np.uint8))
+    dark = cv2.inRange(hsv, np.array((0, 0, 0), np.uint8), np.array((180, 255, 80), np.uint8))
+    blob = cv2.morphologyEx(light, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+    n, _, st, _ = cv2.connectedComponentsWithStats(blob)
+    for i in range(1, n):
+        bx, by, bw, bh, a = st[i]
+        if (0.008 * H <= bh <= 0.03 * H and 0.012 * H <= bw <= 0.05 * H and 1.0 <= bw / bh <= 3.5
+                and a > 0.45 * bw * bh and 0.05 <= dark[by:by + bh, bx:bx + bw].mean() / 255 <= 0.55):
+            return "city"
+    return "army"

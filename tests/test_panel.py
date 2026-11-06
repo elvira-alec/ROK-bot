@@ -96,3 +96,24 @@ def test_open_look_jump_and_patrol(panel):
     call("/api/stop", {})
     st = wait_for(call, lambda s: s["phase"] == "ready")
     assert "Patrol stopped" in st["message"]
+
+
+def test_hunt_from_panel(panel):
+    import numpy as np
+    p, call, tmp = panel
+    axes = np.linalg.inv(np.array([[24, 10], [-8, 20]], float)).tolist()
+    from rokwatch import config
+    config.save_fields({"hunt.axes_close": axes}, str(tmp / "config.yaml"))
+    call("/api/settings", {"player_name": "[P83L]JONH WICK", "hunt_radius": "20",
+                           "game_url": PAGE + "#farmer=155,368",
+                           "sites": [{"name": "his city", "x": 162, "y": 374, "kind": "enemy"},
+                                     {"name": "logging camp", "x": 205, "y": 424, "kind": "mine"}]})
+    assert call("/api/settings")["close_axes_learned"]
+    call("/api/open", {})
+    wait_for(call, lambda s: s["phase"] == "ready")
+    call("/api/hunt", {})
+    st = wait_for(call, lambda s: s["round"] >= 1 and s["armies"], timeout=120)
+    assert st["armies"][0]["state"] == "parked / gathering"
+    assert abs(st["armies"][0]["x"] - 155) <= 2 and abs(st["armies"][0]["y"] - 368) <= 2
+    call("/api/stop", {})
+    wait_for(call, lambda s: s["phase"] == "ready")

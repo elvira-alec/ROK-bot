@@ -116,6 +116,26 @@
   </section>
 
   <section>
+    <h2><span class="step">4</span> Hunt his armies</h2>
+    <label for="player_name">His name exactly as in game (with alliance tag)</label>
+    <input id="player_name" placeholder="[P83L]JONH WICK">
+    <label for="hunt_radius">How far around his city to search (map tiles)</label>
+    <input id="hunt_radius" inputmode="numeric" placeholder="25">
+    <div class="row">
+      <button class="primary" onclick="save()">Save</button>
+      <button class="go" id="b-hunt" onclick="post('hunt')">Start hunting</button>
+      <button class="danger" onclick="post('stop')">Stop</button>
+    </div>
+    <p class="hint">Hunting sweeps the area around his city at the close zoom (where names show over
+      troops), finds his armies and follows them. First zoom in so names are readable and press
+      <b>Learn map directions</b> once at that zoom. <span id="close-axes"></span></p>
+    <table id="armies-table" hidden>
+      <thead><tr><th>Army</th><th>Where</th><th>Doing</th><th>Heading for</th><th>Seen</th></tr></thead>
+      <tbody id="armies"></tbody>
+    </table>
+  </section>
+
+  <section>
     <h2>Recent alerts</h2>
     <ul class="alerts" id="alerts"><li class="empty">No alerts yet</li></ul>
   </section>
@@ -171,7 +191,9 @@ function addSite() { sites.push({ name: '', x: '', y: '', kind: 'mine' }); drawS
 
 async function loadSettings() {
   const s = await (await fetch('/api/settings')).json();
-  for (const k of ['game_url', 'ntfy_topic', 'discord_webhook']) $(k).value = s[k] || '';
+  for (const k of ['game_url', 'ntfy_topic', 'discord_webhook', 'player_name']) $(k).value = s[k] || '';
+  $('hunt_radius').value = s.hunt_radius || 25;
+  $('close-axes').textContent = s.close_axes_learned ? '(Done: directions for the close zoom are learned.)' : '(Not done yet.)';
   $('auto_recall').checked = !!s.auto_recall;
   $('recall_scope').value = s.recall_scope === 'all' ? 'all' : 'threatened';
   sites = (s.sites || []).map(x => ({ ...x }));
@@ -181,6 +203,7 @@ async function save() {
   await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ game_url: $('game_url').value, ntfy_topic: $('ntfy_topic').value,
       discord_webhook: $('discord_webhook').value, sites, auto_recall: $('auto_recall').checked,
+      player_name: $('player_name').value, hunt_radius: $('hunt_radius').value,
       recall_scope: $('recall_scope').value }) });
   await loadSettings(); refresh();
 }
@@ -193,12 +216,18 @@ async function refresh() {
   $('phase').textContent = st.phase; $('phase').className = 'pill ' + st.phase; $('msg').textContent = st.message;
   const running = st.phase === 'patrolling';
   $('b-start').disabled = running || st.phase === 'stopped' || st.phase === 'opening';
+  $('b-hunt').disabled = $('b-start').disabled;
   $('b-stop').disabled = !running;
   facts($('progress'), [['Rounds done', st.round], ['Last place checked', st.last_site || '-']]);
   $('alerts').innerHTML = st.alerts.length ? st.alerts.map(a =>
     `<li class="${a.urgent ? 'urgent' : ''}"><b>${esc(a.title)}</b>${esc(a.message)}<br><small>${esc(a.time)}</small></li>`).join('')
     : '<li class="empty">No alerts yet</li>';
   $('report').textContent = st.report;
+  const ar = st.armies || [];
+  $('armies-table').hidden = !ar.length;
+  $('armies').innerHTML = ar.map(a => `<tr><td>#${esc(a.id)}</td><td>${esc(a.x)}, ${esc(a.y)}</td>
+    <td>${esc(a.state)}</td><td>${a.dest ? esc(a.dest[0]) + ', ' + esc(a.dest[1]) : '-'}</td>
+    <td>${esc(a.last_seen)}</td></tr>`).join('');
   const lg = $('log'), atEnd = lg.scrollTop + lg.clientHeight >= lg.scrollHeight - 5;
   lg.textContent = st.log.join('\n'); if (atEnd) lg.scrollTop = lg.scrollHeight;
   if (st.look && st.look.time !== lastLook) {
