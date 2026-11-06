@@ -195,7 +195,9 @@ def test_zoomed_out_finds_diamonds_and_checks_names(game, tmp_path):
     assert js(game, "sim.state.zoom") == 1       # back to the zoomed-out view afterwards
     # second sweep: already identified, no zooming in again
     h.round()
-    assert all(a.checks == 1 for a in h.tracker.armies)
+    # identified armies aren't zoomed in on again (an unread one may be retried, up to 3 times)
+    assert all(a.checks == 1 for a in h.tracker.armies if a.owner)
+    assert all(a.checks <= 3 for a in h.tracker.armies)
 
 
 def test_zoomed_out_full_story(game, tmp_path):
