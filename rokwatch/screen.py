@@ -718,25 +718,37 @@ def _dark_outline_ratio(frame, centre, size):  # (kept for reference; not used)
 
 def icon_kind(frame, c) -> str:
     """'scout' or 'army' for a diamond at c.
-    A scout is a plain 3D pyramid: one face clearly darker than the other and each
-    face flat (measured on real screens: ~100 brightness apart, spread under 10).
-    An army is a flat diamond with a white troop symbol (spread 30+ on both halves)."""
+    A scout is a plain 3D pyramid: split down its ridge, one face is clearly darker
+    than the other and each face is flat (real screens: ~100 apart, spread under 10).
+    An army is a flat diamond with a white troop symbol across the middle, so no
+    split gives two flat faces with one much darker. The ridge is searched a few pixels either side,
+    because the detected centre can be a little off."""
     H = frame.shape[0]
     x, y = c
-    r = max(4, int(0.012 * H))                 # just the middle of the icon
-    hsv = cv2.cvtColor(frame[max(0, y - r):y + r + 1, max(0, x - r):x + r + 1], cv2.COLOR_BGR2HSV)
+    r = max(4, int(0.012 * H))
+    k = max(2, int(0.004 * H))               # how far off the centre may be
+    x0, y0 = max(0, x - r - k), max(0, y - r - k)
+    hsv = cv2.cvtColor(frame[y0:y + r + k + 1, x0:x + r + k + 1], cv2.COLOR_BGR2HSV)
     v = hsv[..., 2].astype(float)
     hh, ww = v.shape
-    yy, xx = np.mgrid[:hh, :ww]
-    xx = xx - (x - max(0, x - r))
-    yy = yy - (y - max(0, y - r))
-    inside = (np.abs(xx) + np.abs(yy)) < r
-    left, right = v[inside & (xx < -1)], v[inside & (xx > 1)]
-    if len(left) < 5 or len(right) < 5:
-        return "army"
-    diff = abs(float(np.median(left)) - float(np.median(right)))
-    spread = max(float(left.std()), float(right.std()))
-    return "scout" if diff >= 50 and spread <= 20 else "army"
+    gy, gx = np.mgrid[:hh, :ww]
+    for dy in range(-k, k + 1, max(1, k // 2)):
+        for dx in range(-k, k + 1):
+            cx, cy = x - x0 + dx, y - y0 + dy
+            xx, yy = gx - cx, gy - cy
+            inside = (np.abs(xx) + np.abs(yy)) < r
+            left, right = v[inside & (xx < -1)], v[inside & (xx > 1)]
+            if len(left) < 5 or len(right) < 5:
+                continue
+            ml, mr = float(np.median(left)), float(np.median(right))
+            diff = abs(ml - mr)
+            ratio = min(ml, mr) / max(ml, mr, 1.0)
+            spread = max(float(left.std()), float(right.std()))
+            # scout: dark face ~0.57 of the light one; an army's grey fill next to its
+            # white symbol is 0.7 or more
+            if diff >= 50 and spread <= 20 and ratio <= 0.66:
+                return "scout"
+    return "army"
 
 
 def find_map_icons(frame: np.ndarray):
@@ -766,7 +778,8 @@ def find_map_icons(frame: np.ndarray):
         if ((inner[..., 2] > 235) & (inner[..., 1] < 30)).mean() < 0.08:
             continue                          # needs a white symbol inside
         if all(np.hypot(cx - f[0][0], cy - f[0][1]) > 0.5 * max(w, h) for f in found):
-            found.append(((int(cx), int(cy)), "army"))
+            if icon_kind(frame, (int(cx), int(cy))) == "army":
+                found.append(((int(cx), int(cy)), "army"))
     return found
 
 

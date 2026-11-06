@@ -313,3 +313,45 @@ def test_map_icon_kinds_on_crops(name):
     canvas[400:400 + crop.shape[0], 1000:1000 + crop.shape[1]] = crop
     found = screen.find_map_icons(canvas)
     assert [k for _, k in found] == [CROPS[name]], found
+
+
+ICON_SPOTS = [("my_armies_simple.png", (933, 991), "army"),        # sword
+              ("march_simple_view.png", (1538, 621), "army"),      # catapult
+              ("crops/army_cavalry.jpg", (197, 163), "army"),      # horse
+              ("crops/army_siege.jpg", (178, 155), "army"),
+              ("crops/army_flag.jpg", (137, 148), "army"),
+              ("scouted_simple_3.png", (1215, 933), "scout"),
+              ("scouted_simple_4.png", (1341, 726), "scout"),
+              ("scouted_simple_5.png", (1443, 727), "scout"),
+              ("scouted_simple_2.png", (1378, 839), "scout"),
+              ("scouted_simple_4.png", (1121, 929), "scout")]
+
+
+def test_scouts_and_armies_never_swapped():
+    """Each icon at several screen sizes and brightnesses, on the real day and night
+    map. A scout must never come out as an army or the other way round."""
+    day, night = load("march_simple_view"), load("search_bar_marching")
+    swapped, missed, total = [], 0, 0
+    for f, (x, y), kind in ICON_SPOTS:
+        im = cv2.imread(str(DIR / f))
+        r = 34 if kind == "scout" else (60 if f.startswith("crops") else 46)
+        patch = im[max(0, y - r):y + r, max(0, x - r):x + r]
+        for scale in (0.7, 1.0, 1.3):
+            p = cv2.resize(patch, None, fx=scale, fy=scale,
+                           interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_CUBIC)
+            for bg_src in (day, night):
+                for bright in (0.9, 1.0, 1.1):
+                    pv = np.clip(p.astype(float) * bright, 0, 255).astype(np.uint8)
+                    bg = cv2.resize(bg_src, None, fx=scale, fy=scale)
+                    cy, cx = int(560 * scale), int(1700 * scale)
+                    bg[cy:cy + pv.shape[0], cx:cx + pv.shape[1]] = pv
+                    mid = (cx + pv.shape[1] // 2, cy + pv.shape[0] // 2)
+                    got = [k for c, k in screen.find_map_icons(bg)
+                           if abs(c[0] - mid[0]) < 60 * scale and abs(c[1] - mid[1]) < 60 * scale]
+                    total += 1
+                    if any(k != kind for k in got):
+                        swapped.append((f, scale, bright, got))
+                    elif not got:
+                        missed += 1
+    assert swapped == [], swapped
+    assert missed <= total * 0.05, (missed, total)
