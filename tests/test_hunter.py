@@ -84,8 +84,10 @@ def game(tmp_path):
         yield Game(gb, settle=0.4)
 
 
-def hunter(game, tmp_path, radius=20):
-    cfg = {"hunt": {"player_name": NAME, "city": list(CITY), "radius": radius, "axes_close": AXES}}
+def hunter(game, tmp_path, radius=20, method="close"):
+    cfg = {"hunt": {"player_name": NAME, "city": list(CITY), "radius": radius, "axes_close": AXES,
+                    "method": method, "checks_per_sweep": 4},
+           "patrol": {"axes": AXES}}     # the test page draws every zoom at the same scale
     return Hunter(game, cfg, SITES, str(tmp_path / "his.csv"))
 
 
@@ -134,3 +136,45 @@ def test_bigger_area_takes_several_stops(game, tmp_path):
     seen, stops = h.sweep()
     assert stops > 1
     assert any(math.dist(s.tile, (130, 400)) < 1.5 for s in seen), [s.tile for s in seen]
+
+
+
+# ---------------------------------------------------------------- zoomed-out sweep + zoom in to check names
+
+def test_zoomed_out_finds_diamonds_and_checks_names(game, tmp_path):
+    js(game, f"sim.farmer('{NAME}', [155, 368]); sim.farmer('{NAME}', [172, 371]);"
+             "sim.farmer('[XX]Someone Else', [166, 384])")
+    h = hunter(game, tmp_path, method="zoomed_out")
+    assert h.round() == []
+    owners = sorted((a.owner, round(a.tile[0]), round(a.tile[1])) for a in h.tracker.armies)
+    assert [o[0] for o in owners] == ["him", "him", "other"], owners
+    his = [a for a in h.tracker.summary() if a["his"]]
+    assert len(his) == 2
+    assert js(game, "sim.state.zoom") == 1       # back to the zoomed-out view afterwards
+    # second sweep: already identified, no zooming in again
+    h.round()
+    assert all(a.checks == 1 for a in h.tracker.armies)
+
+
+def test_zoomed_out_full_story(game, tmp_path):
+    js(game, f"sim.farmer('{NAME}', [155, 368]); sim.farmer('{NAME}', [172, 371])")
+    h = hunter(game, tmp_path, method="zoomed_out")
+    assert h.round() == []
+    js(game, "sim.sendFarmer(0, [162, 374], 0.004); sim.sendFarmer(0, [162, 374], 0.004)")
+    time.sleep(1)
+    assert "He's pulling his troops back" in [a.title for a in h.round()]
+    js(game, "sim.clear()")
+    assert [a.title for a in h.round()] == ["All his troops are home"]
+    js(game, f"sim.march('enemy', 'camp', 'white', 0.15, 0.002, '{NAME}')")
+    titles = [a.title for a in h.round()]
+    assert titles == ["HE SENT AN ARMY OUT AT YOU"], titles
+
+
+def test_zoomed_out_ignores_other_players_marching(game, tmp_path):
+    js(game, "sim.march([150, 360], [205, 424], 'white', 0.2, 0.002, '[XX]Someone Else')")
+    h = hunter(game, tmp_path, method="zoomed_out")
+    h.round()
+    js(game, "sim.state.marches[0].progress = 0.3")
+    alerts = h.round()
+    assert alerts == [], [a.title for a in alerts]       # heading for your camp, but not him
+    assert [a.owner for a in h.tracker.armies] == ["other"]

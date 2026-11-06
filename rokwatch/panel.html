@@ -126,9 +126,10 @@
       <button class="go" id="b-hunt" onclick="post('hunt')">Start hunting</button>
       <button class="danger" onclick="post('stop')">Stop</button>
     </div>
-    <p class="hint">Hunting sweeps the area around his city at the close zoom (where names show over
-      troops), finds his armies and follows them. First zoom in so names are readable and press
-      <b>Learn map directions</b> once at that zoom. <span id="close-axes"></span></p>
+    <p class="hint">Hunting sweeps the zoomed-out map around his city (wide view, armies show as grey
+      diamonds), then zooms in on each new army just long enough to read the name over it, and
+      follows the ones that are his. Before the first hunt, press <b>Learn map directions</b> once
+      while zoomed out to the patrol level. <span id="close-axes"></span></p>
     <table id="armies-table" hidden>
       <thead><tr><th>Army</th><th>Where</th><th>Doing</th><th>Heading for</th><th>Seen</th></tr></thead>
       <tbody id="armies"></tbody>
@@ -193,7 +194,7 @@ async function loadSettings() {
   const s = await (await fetch('/api/settings')).json();
   for (const k of ['game_url', 'ntfy_topic', 'discord_webhook', 'player_name']) $(k).value = s[k] || '';
   $('hunt_radius').value = s.hunt_radius || 25;
-  $('close-axes').textContent = s.close_axes_learned ? '(Done: directions for the close zoom are learned.)' : '(Not done yet.)';
+  $('close-axes').textContent = s.axes_learned ? '(Done: map directions are learned.)' : '(Not done yet.)';
   $('auto_recall').checked = !!s.auto_recall;
   $('recall_scope').value = s.recall_scope === 'all' ? 'all' : 'threatened';
   sites = (s.sites || []).map(x => ({ ...x }));

@@ -71,6 +71,7 @@ class ArmySeen:
     moving: bool
     ends: tuple | None          # map coordinates of both ends of its march line
     seen: float                 # time
+    owner: str | None = None    # "him" when his name was read right there
 
 
 @dataclass
@@ -85,6 +86,8 @@ class Army:
     dest: tuple | None = None
     history: list = field(default_factory=list)
     alerted: set = field(default_factory=set)
+    owner: str | None = None       # "him", "other", or None (not checked yet)
+    checks: int = 0                # how many times we zoomed in to read its name
 
 
 class Tracker:
@@ -140,7 +143,11 @@ class Tracker:
 
     def update(self, sightings: list[ArmySeen], now: float) -> list[tuple[str, str, dict]]:
         """Fold one sweep's sightings in. Returns events: (kind, message, details)."""
-        events = []
+        self.match(sightings, now)
+        return self.events()
+
+    def match(self, sightings: list[ArmySeen], now: float):
+        """Pair this sweep's sightings with known armies (by position)."""
         self.sweeps += 1
         unmatched = list(self.armies)
         current = []
@@ -153,6 +160,8 @@ class Tracker:
                 a = Army(self._next, s.tile, now, now)
                 self._next += 1
                 prev_tile, prev_moving = None, False
+                if getattr(s, "owner", None):
+                    a.owner = s.owner
             a.tile, a.last_seen, a.moving, a.ends = s.tile, now, s.moving, s.ends
             a.history.append((now, s.tile))
             if s.moving and s.ends:
@@ -160,19 +169,26 @@ class Tracker:
             else:
                 a.direction, a.dest = None, None
             current.append(a)
+        self.armies = current
+
+    def events(self, include=None) -> list[tuple[str, str, dict]]:
+        """What changed, counting only the armies `include` accepts (default: all)."""
+        include = include or (lambda a: True)
+        mine = [a for a in self.armies if include(a)]
+        events = []
+        for a in mine:
             events += self._army_events(a)
-        home = [a for a in current if a.direction == "home"]
+        home = [a for a in mine if a.direction == "home"]
         if len(home) >= 2 and self._last_home_count < 2:
             events.append(("pulling_back", f"He's pulling troops back to his city "
                                            f"({len(home)} armies heading home).",
                            {"armies": len(home)}))
         self._last_home_count = len(home)
-        away = [a for a in current if not self.at_home(a.tile)]
+        away = [a for a in mine if not self.at_home(a.tile)]
         if self._last_away and self._last_away >= 2 and not away:
             events.append(("all_home", "All his armies are back home. He may be getting ready "
                                        "to attack (or going offline).", {}))
         self._last_away = len(away)
-        self.armies = current
         return events
 
     def _army_events(self, a: Army):
@@ -228,15 +244,18 @@ class Tracker:
                     return name
         return None
 
-    def summary(self):
+    def summary(self, include=None):
+        include = include or (lambda a: a.owner in (None, "him"))
+
         def state(a):
             if a.moving:
                 return {"home": "going home", "out": "marching out"}.get(a.direction, "marching")
             return "at his city" if self.at_home(a.tile) else "parked / gathering"
         return [{"id": a.id, "x": round(a.tile[0]), "y": round(a.tile[1]), "state": state(a),
                  "dest": [round(a.dest[0]), round(a.dest[1])] if a.dest else None,
-                 "last_seen": datetime.fromtimestamp(a.last_seen).strftime("%H:%M:%S")}
-                for a in self.armies]
+                 "last_seen": datetime.fromtimestamp(a.last_seen).strftime("%H:%M:%S"),
+                 "his": a.owner == "him"}
+                for a in self.armies if include(a)]
 
 
 # ---------------------------------------------------------------- the hunter
@@ -248,7 +267,13 @@ class Hunter:
         self.name = h.get("player_name", "")
         self.city = tuple(h.get("city", (0, 0)))
         self.radius = float(h.get("radius", 25))
-        self.axes = h.get("axes_close")         # tiles per pixel at the close zoom
+        # "zoomed_out": sweep the simplified map (wide view, grey diamonds), zoom in only to
+        # read who a diamond belongs to. "close": sweep at the close zoom reading names.
+        self.method = h.get("method", "zoomed_out")
+        self.axes_close = h.get("axes_close")
+        self.axes_out = cfg.get("patrol", {}).get("axes")
+        self.axes = self.axes_out if self.method == "zoomed_out" else self.axes_close
+        self.checks_per_sweep = int(h.get("checks_per_sweep", 3))
         self.my_sites = my_sites
         self.tracker = Tracker(self.city, my_sites, h.get("near_city", 6),
                                h.get("match_distance", 12), h.get("near_site", 8))
@@ -265,7 +290,9 @@ class Hunter:
         if not self.name:
             problems.append("set hunt.player_name (his name as it shows in game)")
         if not self.axes:
-            problems.append("learn the map directions at the close zoom first")
+            problems.append("learn the map directions first (" +
+                            ("at the zoomed-out patrol view" if self.method == "zoomed_out"
+                             else "at the close zoom") + ")")
         return problems
 
     def read_view(self, view) -> list[ArmySeen]:
@@ -294,8 +321,79 @@ class Hunter:
             ends = None
             if moving:
                 ends = tuple(to_tile(cam, self.axes, p, frame.shape) for p in (line.p1, line.p2))
+            out.append(ArmySeen(tile, moving, ends, time.time(), owner="him"))
+        return out
+
+    def read_view_out(self, view) -> list[ArmySeen]:
+        """Armies on the zoomed-out map (grey diamonds), in map coordinates."""
+        frame = view.frame
+        if not view.camera:
+            return []
+        cam = view.camera[1:3]
+        H = frame.shape[0]
+        lines = [ln for ln in screen.find_march_lines(frame) if ln.color != "green"]
+        out = []
+        for d in screen.find_army_icons(frame):
+            tile = to_tile(cam, self.axes, d, frame.shape)
+            line = min(lines, key=lambda ln: ln.distance_to(d), default=None)
+            moving = bool(line and line.distance_to(d) < 0.05 * H)  # the icon hides the first dots
+            ends = (tuple(to_tile(cam, self.axes, p, frame.shape) for p in (line.p1, line.p2))
+                    if moving else None)
             out.append(ArmySeen(tile, moving, ends, time.time()))
         return out
+
+    def identify(self, armies) -> int:
+        """Zoom in on armies we haven't identified yet and read the name over them.
+        Most likely his first (on a route to/from his city, or near it)."""
+        todo = [a for a in armies if a.owner is None and a.checks < 3]
+        if not todo:
+            return 0
+
+        def likely(a):
+            touches = a.ends and any(self.tracker.at_home(e) for e in a.ends)
+            return (0 if touches else 1, math.dist(a.tile, self.city))
+        todo.sort(key=likely)
+        todo = todo[:self.checks_per_sweep]
+        if not self.game.zoom_to_close():
+            log.warning("hunt: couldn't zoom in to read names")
+            return 0
+        done = 0
+        for a in todo:
+            a.checks += 1
+            if not self.game.goto(int(round(a.tile[0])), int(round(a.tile[1]))):
+                continue
+            self.game.wait()
+            v = self.game.look()
+            H, W = v.frame.shape[:2]
+            centre = (W / 2, H / 2)
+            near = [lb for lb in screen.find_player(v.frame, v.texts, self.name)
+                    if lb.kind == "army" and math.dist(lb.pos, centre) < 0.3 * H]
+            if near:
+                a.owner = "him"
+            elif self._other_army_label_near(v, centre, H):
+                a.owner = "other"
+            done += 1
+            log.info("hunt: army #%d at %.0f,%.0f is %s", a.id, a.tile[0], a.tile[1],
+                     a.owner or "unclear")
+        self.game.zoom_to_patrol_level()
+        return done
+
+    def is_his(self, a) -> bool:
+        """His for sure (name read), or not checked yet but on a route that starts or
+        ends at his city (almost always his own army)."""
+        if a.owner == "him":
+            return True
+        if a.owner is None and a.ends:
+            return any(self.tracker.at_home(e) for e in a.ends)
+        return False
+
+    @staticmethod
+    def _other_army_label_near(view, centre, H):
+        for t in view.texts:
+            if "[" in t.text and ":" not in t.text and math.dist(t.center, centre) < 0.3 * H:
+                if screen.label_kind(view.frame, t) == "army":
+                    return True
+        return False
 
     def sweep(self, stop=None) -> tuple[list[ArmySeen], int]:
         """Visit every point of the sweep grid. Returns (sightings, points visited)."""
@@ -315,7 +413,8 @@ class Hunter:
             view = self.game.look()
             if self.warning.check(view.frame):
                 self.warned = True
-            for s in self.read_view(view):
+            reader = self.read_view_out if self.method == "zoomed_out" else self.read_view
+            for s in reader(view):
                 # the same army seen from two overlapping stops: keep one
                 if all(math.dist(s.tile, o.tile) > 4 for o in seen):
                     seen.append(s)
@@ -324,8 +423,15 @@ class Hunter:
     def round(self, stop=None) -> list[Alert]:
         now = time.time()
         self.warned = False
+        if self.method == "zoomed_out":
+            self.game.zoom_to_patrol_level()
         sightings, visited = self.sweep(stop)
-        events = self.tracker.update(sightings, now)
+        if self.method == "zoomed_out":
+            self.tracker.match(sightings, now)
+            self.identify(self.tracker.armies)
+            events = self.tracker.events(self.is_his)
+        else:
+            events = self.tracker.update(sightings, now)
         self._log()
         alerts = []
         if self.warned:

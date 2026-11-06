@@ -103,12 +103,12 @@ def test_hunt_from_panel(panel):
     p, call, tmp = panel
     axes = np.linalg.inv(np.array([[24, 10], [-8, 20]], float)).tolist()
     from rokwatch import config
-    config.save_fields({"hunt.axes_close": axes}, str(tmp / "config.yaml"))
+    config.save_fields({"hunt.axes_close": axes, "patrol.axes": axes}, str(tmp / "config.yaml"))
     call("/api/settings", {"player_name": "[P83L]JONH WICK", "hunt_radius": "20",
                            "game_url": PAGE + "#farmer=155,368",
                            "sites": [{"name": "his city", "x": 162, "y": 374, "kind": "enemy"},
                                      {"name": "logging camp", "x": 205, "y": 424, "kind": "mine"}]})
-    assert call("/api/settings")["close_axes_learned"]
+    assert call("/api/settings")["axes_learned"]
     call("/api/open", {})
     wait_for(call, lambda s: s["phase"] == "ready")
     call("/api/hunt", {})

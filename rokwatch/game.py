@@ -157,6 +157,18 @@ class Game:
 
     zoom_out_to_simple = zoom_to_patrol_level  # old name
 
+    def zoom_to_close(self, max_steps=10) -> bool:
+        """Scroll in to the 3D view, where names show over troops."""
+        for _ in range(max_steps):
+            v = self.look()
+            if screen.zoom_level(v.frame, v.texts) == "close":
+                return True
+            H, W = v.frame.shape[:2]
+            self.b.wheel(W // 2, H // 2, -300)
+            self.wait(0.8)
+        v = self.look()
+        return screen.zoom_level(v.frame, v.texts) == "close"
+
     # ---------------------------------------------------------------- troops
     def troops(self, view: View | None = None):
         v = view or self.look()
