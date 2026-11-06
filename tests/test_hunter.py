@@ -88,6 +88,14 @@ def test_tracker_scouts_are_not_troops():
     assert tr2.update([], 1) == []
 
 
+def test_tracker_pulling_back_even_if_lines_missed():
+    tr = Tracker(CITY, SITES)
+    tr.update([ArmySeen((150, 390), False, None, 0), ArmySeen((180, 360), False, None, 0)], 0)
+    # next sweep: both clearly closer to his city, but no march line seen under them
+    ev = tr.update([ArmySeen((154, 385), False, None, 1), ArmySeen((176, 365), False, None, 1)], 1)
+    assert [e[0] for e in ev] == ["pulling_back"], ev
+
+
 # ---------------------------------------------------------------- on the test page
 
 @pytest.fixture
@@ -175,9 +183,12 @@ def test_zoomed_out_full_story(game, tmp_path):
     js(game, f"sim.farmer('{NAME}', [155, 368]); sim.farmer('{NAME}', [172, 371])")
     h = hunter(game, tmp_path, method="zoomed_out")
     assert h.round() == []
+    first = [(a.owner, a.tile, a.moving) for a in h.tracker.armies]
     js(game, "sim.sendFarmer(0, [162, 374], 0.004); sim.sendFarmer(0, [162, 374], 0.004)")
     time.sleep(1)
-    assert "He's pulling his troops back" in [a.title for a in h.round()]
+    titles = [a.title for a in h.round()]
+    debug = (first, [(a.owner, a.tile, a.moving, a.direction, a.ends) for a in h.tracker.armies])
+    assert "He's pulling his troops back" in titles, (titles, debug)
     js(game, "sim.clear()")
     assert [a.title for a in h.round()] == ["All his troops are home"]
     js(game, f"sim.march('enemy', 'camp', 'white', 0.15, 0.002, '{NAME}')")

@@ -89,6 +89,7 @@ class Army:
     alerted: set = field(default_factory=set)
     owner: str | None = None       # "him", "other", or None (not checked yet)
     kind: str = "army"             # "army" or "scout"
+    prev_tile: tuple | None = None # where it was last sweep
     checks: int = 0                # how many times we zoomed in to read its name
 
 
@@ -165,6 +166,7 @@ class Tracker:
                 prev_tile, prev_moving = None, False
                 if getattr(s, "owner", None):
                     a.owner = s.owner
+            a.prev_tile = prev_tile
             a.tile, a.last_seen, a.moving, a.ends = s.tile, now, s.moving, s.ends
             a.kind = getattr(s, "kind", "army")
             a.history.append((now, s.tile))
@@ -183,7 +185,16 @@ class Tracker:
         for a in his:
             events += self._scout_events(a) if a.kind == "scout" else self._army_events(a)
         mine = [a for a in his if a.kind == "army"]     # scouts don't count as troops
-        home = [a for a in mine if a.direction == "home"]
+        def heading_home(a):
+            if a.direction == "home":
+                return True
+            # its line may be missed on one look; the move itself also tells: it was
+            # out in the field and is now clearly closer to his city
+            if a.prev_tile is not None and not self.at_home(a.prev_tile):
+                return (math.dist(a.tile, self.city) < math.dist(a.prev_tile, self.city) - 1.0
+                        and a.direction != "out")
+            return False
+        home = [a for a in mine if heading_home(a)]
         if len(home) >= 2 and self._last_home_count < 2:
             events.append(("pulling_back", f"He's pulling troops back to his city "
                                            f"({len(home)} armies heading home).",
