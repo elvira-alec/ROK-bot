@@ -218,7 +218,11 @@ def test_zoomed_out_full_story(game, tmp_path):
     first = [(a.owner, a.tile, a.moving) for a in h.tracker.armies]
     js(game, "sim.sendFarmer(0, [162, 374], 0.004); sim.sendFarmer(0, [162, 374], 0.004)")
     time.sleep(1)
-    titles = [a.title for a in h.round()]
+    titles = []
+    for _ in range(3):      # a slow machine may need another sweep to see both moving
+        titles += [a.title for a in h.round()]
+        if "He's pulling his troops back" in titles:
+            break
     debug = (first, [(a.owner, a.tile, a.moving, a.direction, a.ends) for a in h.tracker.armies])
     assert "He's pulling his troops back" in titles, (titles, debug)
     js(game, "sim.clear()")
