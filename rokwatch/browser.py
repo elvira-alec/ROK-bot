@@ -36,6 +36,10 @@ class GameBrowser:
 
     @classmethod
     def from_config(cls, cfg: dict):
+        if cfg.get("game_window"):
+            # the game runs as its own program (PC game / BlueStacks), not in a browser
+            from .desktop import DesktopWindow
+            return DesktopWindow.from_config(cfg)
         return cls(cfg["game_url"], cfg.get("browser_profile", "./browser-profile"),
                    cfg.get("viewport", (1600, 900)), cfg.get("headless", False),
                    cfg.get("browser_executable"), cfg.get("browser_channel"),
@@ -69,7 +73,7 @@ class GameBrowser:
                         log.warning("Couldn't start %s (%s). Trying %s.", ch,
                                     str(e).splitlines()[0], tries[i + 1] or "the built-in browser")
                 self.page = self._ctx.pages[0] if self._ctx.pages else self._ctx.new_page()
-                if self.page.url in ("", "about:blank"):
+                if self.page.url in ("", "about:blank") and self.url:
                     self.page.goto(self.url)
         except Exception:
             self._pw.stop()

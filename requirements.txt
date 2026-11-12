@@ -6,3 +6,6 @@ requests>=2.31
 # pinned: these read the screen. The bot is tuned and tested on these exact versions.
 rapidocr_onnxruntime==1.2.3
 onnxruntime==1.29.0
+# only used when the game runs as its own program (Windows)
+mss>=9.0
+pyautogui>=0.9.54; sys_platform == "win32"

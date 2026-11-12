@@ -114,9 +114,14 @@ class Worker:
             return
         self._close()
         self._set("opening", "Opening the game window...")
-        self.gb = GameBrowser.from_config(self._cfg()).__enter__()
-        self._set("ready", "Game window open. Log in, go to the map, close menus, "
-                           "then press Start patrol.")
+        cfg = self._cfg()
+        self.gb = GameBrowser.from_config(cfg).__enter__()
+        if cfg.get("game_window"):
+            self._set("ready", "Connected to the game window. Get to the map, close menus, "
+                               "then use the buttons below. (Mouse into a corner = stop.)")
+        else:
+            self._set("ready", "Game window open. Log in, go to the map, close menus, "
+                               "then press Start patrol.")
 
     def _area_warning(self) -> str:
         """A message if the game picture can't be found or doesn't fit, else ''."""

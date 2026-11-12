@@ -2,9 +2,15 @@
 # The first run walks you through setup (where his city and your spots are)
 # and saves that to setup.yaml + calibration.png.
 
-# The page where you play Rise of Kingdoms in the browser
-# (for example the BlueStacks X "Play on Cloud" page for RoK).
-game_url: "https://www.bluestacks.com/apps/strategy/rise-of-kingdoms-on-pc.html"
+# Where the game is. Use ONE of these:
+#  * game_url: the web page where Rise of Kingdoms plays inside the browser, or
+#  * game_window: if the game runs as its own program (the Rise of Kingdoms PC game
+#    or BlueStacks), part of its window title, e.g. "Rise of Kingdoms". The bot then
+#    uses your real mouse; push it into a screen corner to stop the bot at once.
+game_url: ""
+game_window: ""
+# BlueStacks zooms with Ctrl + mouse wheel: set to "ctrl" there.
+game_window_zoom_key: ""
 
 # Where the browser keeps your login, so you only sign in once.
 browser_profile: "./browser-profile"

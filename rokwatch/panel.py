@@ -22,6 +22,8 @@ PAGE = Path(__file__).with_name("panel.html")
 # settings the panel can change (saved to setup.yaml, so config.yaml keeps its comments)
 EDITABLE = {
     "game_url": "game_url",
+    "game_window": "game_window",
+    "game_window_zoom_key": "game_window_zoom_key",
     "ntfy_topic": "notify.ntfy_topic",
     "discord_webhook": "notify.discord_webhook",
     "sites": "patrol.sites",
@@ -79,6 +81,8 @@ class Panel:
                     v = bool(v)
                 elif k == "recall_scope":
                     v = "all" if v == "all" else "threatened"
+                elif k == "game_window_zoom_key":
+                    v = "ctrl" if str(v).lower() in ("ctrl", "control", "true", "1") else ""
                 elif k == "hunt_radius":
                     try:
                         v = max(5, min(80, int(v)))

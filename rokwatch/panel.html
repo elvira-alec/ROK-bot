@@ -75,6 +75,11 @@
     <h2><span class="step">1</span> Alerts and game page</h2>
     <label for="game_url">Page where you play Rise of Kingdoms in the browser</label>
     <input id="game_url" placeholder="https://...">
+    <label for="game_window">Or, if the game runs as its own program (PC game / BlueStacks): part of its window title</label>
+    <input id="game_window" placeholder="Rise of Kingdoms   (leave empty to use a browser)">
+    <label class="toggle"><input type="checkbox" id="game_window_zoom_key"> Hold Ctrl while scrolling to zoom (BlueStacks)</label>
+    <p class="hint">With a game window the bot uses your real mouse while it works. To stop it at
+      once, push the mouse into a corner of the screen.</p>
     <label for="ntfy_topic">ntfy topic (subscribe to the same name in the ntfy phone app)</label>
     <input id="ntfy_topic" placeholder="rok-alerts-something-random">
     <label for="discord_webhook">Discord webhook (optional)</label>
@@ -107,7 +112,7 @@
   <section>
     <h2><span class="step">3</span> Run it</h2>
     <div class="row">
-      <button class="primary" id="b-open" onclick="post('open')">Open game window</button>
+      <button class="primary" id="b-open" onclick="post('open')">Open / connect game</button>
       <button class="go" id="b-start" onclick="post('start')">Start patrol</button>
       <button class="danger" id="b-stop" onclick="post('stop')">Stop</button>
     </div>
@@ -192,7 +197,8 @@ function addSite() { sites.push({ name: '', x: '', y: '', kind: 'mine' }); drawS
 
 async function loadSettings() {
   const s = await (await fetch('/api/settings')).json();
-  for (const k of ['game_url', 'ntfy_topic', 'discord_webhook', 'player_name']) $(k).value = s[k] || '';
+  for (const k of ['game_url', 'game_window', 'ntfy_topic', 'discord_webhook', 'player_name']) $(k).value = s[k] || '';
+  $('game_window_zoom_key').checked = s.game_window_zoom_key === 'ctrl';
   $('hunt_radius').value = s.hunt_radius || 25;
   $('close-axes').textContent = s.axes_learned ? '(Done: map directions are learned.)' : '(Not done yet.)';
   $('auto_recall').checked = !!s.auto_recall;
@@ -202,7 +208,8 @@ async function loadSettings() {
 }
 async function save() {
   await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ game_url: $('game_url').value, ntfy_topic: $('ntfy_topic').value,
+    body: JSON.stringify({ game_url: $('game_url').value, game_window: $('game_window').value,
+      game_window_zoom_key: $('game_window_zoom_key').checked ? 'ctrl' : '', ntfy_topic: $('ntfy_topic').value,
       discord_webhook: $('discord_webhook').value, sites, auto_recall: $('auto_recall').checked,
       player_name: $('player_name').value, hunt_radius: $('hunt_radius').value,
       recall_scope: $('recall_scope').value }) });

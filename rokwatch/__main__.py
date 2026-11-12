@@ -185,6 +185,21 @@ def selftest(path):
     return 0
 
 
+def window_selftest(title):
+    """Connect to a game window by title, read it, jump the map. Prints JSON."""
+    import json
+    from .desktop import DesktopWindow
+    from .game import Game
+    with DesktopWindow(title) as w:
+        g = Game(w, settle=1.0)
+        before = g.look().camera
+        ok = g.goto(162, 374)
+        after = g.look().camera
+    print(json.dumps({"before": list(before) if before else None, "jumped": ok,
+                      "after": list(after) if after else None}))
+    return 0 if ok else 1
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Rise of Kingdoms attack watcher")
     ap.add_argument("--config", default=config.DEFAULT_PATH)
@@ -206,11 +221,14 @@ def main(argv=None):
     ap.add_argument("--report", action="store_true", help="when is he active? (from the log)")
     ap.add_argument("--panel", action="store_true", help="open the control panel")
     ap.add_argument("--selftest", metavar="PNG", help=argparse.SUPPRESS)  # checks the build
+    ap.add_argument("--window-selftest", metavar="TITLE", help=argparse.SUPPRESS)
     ap.add_argument("--max-checks", type=int, help=argparse.SUPPRESS)  # for tests
     args = ap.parse_args(argv)
     setup_logging()
     if args.selftest:
         return selftest(args.selftest)
+    if args.window_selftest:
+        return window_selftest(args.window_selftest)
     if args.panel:
         from .panel import serve
         serve(args.config)
