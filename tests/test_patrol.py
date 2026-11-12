@@ -44,6 +44,24 @@ def test_reads_camera_and_jumps(game):
     assert js(game, "[sim.state.cam.x, sim.state.cam.y]") == [162, 374]
     assert js(game, "sim.state.dialog") is None  # search box closed again
     assert js(game, "sim.state.typed") == "162374"
+    assert not js(game, "sim.state.starClicks")       # never the favourites star
+
+
+@pytest.mark.parametrize("simple", [False, True])
+def test_jump_taps_magnifier_not_star(game, simple):
+    """The star sits right after the magnifier: tapping it opens Favorites instead."""
+    if simple:
+        js(game, "sim.state.zoom = 1; sim.state.simple = true")
+        time.sleep(0.3)
+    from rokwatch import screen
+    v = game.look()
+    bar = screen.camera_coords(v.frame, v.texts)
+    x, y = screen.search_button(v.frame, bar[3])
+    mg = js(game, "(() => { const cb = sim.state.simple ? {x:75,w:160} : {x:285,w:160};"
+                  " return [cb.x + cb.w + 12, 18]; })()")
+    assert abs(x - mg[0]) <= 6 and abs(y - mg[1]) <= 6, ((x, y), mg)
+    assert game.goto(176, 380)
+    assert not js(game, "sim.state.starClicks")
 
 
 def test_zoom_out_to_patrol_level(game):

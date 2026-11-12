@@ -150,3 +150,11 @@ patrol:
 # Y box and Go button of the coordinate search are, as fractions of the game
 # screen (0-1). Example: x_field: [0.43, 0.45]
 goto_dialog: {}
+
+# Pictures the bot keeps so you can send them in to improve it (folder: snapshots/).
+# One is saved with every alert, when you press "Save snapshot" in the panel, and
+# every few minutes while patrolling / hunting. Each has a .json with what the bot read.
+snapshots:
+  every_minutes: 10     # 0 = only alerts and the button
+  on_alerts: true
+  keep: 300             # oldest are deleted after this many

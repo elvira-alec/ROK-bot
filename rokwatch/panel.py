@@ -6,18 +6,24 @@
 from __future__ import annotations
 
 import hmac
+import ipaddress
 import json
 import logging
+import os
 import secrets
+import shutil
 import socket
+import subprocess
+import sys
 import threading
+import time
 import webbrowser
 from http.cookies import SimpleCookie
 from urllib.parse import parse_qs, urlsplit
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import config
+from . import config, snapshots
 from .patrol import activity_report
 from .worker import MemoryLog, Worker
 
@@ -37,6 +43,7 @@ EDITABLE = {
     "player_name": "hunt.player_name",
     "panel_on_phone": "panel_on_phone",
     "hunt_radius": "hunt.radius",
+    "snap_every": "snapshots.every_minutes",
 }
 
 
@@ -77,21 +84,34 @@ class Panel:
             config.save_fields({"panel_key": key}, self.cfg_path)
         return key
 
-    def phone_info(self, port, listening_on_lan):
+    def phone_info(self, port, listening_on_lan=True):
+        """Links + QR codes for the phone: 'local' (same Wi-Fi) and 'tailscale' (anywhere,
+        once Tailscale runs on this laptop and the phone with the same account)."""
         enabled = bool(_get(config.load(self.cfg_path), "panel_on_phone"))
-        info = {"enabled": enabled, "active": listening_on_lan, "url": None, "qr": None}
-        if enabled and listening_on_lan:
-            url = f"http://{lan_ip()}:{port}/?key={self.phone_key()}"
-            info["url"] = url
-            try:
-                import io
-                import segno
-                buf = io.BytesIO()
-                segno.make(url, error="m").save(buf, kind="svg", scale=6, border=2, dark="#000",
-                                                  light="#fff")
-                info["qr"] = buf.getvalue().decode()
-            except Exception as e:     # the link alone still works
-                log.debug("QR code failed: %s", e)
+        info = {"enabled": enabled, "active": listening_on_lan, "url": None, "qr": None,
+                "options": []}
+        if not (enabled and listening_on_lan):
+            return info
+        key = self.phone_key()
+        local = lan_ip()
+        ts = tailscale_address()
+        routes = [("local", "Home Wi-Fi", local if not is_tailscale_ip(local) else None)]
+        routes.append(("tailscale", "Tailscale (from anywhere)", ts))
+        for kind, label, host in routes:
+            opt = {"kind": kind, "label": label, "url": None, "qr": None}
+            if host:
+                opt["url"] = f"http://{host}:{port}/?key={key}"
+                opt["qr"] = _qr_svg(opt["url"])
+            elif kind == "tailscale":
+                opt["help"] = ("Tailscale isn't running on this laptop. Install Tailscale on this "
+                               "laptop and on your phone, sign in to both with the same account, "
+                               "then come back here (no restart needed).")
+            else:
+                opt["help"] = "This laptop isn't on a home network right now."
+            info["options"].append(opt)
+        first = next((o for o in info["options"] if o["url"]), None)
+        if first:
+            info["url"], info["qr"] = first["url"], first["qr"]
         return info
 
     def settings(self):
@@ -100,6 +120,8 @@ class Panel:
         out["axes_learned"] = bool(_get(cfg, "patrol.axes"))
         out["close_axes_learned"] = bool(_get(cfg, "hunt.axes_close"))
         out["panel_on_phone"] = bool(_get(cfg, "panel_on_phone"))
+        se = _get(cfg, "snapshots.every_minutes")
+        out["snap_every"] = 10 if se is None else se
         return out
 
     def save(self, data: dict):
@@ -115,6 +137,11 @@ class Panel:
                     v = "all" if v == "all" else "threatened"
                 elif k == "game_window_zoom_key":
                     v = "ctrl" if str(v).lower() in ("ctrl", "control", "true", "1") else ""
+                elif k == "snap_every":
+                    try:
+                        v = max(0, min(240, float(v)))
+                    except (TypeError, ValueError):
+                        v = 10
                 elif k == "hunt_radius":
                     try:
                         v = max(5, min(80, int(v)))
@@ -133,6 +160,7 @@ class Panel:
             "phase": st.phase, "message": st.message, "round": st.round,
             "last_site": st.last_site, "alerts": st.alerts, "look": st.look,
             "armies": st.armies,
+            "snaps": snapshots.listing(limit=24),
             "log": list(self.memlog.lines)[-80:],
             "report": activity_report(_get(cfg, "patrol.activity_log") or "activity.csv"),
         }
@@ -146,6 +174,67 @@ def lan_ip() -> str:
             return sk.getsockname()[0]
     except OSError:
         return "127.0.0.1"
+
+
+TAILSCALE_NET = ipaddress.ip_network("100.64.0.0/10")
+_ts_cache = {"t": 0.0, "ip": None}
+
+
+def is_tailscale_ip(a) -> bool:
+    try:
+        return ipaddress.ip_address(a) in TAILSCALE_NET
+    except ValueError:
+        return False
+
+
+def _tailscale_exe():
+    exe = shutil.which("tailscale")
+    if exe:
+        return exe
+    for p in (r"C:\Program Files\Tailscale\tailscale.exe",
+              r"C:\Program Files (x86)\Tailscale\tailscale.exe",
+              "/Applications/Tailscale.app/Contents/MacOS/Tailscale"):
+        if os.path.exists(p):
+            return p
+    return None
+
+
+def tailscale_address(max_age=20.0):
+    """This laptop's Tailscale address (100.x.y.z), or None when Tailscale isn't up.
+    Checked again every max_age seconds, so starting Tailscale needs no restart here."""
+    now = time.time()
+    if now - _ts_cache["t"] < max_age:
+        return _ts_cache["ip"]
+    ip = None
+    exe = _tailscale_exe()
+    if exe:
+        try:
+            flags = 0x08000000 if sys.platform == "win32" else 0      # no console window
+            out = subprocess.run([exe, "ip", "-4"], capture_output=True, text=True,
+                                 timeout=4, creationflags=flags).stdout
+            ip = next((a.strip() for a in out.split() if is_tailscale_ip(a.strip())), None)
+        except (OSError, subprocess.SubprocessError):
+            pass
+    if not ip:          # no command line tool: look at this computer's own addresses
+        try:
+            addrs = {i[4][0] for i in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)}
+            ip = next((a for a in sorted(addrs) if is_tailscale_ip(a)), None)
+        except OSError:
+            pass
+    _ts_cache.update(t=now, ip=ip)
+    return ip
+
+
+def _qr_svg(url):
+    try:
+        import io
+        import segno
+        buf = io.BytesIO()
+        segno.make(url, error="m").save(buf, kind="svg", scale=6, border=2, dark="#000", light="#fff")
+        return buf.getvalue().decode()
+    except Exception as e:     # the link alone still works
+        log.debug("QR code failed: %s", e)
+        return None
 
 
 def make_handler(panel: Panel, port_holder=None):
@@ -204,6 +293,22 @@ def make_handler(panel: Panel, port_holder=None):
                     return self._send(200, {"enabled": True, "active": True, "url": None,
                                             "qr": None, "on_phone": True})
                 return self._send(200, panel.phone_info(port_holder["port"], port_holder["lan"]))
+            if path.startswith("/snap/"):
+                p = snapshots.path_of(path[len("/snap/"):])
+                if not p:
+                    return self._send(404, {"error": "no such snapshot"})
+                ctype = {".png": "image/png", ".jpg": "image/jpeg"}.get(p.suffix, "application/json")
+                return self._send(200, p.read_bytes(), ctype)
+            if path == "/api/snapshots.zip":
+                data = snapshots.zip_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/zip")
+                self.send_header("Content-Disposition",
+                                 f'attachment; filename="rok-snapshots-{time.strftime("%Y%m%d-%H%M")}.zip"')
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
             if path.startswith("/view.png"):
                 p = Path(panel.worker.shot_path)
                 return self._send(200, p.read_bytes(), "image/png") if p.exists() else \
@@ -235,6 +340,9 @@ def make_handler(panel: Panel, port_holder=None):
             if path in cmds:
                 panel.worker.send(cmds[path])
                 return self._send(200, {"ok": True})
+            if path == "/api/snap":
+                panel.worker.request_snap(str(data.get("note") or "")[:60])
+                return self._send(200, {"ok": True})
             if path == "/api/goto":
                 try:
                     panel.worker.send("goto", x=int(data["x"]), y=int(data["y"]))
@@ -252,20 +360,25 @@ def serve(cfg_path=config.DEFAULT_PATH, port=8765, open_browser=True):
     if not P(cfg_path).exists() and P("config.example.yaml").exists():
         P(cfg_path).write_text(P("config.example.yaml").read_text())
     panel = Panel(cfg_path)
-    # On the home network too (for the phone) only when switched on; key-protected.
+    # Always listening on the network so 'panel on phone' (home Wi-Fi or Tailscale) can be
+    # switched on without a restart. Nothing gets in from outside this laptop unless it's
+    # switched on AND the request carries the secret key (see _allowed).
     phone = bool(_get(config.load(cfg_path), "panel_on_phone"))
-    host = "0.0.0.0" if phone else "127.0.0.1"
-    holder = {"port": port, "lan": phone}
+    holder = {"port": port, "lan": True}
     try:
-        srv = ThreadingHTTPServer((host, port), make_handler(panel, holder))
+        srv = ThreadingHTTPServer(("0.0.0.0", port), make_handler(panel, holder))
     except OSError:  # port taken (maybe it's already open): use any free one
-        srv = ThreadingHTTPServer((host, 0), make_handler(panel, holder))
+        srv = ThreadingHTTPServer(("0.0.0.0", 0), make_handler(panel, holder))
     holder["port"] = srv.server_port
     url = f"http://127.0.0.1:{srv.server_port}/"
     print(f"RoK watcher control panel: {url}  (keep this window open; Ctrl+C to quit)")
+    print("If Windows asks whether to allow RoKWatcher on networks, tick BOTH boxes (Private and "
+          "Public) and click Allow: that's what lets your phone in (it still needs the secret key).")
     if phone:
         print(f"On your phone (same Wi-Fi): http://{lan_ip()}:{srv.server_port}/?key={panel.phone_key()}")
-        print("If Windows asks whether to allow RoKWatcher on networks, click Allow (private).")
+        if tailscale_address():
+            print(f"On your phone (Tailscale): http://{tailscale_address()}:{srv.server_port}/"
+                  f"?key={panel.phone_key()}")
     if open_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     try:

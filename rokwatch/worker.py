@@ -42,6 +42,7 @@ class Status:
     alerts: list = field(default_factory=list)   # recent alerts for the panel
     look: dict | None = None                     # result of the last "what do you see"
     armies: list = field(default_factory=list)   # his armies, from the last hunt sweep
+    snaps: int = 0                               # snapshots saved this session
 
 
 class Worker:
@@ -53,6 +54,8 @@ class Worker:
         self.thread = None
         self.gb = None
         self.shot_path = "debug/panel_view.png"
+        self._last_sample = 0.0
+        self._snap_wanted = None
 
     # ------------------------------------------------------------ from the panel
     def send(self, cmd, **kw):
@@ -78,6 +81,60 @@ class Worker:
         self.status.alerts.insert(0, {"time": time.strftime("%H:%M:%S"), "title": a.title,
                                       "message": a.message, "urgent": a.urgent})
         del self.status.alerts[30:]
+        if self._snap_cfg().get("on_alerts", True):        # the picture the alert came from
+            self._auto_snap(f"alert {a.title}", {"alert": f"{a.title}: {a.message}"})
+
+    # ------------------------------------------------------------ snapshots
+    def _snap_cfg(self) -> dict:
+        return self._cfg().get("snapshots") or {}
+
+    def _auto_snap(self, tag, extra=None):
+        v = getattr(self.gb, "last_view", None) if self.gb else None
+        if v is None:
+            return None
+        try:
+            from . import snapshots
+            info = {**(extra or {}), **snapshots.describe(v)}
+            name = snapshots.save(v.frame, tag, info, keep=int(self._snap_cfg().get("keep", 300)))
+            self.status.snaps += 1
+            return name
+        except Exception:
+            log.debug("snapshot failed", exc_info=True)
+            return None
+
+    def request_snap(self, note=""):
+        """From the panel. While patrolling / hunting the worker is busy, so the picture
+        is taken at its next step (no extra screenshot, no interruption)."""
+        if self.status.phase == "patrolling":
+            self._snap_wanted = note or ""
+            self.status.message = "Snapshot will be taken at the next step..."
+        else:
+            self.send("snap", note=note)
+
+    def _maybe_sample(self):
+        """Between patrol / hunt steps: a requested snapshot, and every few minutes a
+        sample picture (for improving the bot)."""
+        if self._snap_wanted is not None:
+            note, self._snap_wanted = self._snap_wanted, None
+            name = self._auto_snap("manual " + note, {"note": note})
+            self.status.message = f"Snapshot saved: {name}" if name else "Snapshot failed (no picture yet)"
+        every = float(self._snap_cfg().get("every_minutes", 10) or 0)
+        if every > 0 and time.time() - self._last_sample >= every * 60:
+            self._last_sample = time.time()
+            self._auto_snap("sample")
+
+    def _do_snap(self, note=""):
+        from . import snapshots
+        game = self._game()
+        self._set(self.status.phase if self.status.phase == "patrolling" else "busy",
+                  "Taking a snapshot...")
+        v = game.look()
+        info = {"note": note, **snapshots.describe(v)}
+        name = snapshots.save(v.frame, "manual " + (note or ""), info, png=True,
+                              keep=int(self._snap_cfg().get("keep", 300)))
+        self.status.snaps += 1
+        self._set("ready" if self.status.phase == "busy" else self.status.phase,
+                  f"Snapshot saved: {name} (see 'Snapshots' below)")
 
     def _run(self):
         while True:
@@ -274,10 +331,13 @@ class Worker:
             for a in hunter.round(stop=self.stop_patrol.is_set):
                 self._alert(notifier, a)
             self.status.round += 1
+            self._maybe_sample()
             self.status.armies = hunter.tracker.summary()
             self.status.last_site = f"{len(self.status.armies)} of his armies seen"
             end = time.time() + float(h.get("pause_between_sweeps", 5))
             while time.time() < end and not self.stop_patrol.is_set():
+                if self._snap_wanted is not None:
+                    self._maybe_sample()
                 time.sleep(0.2)
         self.stop_patrol.clear()
         self._set("ready", f"Hunting stopped after {self.status.round} sweep(s)")
@@ -310,10 +370,13 @@ class Worker:
                 self.status.last_site = site.name
                 for a in patrol.visit(site):
                     self._alert(notifier, a)
+                self._maybe_sample()
             self.status.round += 1
             log.info("Round %d done", self.status.round)
             end = time.time() + float(p.get("pause_between_rounds", 5))
             while time.time() < end and not self.stop_patrol.is_set():
+                if self._snap_wanted is not None:
+                    self._maybe_sample()
                 time.sleep(0.2)
         self.stop_patrol.clear()
         self._set("ready", f"Patrol stopped after {self.status.round} round(s)")

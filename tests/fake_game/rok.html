@@ -38,6 +38,8 @@
   };
 
   // ---------- layout of clickable things (half of real screenshot positions)
+  const magnifier = () => { const cb = coordBar(); return { x: cb.x + cb.w + 12, y: 18 }; };
+  const star = () => { const cb = coordBar(); return { x: cb.x + cb.w + 36, y: 6, w: 24, h: 24 }; };
   const coordBar = () => state.simple ? { x: 75, y: 0, w: 160, h: 28 } : { x: 285, y: 0, w: 160, h: 28 };
   const portrait = i => ({ x: 1339 - 26, y: 168 + 60 * i - 26, w: 52, h: 52 });
   const badge = i => [1357, 191 + 60 * i];
@@ -126,8 +128,16 @@
       text("1,771,045", 100, 22, 18); text('VIP 7', 105, 50, 15, '#f3c84b');
     }
     text(`#4183 X:${state.cam.x} Y:${state.cam.y}`, cb.x + 6, 21, 17);
-    ctx.lineWidth = 2.5; ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.arc(cb.x + cb.w + 10, 12, 6, 0, 7); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(cb.x + cb.w + 14, 16); ctx.lineTo(cb.x + cb.w + 19, 21); ctx.stroke();
+    // magnifier (opens the search) and, right after it, the orange favourites star (a trap)
+    const mg = magnifier(), st = star();
+    ctx.lineWidth = 2.2; ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.arc(mg.x - 1, mg.y - 1, 5, 0, 7); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(mg.x + 3, mg.y + 3); ctx.lineTo(mg.x + 7, mg.y + 7); ctx.stroke();
+    ctx.fillStyle = '#f39a12'; ctx.fillRect(st.x, st.y, st.w, st.h);
+    ctx.fillStyle = '#b65f0a'; ctx.font = 'bold 16px sans-serif'; ctx.fillText('★', st.x + 4, st.y + 18);
+    if (state.favs) {
+      ctx.fillStyle = 'rgba(240,235,220,0.97)'; ctx.fillRect(400, 120, 640, 400);
+      text('Favorites', 650, 160, 22, '#5a3a1a', false);
+    }
     // troop panel (real screenshot piece); recalled troops get a grey "returning" badge
     if (A.panel.complete) ctx.drawImage(A.panel, 1280, 115);
     state.troops.forEach((tr, i) => {
@@ -192,8 +202,11 @@
       if (!inside(dlg, x, y)) state.dialog = null;
       return;
     }
-    const cb = coordBar();
-    if (inside({ x: cb.x, y: cb.y, w: cb.w + 30, h: cb.h }, x, y)) {
+    if (state.favs) { state.favs = false; return; }
+    if (inside(star(), x, y)) { state.favs = true; state.starClicks = (state.starClicks || 0) + 1; return; }
+    const cb = coordBar(), mg = magnifier();
+    if (inside({ x: cb.x, y: cb.y, w: cb.w, h: cb.h }, x, y) ||
+        inside({ x: mg.x - 11, y: mg.y - 11, w: 22, h: 22 }, x, y)) {
       state.dialog = { x: '', y: '', focus: null, all: false };
       return;
     }
@@ -212,7 +225,7 @@
     state.dialog = null;
   }
   window.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { state.dialog = null; state.box = null; return; }
+    if (e.key === 'Escape') { state.dialog = null; state.box = null; state.favs = false; return; }
     const D = state.dialog;
     if (!D) return;
     if (e.key === 'Enter') return go();

@@ -47,7 +47,12 @@ class Game:
         frame = self.frame() if frame is None else frame
         texts = screen.read_text(frame)
         cam = screen.camera_coords(frame, texts)
-        return View(frame, texts, cam[:3] if cam else None, screen.is_simple_view(texts, frame))
+        v = View(frame, texts, cam[:3] if cam else None, screen.is_simple_view(texts, frame))
+        try:
+            self.b.last_view = v          # kept for snapshots (see snapshots.py)
+        except AttributeError:
+            pass
+        return v
 
     def zoom(self, view: View | None = None) -> str:
         v = view or self.look()

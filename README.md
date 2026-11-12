@@ -32,6 +32,24 @@ It needs Windows 10/11 with **Google Chrome or Microsoft Edge** (Edge comes with
 
 Windows may warn about an unknown app the first time. Click **More info → Run anyway**: the exe isn't code-signed. It's built automatically from this repo's code on GitHub, and the build log is under **Actions → windows-exe**.
 
+## The panel on your phone (home Wi-Fi or Tailscale)
+
+In the panel, tick **Let my phone open this panel**. A QR code appears right away (no restart). Pick which one with the switch above it:
+
+- **🏠 Home Wi-Fi:** works while the phone is on the same Wi-Fi as the laptop.
+- **🌍 Tailscale:** works from anywhere, including mobile data. Install the free **Tailscale** app on the laptop and on the phone and sign in to both with the same account. The Tailscale QR code shows up by itself once Tailscale is running (no restart).
+
+Scan it with the phone camera. The link has a secret key in it, so nobody else can open the panel. When Windows asks whether RoKWatcher may use networks, tick **both** boxes (Private and Public) and click **Allow**. Tailscale often counts as a "Public" network.
+
+## Snapshots (to improve the bot)
+
+The bot keeps pictures of what it sees in the **`snapshots`** folder, each with a `.json` of what it read from it:
+- whenever you press **📸 Save snapshot** in the panel (add a note like "his scout near my farm"),
+- with every alert,
+- every 10 minutes while patrolling or hunting (change or switch off in the panel).
+
+They also show in the panel: tap one to open it, or use **Download the newest 40 as a .zip**. Send them over when the bot gets something wrong, or when something new happens in the game, so it can be tuned. Only the newest 300 are kept.
+
 ## Patrol mode (the full bot)
 
 `run.bat --patrol` makes the bot move around the map for you, like a player checking in:
