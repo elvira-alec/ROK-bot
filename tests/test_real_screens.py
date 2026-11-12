@@ -427,3 +427,39 @@ def test_night_armies_on_his_march_line(texts):
     assert len(armies) == 2 and all(lines[0].distance_to(c) < 25 for c in armies)
     used, total, _ = screen.troop_panel(img, texts["his_armies_near_night"])
     assert (used, total) in ((2, 4), (None, None))
+
+
+# ---------------------------------------------------------------- the magnifier (search) button
+
+def _star_left(frame, x_hint):
+    """Left edge of the orange star (favourites) button, measured on the real
+    screenshots: x 589 on the simplified map, 937 in the close view."""
+    return 589 if x_hint < 700 else 937
+
+
+@pytest.mark.parametrize("name", ALL)
+def test_search_button_hits_magnifier_not_star(name, texts):
+    """Measured magnifier centres: x 541 (simplified map) / 894 (close view), y 36.
+    Includes red under-attack tint and the autumn map."""
+    f = load(name)
+    cam = screen.camera_coords(f, texts[name])
+    x, y = screen.search_button(f, cam[3])
+    want = 541 if x < 700 else 894
+    assert abs(x - want) <= 4 and abs(y - 36) <= 4, (x, y)
+    assert x < _star_left(f, x) - 20                     # well clear of the star
+
+
+@pytest.mark.parametrize("name", ["march_simple_view", "own_city_gathering", "enemy_city_close"])
+def test_search_button_fallback_never_hits_star(name, texts, monkeypatch):
+    f = load(name)
+    cam = screen.camera_coords(f, texts[name])
+    monkeypatch.setattr(screen, "find_magnifier", lambda frame: None)
+    x, _ = screen.search_button(f, cam[3])
+    assert x < _star_left(f, x) - 8
+
+
+def test_search_button_other_window_sizes():
+    for scale in (0.55, 0.75, 1.3):
+        f = cv2.resize(load("scouted_simple_4"), None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+        m = screen.find_magnifier(f)
+        assert m and abs(m[0] - 541 * scale) <= 5 and abs(m[1] - 36 * scale) <= 5, (scale, m)

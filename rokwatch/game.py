@@ -69,9 +69,8 @@ class Game:
                 log.warning("goto: can't see the coordinates bar (menu open?)")
                 self.close_popups()
                 continue
-            # the magnifier sits at the right end of the coordinates text
-            t = bar[3]
-            self.b.click(t.box[0] + t.box[2] + int(0.012 * v.frame.shape[0]), t.center[1])
+            # tap the magnifier (found by its shape, so never the star next to it)
+            self.b.click(*screen.search_button(v.frame, bar[3]))
             self.wait(1.0)
             if self._fill_coord_dialog(x, y):
                 self.wait(self.settle + 1.0)

@@ -941,3 +941,73 @@ def read_toasts(frame: np.ndarray, texts: list[Text]) -> list[tuple[str, str]]:
     if not out and "YOUHAVEBEEN" in letters and "SCOUT" in letters:
         out.append(("scouted", joined))
     return out
+
+
+# ---------------------------------------------------------------- the search (magnifier) button
+
+# The magnifier ("search") icon after the '#4183 X:… Y:…' readout, cut from a real
+# screenshot (1320 px tall game), stored as the darkest channel so the white icon
+# still stands out under the red under-attack tint or on autumn maps.
+_MAGNIFIER_PNG = (
+    "iVBORw0KGgoAAAANSUhEUgAAACgAAAAnCAAAAABYw1VkAAAEc0lEQVQ4ESXB7W9UZR7H4e/nd05nGNrOtJTCPMTS"
+    "aksZSywDbNhgFsFk1bgsqJvVxBfGZF/tC/4m479gSGTjAsaFVgtsKVoKlBZaxDItfZoyw8ycOfftEK+LjAUWGG2i"
+    "TbwiQCABEhJGj1kIBgIBwhAChAAhISATBAEYAgSINiFACBASiExoZpgIwsSuVDJhUitqNJothJAJIRC91obJwp59"
+    "A0OFvoSizfKT5WdbXki0SSDoNTOMjq7+gcHBXF93qOjF1urTJ0vPq7GXAIEQvYa19RZGRocKqUTgvVzU2HjyYH6l"
+    "0nICAUL0WFuYPHR4fDifrteqDZ/oTKWi9cWZuUfVyAkECAaaLcKu3Mnjo91BbXV1/aV279nbn7H6/M83V7abQggQ"
+    "xZ26duVKp8ezL8qLC083G0rtyQ68XujbuPe/uac7QgIExUqdzOGPj+SZn56cLTtBsu/AiaPjqfLNibsragMBh3bq"
+    "DL79Rd4v/3Tj9kYdkyzZOXLszEji2ZWpe40YCQSHao34T+9/nlyZ/OH2EhaAvHN7iu++M6jL1/+/1UAgRNE3ds6f"
+    "Pd2Yuzj1uB4EBpJ3iX0H/3k08+Pk1LOqBAiKiqPPPiw9u3Xxl7IwA+G9dfV/dvLAzM0fl7clAaIo7778cOT+5KWH"
+    "GwFgoLaOzn+cHnswPbmw6QQIimrVL5wvTF+7slQxXjEJHyTPnSk9vjMxv+4EEgx5H184X7h97erylvEHSWHq7OnS"
+    "o5mJh+tOIC8KEv8+N3h38vLiJuIVIRJd504dnp+eeLThBN6LgsSXfx9bvvWf2TVz3oQJ2e49n7w9fOfGxK/bDog9"
+    "5BEf/e3k9t1Lt39tOo8hRLJv8KNj+65P/FSuygsvkRf6y3tnWf5h6sGaEyYJywyW/joc/vfarUoTLzkv8hLD7/wr"
+    "vXPv+o1ZBxLewnzpg7HujW8nZp0QqsciL9E7/uloZmf2zkx5syqps3f/wbdO9EfLl6YWBBKxh7xEx8Cpk6Pp1cdz"
+    "i0/XY9GXHzo4/EZi5/HVWwtNh5Aw8hK++8C7fx4NauXl357Xfbgv91p2b5rq2o3p2bWXEiZBXsKHnUdKbxUywfZ2"
+    "peE7MunujtA6qT+6P/twZRuQIIfw8oU33iwO7Zdrxj5ImKvWW7lMcntl4Zf5pSj2AnICuThMF8aKI+ndSXBRbatc"
+    "icaGssHLtbmfZ1ZrToKcBN75MLV3f76vN5Og9WLr+UbNjx8p9YRReXH2zpOKBDkJ4Z3z4a6unp50wlovdrZqLXv9"
+    "6JnB/l0vny9NzdyXICch5L2LYx90dIDi2Fvb8PsnDvarWb37/TcS5CSE5D04YUiCwOTSA6eOv9kdNFa++0oSWYQQ"
+    "KMB7tYFZgGKFx44fe63bla98LYmsQCIMEGrzMpkBLo76h0vj2eDh5HeSyAoFhoGQSULIQHKxpdKZlNUqFUlkMQWG"
+    "QLRJCBDI+2bUct6CVLckskGAQCDaJGRIMsmiKGp5glSXJAoGAoFokxAgmcC3mi2njuRuSb8D6ePKjHFLLjoAAAAA"
+    "SUVORK5CYII="
+)
+_magnifier = None
+
+
+def find_magnifier(frame: np.ndarray):
+    """(x, y, score) of the magnifier's centre in the top bar, or None."""
+    global _magnifier
+    if _magnifier is None:
+        import base64
+        raw = np.frombuffer(base64.b64decode(_MAGNIFIER_PNG), np.uint8)
+        _magnifier = cv2.imdecode(raw, cv2.IMREAD_GRAYSCALE).astype(np.float32)
+    H, W = frame.shape[:2]
+    s = H / 1320
+    best = None
+    for k in (1.0, 0.9, 1.1, 0.8, 1.2):          # windows a bit off the measured size
+        T = cv2.resize(_magnifier, None, fx=s * k, fy=s * k, interpolation=cv2.INTER_AREA)
+        g = frame[0:int(0.09 * H), 0:int(0.5 * W)].min(axis=2).astype(np.float32)
+        if T.shape[0] < 8 or g.shape[0] <= T.shape[0] or g.shape[1] <= T.shape[1]:
+            continue
+        r = cv2.matchTemplate(g, T, cv2.TM_CCOEFF_NORMED)
+        _, mv, _, ml = cv2.minMaxLoc(r)
+        if best is None or mv > best[2]:
+            best = (ml[0] + T.shape[1] // 2, ml[1] + T.shape[0] // 2, float(mv))
+        if mv > 0.9:
+            break
+    return best if best and best[2] >= 0.7 else None
+
+
+def search_button(frame: np.ndarray, coords_text: Text | None = None) -> tuple:
+    """Where to tap to open the coordinate search: the centre of the magnifier right
+    after the '#4183 X:… Y:…' readout (NOT the orange star next to it)."""
+    m = find_magnifier(frame)
+    if m:
+        return m[0], m[1]
+    # not found (unusual skin?): just after the readout, measured on real screens
+    H = frame.shape[0]
+    x, y, w, h = coords_text.box
+    txt = coords_text.text
+    m = re.search(r"\d\W*([QqOoGg9])\W*$", txt.replace(" ", ""))
+    if m:          # OCR read the magnifier as a 'Q': tap that letter's share of the box
+        i = txt.rfind(m.group(1))
+        return int(x + w * (i + 0.5) / len(txt)), y + h // 2
+    return int(x + w + 0.025 * H), y + h // 2
