@@ -117,6 +117,10 @@ class Worker:
         else:
             self.send("snap", note=note)
 
+    def _maybe_sample_quick(self):
+        if self._snap_wanted is not None:
+            self._maybe_sample()
+
     def _maybe_sample(self):
         """Between patrol / hunt steps: a requested snapshot, and every few minutes a
         sample picture (for improving the bot)."""
@@ -351,7 +355,10 @@ class Worker:
 
         def prog(done, total, doing):
             self.status.progress = [done, total]
-            self.status.doing = doing
+            mode = {"sweep": "Searching", "track": "Tracking", "base": "Watching his city"}.get(hunter.mode, "")
+            self.status.doing = (mode + ": " if mode and not doing.startswith(mode) else "") + doing
+            self.status.armies = hunter.tracker.summary()
+            self._maybe_sample_quick()
         hunter.on_progress = prog
         notifier = Notifier.from_config(cfg.get("notify", {}))
         self.stop_patrol.clear()
@@ -363,14 +370,17 @@ class Worker:
             self.status.round += 1
             self._maybe_sample()
             self.status.armies = hunter.tracker.summary()
-            self.status.last_site = f"{len(self.status.armies)} of his armies seen"
+            self.status.last_site = f"{len(self.status.armies)} of his armies tracked"
             end = time.time() + float(h.get("pause_between_sweeps", 5))
             while time.time() < end and not self.stop_patrol.is_set():
                 if self._snap_wanted is not None:
                     self._maybe_sample()
                 time.sleep(0.2)
         self.stop_patrol.clear()
-        self._set("ready", f"Hunting stopped after {self.status.round} sweep(s)")
+        his = hunter.tracker.summary()
+        where = "; ".join(f"#{a['id']} at {a['x']},{a['y']} ({a['state']})" for a in his[:6])
+        self._set("ready", f"Stopped after {self.status.round} round(s). "
+                  + (f"His armies last seen: {where}" if his else "None of his armies are out."))
 
     def _do_stop(self):
         self.stop_patrol.clear()

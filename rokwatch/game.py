@@ -37,6 +37,7 @@ class Game:
         self.settle = settle
         self.goto_cfg = goto_cfg or {}
         self._good_tap = None
+        self._bar_cache = None          # where the X / Y boxes and button are (fractions)
         self.notch_wait = 0.25
         self._zoom_now = None          # notches in from fully out, when known
         if area and hasattr(browser, "set_area"):
@@ -72,29 +73,85 @@ class Game:
     # ---------------------------------------------------------------- moving
     def goto(self, x: int, y: int, tries=3) -> bool:
         """Jump the camera to map coordinates using the game's coordinate search.
-        Checks the readout afterwards; True when the camera is there."""
+        Quick path: find the magnifier by its shape, check the bar opened by its blue
+        button, type into the remembered boxes (no full text reading)."""
         for attempt in range(tries):
-            v = self.look()
-            if v.camera and abs(v.camera[1] - x) <= 1 and abs(v.camera[2] - y) <= 1:
+            f = self.frame()
+            c = screen.camera_coords(f)
+            if c and abs(c[1] - x) <= 1 and abs(c[2] - y) <= 1:
                 return True
-            bar = screen.camera_coords(v.frame, v.texts)
-            if not bar:
-                log.warning("goto: can't see the coordinates bar (menu open?)")
-                self.close_popups()
-                continue
-            # tap the magnifier (found by its shape, so never the star next to it).
-            # If the search bar doesn't open (e.g. Favorites opened instead), close
-            # that and try the next spot.
-            if not self._open_search(v, bar[3]):
-                continue
-            if self._fill_coord_dialog(x, y):
-                self.wait(self.settle + 1.0)
-                v = self.look()
-                if v.camera and abs(v.camera[1] - x) <= 2 and abs(v.camera[2] - y) <= 2:
+            if self._quick_jump(f, x, y) or self._slow_jump(x, y):
+                if self._wait_camera(x, y):
                     return True
-                log.warning("goto %s,%s: camera is at %s (try %d)", x, y, v.camera, attempt + 1)
+                log.warning("goto %s,%s: camera is at %s (try %d)", x, y, self.camera_fast(),
+                            attempt + 1)
             self.close_popups()
         return False
+
+    def _wait_camera(self, x, y, timeout=4.0) -> bool:
+        end = time.time() + timeout
+        time.sleep(0.4)
+        while time.time() < end:
+            cam = self.camera_fast()
+            if cam and abs(cam[0] - x) <= 2 and abs(cam[1] - y) <= 2:
+                time.sleep(0.25)                   # let the map finish drawing
+                return True
+            time.sleep(0.25)
+        return False
+
+    def _bar_opened(self, timeout=1.5):
+        end = time.time() + timeout
+        while time.time() < end:
+            time.sleep(0.15)
+            f = self.frame()
+            btn = screen.search_go_button(f)
+            if btn:
+                return f, btn
+        return None, None
+
+    def _quick_jump(self, f, x, y) -> bool:
+        m = screen.find_magnifier(f)
+        if not m:
+            return False
+        self.b.click(m[0], m[1])
+        f2, btn = self._bar_opened()
+        if not btn:
+            log.warning("goto: tapped the magnifier at %d,%d but the search didn't open", m[0], m[1])
+            self.close_popups()
+            return False
+        H, W = f2.shape[:2]
+        cache = self._bar_cache
+        if not (cache and abs(cache[2][0] * W - btn[0]) < 0.02 * H
+                and abs(cache[2][1] * H - btn[1]) < 0.02 * H):
+            v = self.look(f2)                      # first time: read the bar once
+            bar = screen.find_search_bar(v.frame, v.texts)
+            if not bar:
+                return self._fill_coord_dialog(x, y, v)
+            self._bar_cache = cache = tuple((p[0] / W, p[1] / H) for p in
+                                            (bar.x_field, bar.y_field, bar.button))
+        xf, yf, go = ((int(p[0] * W), int(p[1] * H)) for p in cache)
+        self._type_into(xf, x)
+        self._type_into(yf, y)
+        self.b.click(*go)
+        return True
+
+    def _type_into(self, pos, val):
+        self.b.click(*pos)
+        time.sleep(0.12)
+        self.b.press("Control+A")
+        self.b.press("Backspace")
+        self.b.type(val)
+
+    def _slow_jump(self, x, y) -> bool:
+        """The old way (full text reading): when the magnifier can't be found."""
+        v = self.look()
+        bar = screen.camera_coords(v.frame, v.texts)
+        if not bar:
+            log.warning("goto: can't see the coordinates bar (menu open?)")
+            return False
+        if not self._open_search(v, bar[3]):
+            return False
+        return self._fill_coord_dialog(x, y)
 
     def _open_search(self, v, coords_text) -> bool:
         H = v.frame.shape[0]
@@ -126,21 +183,27 @@ class Game:
         return cv2.resize(g, (160, max(8, int(160 * g.shape[0] / g.shape[1]))),
                           interpolation=cv2.INTER_AREA).astype(np.float32)
 
-    def zoom_all_out(self, max_notches=60) -> int:
+    def zoom_all_out(self, max_notches=60, count=False) -> int:
         """Scroll out until the picture stops changing (fully zoomed out).
-        Returns how many notches it took."""
+        count=True: one notch at a time, returning how many it took (slower). Otherwise
+        it scrolls in quick bursts (going past the end does no harm)."""
         H, W = self.frame().shape[:2]
         prev = self._small()
-        still = 0
-        for n in range(1, max_notches + 1):
-            self.b.wheel(W // 2, H // 2, 100)
-            time.sleep(self.notch_wait)
+        still, n = 0, 0
+        burst = 1 if count else 6
+        while n < max_notches:
+            for _ in range(burst):
+                self.b.wheel(W // 2, H // 2, 100)
+                time.sleep(self.notch_wait if count else 0.04)
+            n += burst
+            if not count:
+                time.sleep(self.notch_wait)
             cur = self._small()
             # share of the picture that changed (marching icons are only a few pixels)
             if float(np.mean(np.abs(cur - prev) > 12)) < 0.004:
                 still += 1
-                if still >= 2:
-                    return n - 2
+                if still >= (2 if count else 1):
+                    return n - 2 * burst if count else n
             else:
                 still = 0
             prev = cur
@@ -162,7 +225,7 @@ class Game:
 
     def measure_zoom(self) -> int:
         """How many notches in from fully zoomed out the view is now (and put it back)."""
-        n = self.zoom_all_out()
+        n = self.zoom_all_out(count=True)
         H, W = self.frame().shape[:2]
         for _ in range(n):
             self.b.wheel(W // 2, H // 2, -100)
@@ -171,6 +234,18 @@ class Game:
         return n
 
     # ------------------------------------------------------------- panning
+    def fast_view(self) -> View:
+        """Picture + camera only (reads just the coordinates, not the whole screen):
+        enough for icons and march lines, several times quicker than look()."""
+        f = self.frame()
+        c = screen.camera_coords(f)
+        v = View(f, [], c[:3] if c else None, True)
+        try:
+            self.b.last_view = v
+        except AttributeError:
+            pass
+        return v
+
     def camera_fast(self):
         """Camera (x, y) from the coordinate readout only (much quicker than look())."""
         f = self.frame()
@@ -207,13 +282,13 @@ class Game:
             cam = self.camera_fast()
         return self.goto(x, y)
 
-    def _fill_coord_dialog(self, x, y) -> bool:
+    def _fill_coord_dialog(self, x, y, v=None) -> bool:
         """Type X and Y into the coordinate search box and confirm.
 
         Finds the fields by their 'X' / 'Y' labels. If your dialog looks different,
         set goto_dialog in config.yaml (positions as fractions of the game screen).
         """
-        v = self.look()
+        v = v or self.look()
         H, W = v.frame.shape[:2]
         cfg = self.goto_cfg
         if cfg.get("x_field") and cfg.get("y_field"):
@@ -233,7 +308,7 @@ class Game:
             go = btn[0].center if btn else None
         for (fx, fy), val in ((xf, x), (yf, y)):
             self.b.click(int(fx), int(fy))
-            self.wait(0.3)
+            self.wait(0.12)
             self.b.press("Control+A")
             self.b.press("Backspace")
             self.b.type(val)

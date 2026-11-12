@@ -269,3 +269,38 @@ def test_tracks_your_gathering_troops_and_warns_when_he_moves_close(game, tmp_pa
     assert "HIS ARMY IS MOVING CLOSE TO YOU" in titles, titles
     msg = alerts[titles.index("HIS ARMY IS MOVING CLOSE TO YOU")].message
     assert "205,424" in msg, msg              # names your troop's spot it found by itself
+
+
+def test_sweeps_then_follows_his_armies_then_watches_his_city(game, tmp_path):
+    """First round searches the whole area; then it only visits his known armies (+ his
+    city), keeping the ones it didn't look at; with none out it just watches his city."""
+    js(game, f"sim.farmer('{NAME}', [155, 368]); sim.farmer('{NAME}', [180, 392])")
+    h = hunter(game, tmp_path, method="zoomed_out")
+    h.round()
+    assert h.mode == "sweep"
+    ids = sorted(a.id for a in h.tracker.armies if a.owner == "him")
+    assert len(ids) == 2
+    clicks = js(game, "sim.state.clicks.length")
+    t0 = time.time()
+    h.round()
+    assert h.mode == "track"
+    assert sorted(a.id for a in h.tracker.armies if a.owner == "him") == ids   # same armies, still known
+    took = time.time() - t0
+    js(game, "sim.clear()")
+    h.round()
+    h.round()
+    assert not [a for a in h.tracker.armies if a.owner == "him"]
+    assert h.plan(time.time()) == "base"
+    h._last_full = 1                                                        # long ago
+    assert h.plan(time.time()) == "sweep"
+    print("track round took", round(took, 1), "s;", js(game, "sim.state.clicks.length") - clicks, "clicks")
+
+
+def test_red_eye_means_scouted():
+    import cv2
+    from rokwatch import screen
+    real = Path(__file__).resolve().parent / "real_screens"
+    for n in ("scouted_my_city", "scouted_his_city", "attack_red_dashes_close"):
+        assert screen.danger_icons(cv2.imread(str(real / f"{n}.png"))) == {"scouted"}, n
+    for n in ("own_city_gathering", "march_simple_view", "his_city_swords_simple", "recall_panel"):
+        assert screen.danger_icons(cv2.imread(str(real / f"{n}.png"))) == set(), n

@@ -76,7 +76,12 @@ def camera_coords(frame: np.ndarray, texts: list[Text] | None = None):
     Returns (kingdom, x, y, text) or None."""
     h, w = frame.shape[:2]
     if texts is None:
-        texts = read_text(frame, (0, 0, int(w * 0.4), int(h * 0.08)))
+        # just the top-left strip; padded, because the text reader misreads a thin crop
+        pad = 30
+        crop = cv2.copyMakeBorder(frame[0:int(h * 0.08), 0:int(w * 0.4)], pad, pad, pad, pad,
+                                  cv2.BORDER_CONSTANT, value=(0, 0, 0))
+        texts = [Text(t.text, (t.box[0] - pad, t.box[1] - pad, t.box[2], t.box[3]), t.conf)
+                 for t in read_text(crop)]
     for t in texts:
         if t.box[1] > h * 0.1:
             continue
@@ -1019,3 +1024,44 @@ def search_button(frame: np.ndarray, coords_text: Text | None = None) -> tuple:
         i = txt.rfind(m.group(1))
         return int(x + w * (i + 0.5) / len(txt)), y + h // 2
     return int(x + w + 0.025 * H), y + h // 2
+
+
+# ---------------------------------------------------------------- danger icons
+
+def danger_icons(frame: np.ndarray) -> set:
+    """Big red round icons the game shows while something is coming at you:
+    an eye bottom right ('scouted') and a sword bottom left ('attacked').
+    (Red notification badges are much smaller.)"""
+    H, W = frame.shape[:2]
+    y0 = int(0.6 * H)
+    hsv = cv2.cvtColor(frame[y0:], cv2.COLOR_BGR2HSV)
+    red = (cv2.inRange(hsv, np.array((0, 170, 150), np.uint8), np.array((8, 255, 255), np.uint8))
+           | cv2.inRange(hsv, np.array((172, 170, 150), np.uint8), np.array((180, 255, 255), np.uint8)))
+    n, _, st, c = cv2.connectedComponentsWithStats(red)
+    found = set()
+    for i in range(1, n):
+        x, y, w, h, a = st[i]
+        if not (0.055 * H <= w <= 0.13 * H and 0.8 < w / h < 1.25 and 0.5 <= a / (w * h) <= 0.8):
+            continue
+        cx = c[i][0]
+        if cx > 0.78 * W:
+            found.add("scouted")
+        elif cx < 0.25 * W:
+            found.add("attacked")
+    return found
+
+
+def search_go_button(frame: np.ndarray):
+    """The blue search button of the open coordinate bar (quick check, no text reading)."""
+    H, W = frame.shape[:2]
+    y0, y1 = int(0.08 * H), int(0.5 * H)
+    hsv = cv2.cvtColor(frame[y0:y1], cv2.COLOR_BGR2HSV)
+    blue = cv2.inRange(hsv, np.array((93, 170, 190), np.uint8), np.array((110, 255, 255), np.uint8))
+    n, _, st, c = cv2.connectedComponentsWithStats(blue)
+    best = None
+    for i in range(1, n):
+        x, y, w, h, a = st[i]
+        if (0.04 * H <= w <= 0.09 * H and 0.04 * H <= h <= 0.09 * H and a > 0.6 * w * h
+                and x > 0.3 * W and (best is None or x < best[0])):
+            best = (int(c[i][0]), int(c[i][1]) + y0)
+    return best

@@ -155,7 +155,7 @@ class GameBrowser:
         self.page.keyboard.press(key)
 
     def type(self, text):
-        self.page.keyboard.type(str(text), delay=60)
+        self.page.keyboard.type(str(text), delay=15)
 
     def wheel(self, x, y, dy):
         self.page.mouse.move(*self._abs(x, y))

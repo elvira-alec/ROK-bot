@@ -101,9 +101,14 @@
 <div id="now" hidden><div class="t" id="now-t"></div><div class="bar" id="now-bar"><i id="now-fill"></i></div></div>
 <main>
   <section id="live-box">
-    <h2>👁 Live view</h2>
+    <h2>👁 Live view &amp; his armies</h2>
     <label class="toggle"><input type="checkbox" id="live-on" checked> Show what the bot sees (small picture, about every 2 seconds)</label>
     <img id="live-img" alt="" hidden>
+    <p class="hint" id="armies-none" style="margin-top:10px">His armies will be listed here once it's found some.</p>
+    <table id="armies-table" hidden style="margin-top:10px">
+      <thead><tr><th>Army</th><th>Where</th><th>Doing</th><th>Heading for</th><th>Seen</th></tr></thead>
+      <tbody id="armies"></tbody>
+    </table>
   </section>
 
   <section>
@@ -148,10 +153,16 @@
     <h2><span class="step">3</span> Run it</h2>
     <div class="row">
       <button class="primary" id="b-open" onclick="post('open')">Open / connect game</button>
-      <button class="go" id="b-start" onclick="post('start')">Start patrol</button>
+      <button class="go" id="b-hunt2" onclick="post('hunt')">▶ Watch &amp; track him</button>
+      <button id="b-start" onclick="post('start')">Simple patrol</button>
       <button class="danger" id="b-stop" onclick="post('stop')">Stop</button>
     </div>
-    <p class="hint">Open the game window, log in, go to the map and close any menus. Then press Start patrol. Leave both windows open.</p>
+    <p class="hint"><b>Watch &amp; track him</b> (recommended): searches the area around his city for his armies
+      (farming or marching), then keeps following every one it found, dragging the map from one to the next.
+      When none are out it watches his city for new ones, and re-searches the whole area every few minutes.
+      It alerts you when one heads for your city or your gathering troops, when you're scouted (red eye) or
+      attacked (red sword), and can recall your troops. Set it up in box 4 first.<br>
+      <b>Simple patrol</b>: only checks the places listed in box 2, one after another.</p>
     <div class="facts" id="progress"></div>
   </section>
 
@@ -179,10 +190,6 @@
       diamonds), then zooms in on each new army just long enough to read the name over it, and
       follows the ones that are his. Before the first hunt, press <b>Learn map directions</b> once
       while zoomed out to the patrol level. <span id="close-axes"></span></p>
-    <table id="armies-table" hidden>
-      <thead><tr><th>Army</th><th>Where</th><th>Doing</th><th>Heading for</th><th>Seen</th></tr></thead>
-      <tbody id="armies"></tbody>
-    </table>
   </section>
 
   <section id="phone-box">
@@ -263,7 +270,7 @@ function busy(btn, on) {
 }
 const LABELS = { open: 'Connecting to the game', look: 'Looking at the screen', goto: 'Jumping',
   axes: 'Learning map directions', recall: 'Recalling troops', start: 'Starting patrol',
-  hunt: 'Starting hunt', stop: 'Stopping', test_alert: 'Sending a test alert', snap: 'Saving a snapshot', remember_zoom: 'Measuring the zoom' };
+  hunt: 'Starting to watch & track him', stop: 'Stopping', test_alert: 'Sending a test alert', snap: 'Saving a snapshot', remember_zoom: 'Measuring the zoom' };
 async function post(cmd, body = {}) {
   const btn = document.activeElement;
   busy(btn, true);
@@ -336,7 +343,7 @@ async function refresh() {
   lastMsg = st.message;
   const running = st.phase === 'patrolling';
   $('b-start').disabled = running || st.phase === 'stopped' || st.phase === 'opening';
-  $('b-hunt').disabled = $('b-start').disabled;
+  $('b-hunt').disabled = $('b-start').disabled; $('b-hunt2').disabled = $('b-start').disabled;
   $('b-stop').disabled = !running;
   facts($('progress'), [['Rounds done', st.round], ['Last place checked', st.last_site || '-']]);
   $('alerts').innerHTML = st.alerts.length ? st.alerts.map(a =>
@@ -365,9 +372,9 @@ async function refresh() {
       || '<span class="hint">None yet</span>';
   }
   const ar = st.armies || [];
-  $('armies-table').hidden = !ar.length;
+  $('armies-table').hidden = !ar.length; $('armies-none').hidden = !!ar.length;
   $('armies').innerHTML = ar.map(a => `<tr><td>#${esc(a.id)}</td><td>${esc(a.x)}, ${esc(a.y)}</td>
-    <td>${esc(a.state)}</td><td>${a.dest ? esc(a.dest[0]) + ', ' + esc(a.dest[1]) : '-'}</td>
+    <td>${esc(a.state)}${a.his ? '' : ' <small>(not confirmed his yet)</small>'}</td><td>${a.dest ? esc(a.dest[0]) + ', ' + esc(a.dest[1]) : '-'}</td>
     <td>${esc(a.last_seen)}</td></tr>`).join('');
   const lg = $('log'), atEnd = lg.scrollTop + lg.clientHeight >= lg.scrollHeight - 5;
   lg.textContent = st.log.join('\n'); if (atEnd) lg.scrollTop = lg.scrollHeight;

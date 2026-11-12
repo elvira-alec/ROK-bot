@@ -240,7 +240,7 @@ class DesktopWindow:
 
     def type(self, text):
         self._front()
-        self._pg.typewrite(str(text), interval=0.06)
+        self._pg.typewrite(str(text), interval=0.015)
 
     def wheel(self, x, y, dy):
         """Browser-style wheel: positive dy scrolls down (zooms out)."""
