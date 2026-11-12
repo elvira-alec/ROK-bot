@@ -44,6 +44,7 @@ EDITABLE = {
     "panel_on_phone": "panel_on_phone",
     "hunt_radius": "hunt.radius",
     "snap_every": "snapshots.every_minutes",
+    "hunt_city": "hunt.city",
 }
 
 
@@ -140,6 +141,10 @@ class Panel:
         out["zoom_notches"] = _get(cfg, "hunt.zoom_notches")
         out["close_notches"] = _get(cfg, "hunt.close_notches")
         out["panel_on_phone"] = bool(_get(cfg, "panel_on_phone"))
+        out["targets"] = _get(cfg, "targets") or []
+        if not out["hunt_city"]:                      # older setups: his city from the places list
+            enemy = next((x for x in (_get(cfg, "patrol.sites") or []) if x.get("kind") == "enemy"), None)
+            out["hunt_city"] = [enemy["x"], enemy["y"]] if enemy else None
         se = _get(cfg, "snapshots.every_minutes")
         out["snap_every"] = 10 if se is None else se
         return out
@@ -157,6 +162,11 @@ class Panel:
                     v = "all" if v == "all" else "threatened"
                 elif k == "game_window_zoom_key":
                     v = "ctrl" if str(v).lower() in ("ctrl", "control", "true", "1") else ""
+                elif k == "hunt_city":
+                    try:
+                        v = [int(v[0]), int(v[1])]
+                    except (TypeError, ValueError, IndexError, KeyError):
+                        continue
                 elif k == "snap_every":
                     try:
                         v = max(0, min(240, float(v)))
@@ -170,6 +180,19 @@ class Panel:
                 else:
                     v = str(v or "").strip()
                 updates[dotted] = v
+        # remember every target (name + city) so it can be picked from a list later
+        cfg = config.load(self.cfg_path)
+        targets = [t for t in (_get(cfg, "targets") or []) if isinstance(t, dict) and t.get("name")]
+        if "forget_target" in data:
+            targets = [t for t in targets if t["name"] != str(data["forget_target"])]
+            updates["targets"] = targets
+        name = updates.get("hunt.player_name")
+        city = updates.get("hunt.city") or _get(cfg, "hunt.city")
+        if name:
+            targets = [t for t in targets if t["name"] != name]
+            targets.insert(0, {"name": name, "x": city[0] if city else None,
+                               "y": city[1] if city else None})
+            updates["targets"] = targets[:20]
         config.save_fields(updates, self.cfg_path)
         log.info("Settings saved")
 

@@ -168,8 +168,18 @@
 
   <section>
     <h2><span class="step">4</span> Hunt his armies</h2>
+    <label for="target_pick">Target</label>
+    <div class="row" style="margin-top:0">
+      <select id="target_pick" style="flex:1" onchange="pickTarget()"></select>
+      <button class="danger" id="target_forget" onclick="forgetTarget()" title="Remove this target from the list">Forget</button>
+    </div>
     <label for="player_name">His name exactly as in game (with alliance tag)</label>
     <input id="player_name" placeholder="[P83L]JONH WICK">
+    <label>His city (X, Y)</label>
+    <div class="row" style="margin-top:0">
+      <input id="hunt_x" inputmode="numeric" placeholder="X" style="width:90px">
+      <input id="hunt_y" inputmode="numeric" placeholder="Y" style="width:90px">
+    </div>
     <label for="hunt_radius">How far around his city to search (map tiles)</label>
     <input id="hunt_radius" inputmode="numeric" placeholder="25">
     <div class="row">
@@ -284,6 +294,21 @@ async function post(cmd, body = {}) {
   setTimeout(() => busy(btn, false), 1200);
   refresh();
 }
+let targets = [];
+function pickTarget() {
+  const v = $('target_pick').value;
+  if (v === 'new') { $('player_name').value = ''; $('hunt_x').value = ''; $('hunt_y').value = ''; $('player_name').focus(); return; }
+  const t = targets[+v];
+  $('player_name').value = t.name; $('hunt_x').value = t.x ?? ''; $('hunt_y').value = t.y ?? '';
+  save();
+}
+async function forgetTarget() {
+  const name = $('player_name').value;
+  if (!name || !confirm(`Forget ${name}?`)) return;
+  await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ forget_target: name }) });
+  loadSettings();
+}
 function jump() { post('goto', { x: $('gx').value, y: $('gy').value }); }
 function snap() { post('snap', { note: $('snap_note').value }); $('snap_note').value = ''; }
 
@@ -305,6 +330,12 @@ function addSite() { sites.push({ name: '', x: '', y: '', kind: 'mine' }); drawS
 async function loadSettings() {
   const s = await (await fetch('/api/settings')).json();
   for (const k of ['game_url', 'game_window', 'ntfy_topic', 'discord_webhook', 'player_name']) $(k).value = s[k] || '';
+  $('hunt_x').value = s.hunt_city ? s.hunt_city[0] : ''; $('hunt_y').value = s.hunt_city ? s.hunt_city[1] : '';
+  targets = s.targets || [];
+  $('target_pick').innerHTML = targets.map((t, i) =>
+      `<option value="${i}" ${t.name === s.player_name ? 'selected' : ''}>${esc(t.name)}${t.x != null ? ` (${esc(t.x)}, ${esc(t.y)})` : ''}</option>`).join('')
+    + `<option value="new" ${targets.some(t => t.name === s.player_name) ? '' : 'selected'}>+ New target…</option>`;
+  $('target_forget').disabled = !targets.some(t => t.name === s.player_name);
   $('game_window_zoom_key').checked = s.game_window_zoom_key === 'ctrl';
   $('hunt_radius').value = s.hunt_radius || 25;
   $('zoom-set').textContent = (s.zoom_notches != null ? `Sweeping zoom: ${s.zoom_notches} notches in. ` : 'Sweeping zoom not set yet. ')
@@ -325,6 +356,7 @@ async function save() {
       game_window_zoom_key: $('game_window_zoom_key').checked ? 'ctrl' : '', ntfy_topic: $('ntfy_topic').value,
       discord_webhook: $('discord_webhook').value, sites, auto_recall: $('auto_recall').checked,
       player_name: $('player_name').value, hunt_radius: $('hunt_radius').value,
+      ...($('hunt_x').value && $('hunt_y').value ? { hunt_city: [$('hunt_x').value, $('hunt_y').value] } : {}),
       panel_on_phone: $('panel_on_phone').checked, snap_every: $('snap_every').value,
       recall_scope: $('recall_scope').value }) });
   await loadSettings(); refresh(); loadPhone();

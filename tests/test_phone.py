@@ -185,3 +185,21 @@ def test_snapshots_need_the_key(tmp_path, ip, monkeypatch):
         assert st["snaps"][0]["name"] == name and st["snaps"][0]["tag"] == "alert His army"
     finally:
         srv.shutdown()
+
+
+def test_targets_are_remembered(tmp_path):
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text(yaml.safe_dump({"patrol": {"sites": [{"name": "his", "x": 162, "y": 374, "kind": "enemy"}]}}))
+    p = Panel(str(cfg))
+    assert p.settings()["hunt_city"] == [162, 374]           # old setups: from the places list
+    p.save({"player_name": "[P83L]JONH WICK", "hunt_city": [162, 374]})
+    p.save({"player_name": "[XX]Other Guy", "hunt_city": ["300", "400"]})
+    s = p.settings()
+    assert [t["name"] for t in s["targets"]] == ["[XX]Other Guy", "[P83L]JONH WICK"]
+    assert s["targets"][1]["x"] == 162 and s["hunt_city"] == [300, 400]
+    p.save({"player_name": "[P83L]JONH WICK", "hunt_city": [162, 374]})     # picked again
+    s = p.settings()
+    assert s["targets"][0]["name"] == "[P83L]JONH WICK" and len(s["targets"]) == 2
+    assert config.load(p.cfg_path)["hunt"]["city"] == [162, 374]
+    p.save({"forget_target": "[XX]Other Guy"})
+    assert [t["name"] for t in p.settings()["targets"]] == ["[P83L]JONH WICK"]
