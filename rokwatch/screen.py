@@ -78,9 +78,13 @@ def camera_coords(frame: np.ndarray, texts: list[Text] | None = None):
     if texts is None:
         # just the top-left strip; padded, because the text reader misreads a thin crop
         pad = 30
-        crop = cv2.copyMakeBorder(frame[0:int(h * 0.08), 0:int(w * 0.4)], pad, pad, pad, pad,
-                                  cv2.BORDER_CONSTANT, value=(0, 0, 0))
-        texts = [Text(t.text, (t.box[0] - pad, t.box[1] - pad, t.box[2], t.box[3]), t.conf)
+        up = 2.0 if h < 1000 else 1.0             # small windows: enlarge the digits
+        crop = frame[0:int(h * 0.08), 0:int(w * 0.4)]
+        if up != 1.0:
+            crop = cv2.resize(crop, None, fx=up, fy=up, interpolation=cv2.INTER_CUBIC)
+        crop = cv2.copyMakeBorder(crop, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=(0, 0, 0))
+        texts = [Text(t.text, (int((t.box[0] - pad) / up), int((t.box[1] - pad) / up),
+                               int(t.box[2] / up), int(t.box[3] / up)), t.conf)
                  for t in read_text(crop)]
     for t in texts:
         if t.box[1] > h * 0.1:

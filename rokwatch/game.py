@@ -77,7 +77,7 @@ class Game:
         button, type into the remembered boxes (no full text reading)."""
         for attempt in range(tries):
             f = self.frame()
-            c = screen.camera_coords(f)
+            c = screen.camera_coords(f) or screen.camera_coords(f, screen.read_text(f))
             if c and abs(c[1] - x) <= 1 and abs(c[2] - y) <= 1:
                 return True
             if self._quick_jump(f, x, y) or self._slow_jump(x, y):
@@ -238,7 +238,7 @@ class Game:
         """Picture + camera only (reads just the coordinates, not the whole screen):
         enough for icons and march lines, several times quicker than look()."""
         f = self.frame()
-        c = screen.camera_coords(f)
+        c = screen.camera_coords(f) or screen.camera_coords(f, screen.read_text(f))
         v = View(f, [], c[:3] if c else None, True)
         try:
             self.b.last_view = v
@@ -250,6 +250,8 @@ class Game:
         """Camera (x, y) from the coordinate readout only (much quicker than look())."""
         f = self.frame()
         c = screen.camera_coords(f)
+        if not c:                                  # quick read failed: read the whole screen
+            c = screen.camera_coords(f, screen.read_text(f))
         return (c[1], c[2]) if c else None
 
     def pan_to(self, x, y, axes, max_drags=4, close_enough=2.0) -> bool:
