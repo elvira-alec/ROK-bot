@@ -200,6 +200,20 @@ def window_selftest(title):
     return 0 if ok else 1
 
 
+def window_look(title):
+    """Read a game window without touching it (no clicks, not brought to the front)."""
+    import json
+    from . import screen
+    from .desktop import DesktopWindow, is_blank
+    with DesktopWindow(title) as w:
+        frame = w.screenshot()
+        texts = screen.read_text(frame)
+        cam = screen.camera_coords(frame, texts)
+        print(json.dumps({"camera": list(cam[:3]) if cam else None, "capture": w.last_capture,
+                          "blank": is_blank(frame), "size": [frame.shape[1], frame.shape[0]]}))
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Rise of Kingdoms attack watcher")
     ap.add_argument("--config", default=config.DEFAULT_PATH)
@@ -222,6 +236,7 @@ def main(argv=None):
     ap.add_argument("--panel", action="store_true", help="open the control panel")
     ap.add_argument("--selftest", metavar="PNG", help=argparse.SUPPRESS)  # checks the build
     ap.add_argument("--window-selftest", metavar="TITLE", help=argparse.SUPPRESS)
+    ap.add_argument("--window-look", metavar="TITLE", help=argparse.SUPPRESS)
     ap.add_argument("--max-checks", type=int, help=argparse.SUPPRESS)  # for tests
     args = ap.parse_args(argv)
     setup_logging()
@@ -229,6 +244,8 @@ def main(argv=None):
         return selftest(args.selftest)
     if args.window_selftest:
         return window_selftest(args.window_selftest)
+    if args.window_look:
+        return window_look(args.window_look)
     if args.panel:
         from .panel import serve
         serve(args.config)

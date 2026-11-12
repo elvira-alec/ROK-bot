@@ -40,6 +40,18 @@
   button.go { background: var(--good); border-color: var(--good); color: #062; }
   button.danger { background: transparent; color: var(--bad); border-color: rgba(239,77,90,.5); }
   button:disabled { opacity: .45; cursor: not-allowed; }
+  button:active { transform: translateY(1px); filter: brightness(.9); }
+  button.busy { opacity: .75; cursor: progress; }
+  button.busy::after { content: " …"; }
+  #toasts { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); display: grid; gap: 8px;
+            z-index: 10; width: min(560px, calc(100vw - 32px)); }
+  .toast { background: #233049; border: 1px solid var(--line); border-left: 4px solid var(--accent); color: var(--text);
+           padding: 10px 14px; border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.4); font-size: 14px;
+           animation: pop .2s ease-out; }
+  .toast.good { border-left-color: var(--good); }
+  .toast.bad { border-left-color: var(--bad); }
+  @keyframes pop { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .notes { margin: 10px 0 0; padding-left: 18px; color: var(--warn); font-size: 13px; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
   .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
   table { width: 100%; border-collapse: collapse; margin-top: 4px; }
@@ -65,6 +77,7 @@
 </style>
 </head>
 <body>
+<div id="toasts" aria-live="polite"></div>
 <header>
   <h1>RoK Watcher</h1>
   <span class="pill" id="phase">stopped</span>
@@ -174,8 +187,31 @@ const $ = id => document.getElementById(id);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 let sites = [];
 
+function toast(text, kind = '') {
+  const t = document.createElement('div');
+  t.className = 'toast ' + kind; t.textContent = text;
+  $('toasts').appendChild(t);
+  setTimeout(() => t.remove(), kind === 'bad' ? 9000 : 4500);
+  while ($('toasts').children.length > 3) $('toasts').firstChild.remove();
+}
+function busy(btn, on) {
+  if (!btn || btn.tagName !== 'BUTTON') return;
+  btn.classList.toggle('busy', on);
+}
+const LABELS = { open: 'Connecting to the game', look: 'Looking at the screen', goto: 'Jumping',
+  axes: 'Learning map directions', recall: 'Recalling troops', start: 'Starting patrol',
+  hunt: 'Starting hunt', stop: 'Stopping', test_alert: 'Sending a test alert' };
 async function post(cmd, body = {}) {
-  await fetch('/api/' + cmd, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const btn = document.activeElement;
+  busy(btn, true);
+  toast((LABELS[cmd] || cmd) + '…');
+  try {
+    const r = await fetch('/api/' + cmd, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) toast('That didn\'t work: ' + ((await r.json()).error || r.status), 'bad');
+  } catch (e) {
+    toast('The bot isn\'t answering. Is the black RoKWatcher window still open?', 'bad');
+  }
+  setTimeout(() => busy(btn, false), 1200);
   refresh();
 }
 function jump() { post('goto', { x: $('gx').value, y: $('gy').value }); }
@@ -207,6 +243,8 @@ async function loadSettings() {
   drawSites();
 }
 async function save() {
+  const btn = document.activeElement; busy(btn, true);
+  setTimeout(() => busy(btn, false), 800);
   await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ game_url: $('game_url').value, game_window: $('game_window').value,
       game_window_zoom_key: $('game_window_zoom_key').checked ? 'ctrl' : '', ntfy_topic: $('ntfy_topic').value,
@@ -214,14 +252,19 @@ async function save() {
       player_name: $('player_name').value, hunt_radius: $('hunt_radius').value,
       recall_scope: $('recall_scope').value }) });
   await loadSettings(); refresh();
+  toast('Saved ✓', 'good');
 }
 
 function facts(el, pairs) { el.innerHTML = pairs.map(([k, v]) => `<span>${esc(k)}</span><span>${esc(v)}</span>`).join(''); }
-let lastLook = null;
+let lastLook = null, lastMsg = null;
 async function refresh() {
   let st;
   try { st = await (await fetch('/api/state')).json(); } catch { $('msg').textContent = 'Panel not running'; return; }
   $('phase').textContent = st.phase; $('phase').className = 'pill ' + st.phase; $('msg').textContent = st.message;
+  if (lastMsg !== null && st.message !== lastMsg)      // every new status pops up so it can't be missed
+    toast(st.message, st.phase === 'error' || /couldn|can't|failed|blank|not find/i.test(st.message) ? 'bad'
+          : /connected|saved|jumped|learned|here's what/i.test(st.message) ? 'good' : '');
+  lastMsg = st.message;
   const running = st.phase === 'patrolling';
   $('b-start').disabled = running || st.phase === 'stopped' || st.phase === 'opening';
   $('b-hunt').disabled = $('b-start').disabled;
@@ -243,7 +286,12 @@ async function refresh() {
     facts($('look'), [['Camera at', L.camera ? `#${L.camera[0]} X:${L.camera[1]} Y:${L.camera[2]}` : 'not found'],
       ['Zoom', { close: 'close 3D view', patrol: 'patrol level (good)', far: 'too far out' }[L.zoom] || L.zoom],
       ['Your troops', L.troops ? L.troops.join(', ') : 'troop list not found'],
-      ['March lines', L.marches.length ? L.marches.join('; ') : 'none'], ['Other armies', L.armies]]);
+      ['March lines', L.marches.length ? L.marches.join('; ') : 'none'], ['Other armies', L.armies],
+      ['Picture size', L.size ? L.size.join(' x ') : '-']]);
+    const notes = (L.notes || []).map(n => `<li>${esc(n)}</li>`).join('');
+    let nl = $('look-notes');
+    if (!nl) { nl = document.createElement('ul'); nl.id = 'look-notes'; nl.className = 'notes'; $('look').after(nl); }
+    nl.innerHTML = notes;
     $('view').src = '/view.png?' + Date.now(); $('view').hidden = false;
   }
 }

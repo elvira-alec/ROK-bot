@@ -109,19 +109,62 @@ class Worker:
 
     def _do_open(self):
         from .browser import GameBrowser
+        cfg = self._cfg()
         if self.gb and self.gb.alive:
-            self._set("ready", "Game window is already open")
+            self._set("ready", "Already connected. " + self._where())
             return
         self._close()
-        self._set("opening", "Opening the game window...")
-        cfg = self._cfg()
+        if not cfg.get("game_window") and not cfg.get("game_url"):
+            self._set("error", "Nothing to connect to yet: in box 1, type the game's window "
+                               "title (PC game / BlueStacks) or the web page where you play, "
+                               "then Save.")
+            return
+        self._set("opening", "Connecting to the game..." if cfg.get("game_window")
+                  else "Opening the game page...")
         self.gb = GameBrowser.from_config(cfg).__enter__()
         if cfg.get("game_window"):
-            self._set("ready", "Connected to the game window. Get to the map, close menus, "
-                               "then use the buttons below. (Mouse into a corner = stop.)")
+            self._set("ready", f"Connected to the game window: {self._where()} "
+                               "Now press 'What do you see?'. (Mouse into a corner = stop.)")
         else:
-            self._set("ready", "Game window open. Log in, go to the map, close menus, "
-                               "then press Start patrol.")
+            self._set("ready", "Game page open. Log in, go to the map, close menus, then press "
+                               "'What do you see?'.")
+
+    def _where(self) -> str:
+        title = getattr(self.gb, "window_title", None)
+        if title:
+            try:
+                x, y, w, h = self.gb.rect()
+                return f"'{title}' ({w}x{h})."
+            except Exception:
+                return f"'{title}'."
+        return "browser page " + (getattr(self.gb.page, "url", "") or "") + "."
+
+    def _diagnose(self, frame, v) -> list[str]:
+        """Plain reasons when the bot can't make sense of the picture."""
+        from .desktop import is_blank, list_windows
+        notes = []
+        windowed = getattr(self.gb, "window_title", None) is not None
+        if is_blank(frame):
+            if windowed:
+                notes.append("The picture is blank. The game window may be minimised, or Windows "
+                             "won't share it: put the game on screen (not minimised) and try again.")
+            else:
+                notes.append("The picture is blank: the browser page isn't showing the game. If "
+                             "you play in the Rise of Kingdoms PC program, type its window title "
+                             "in box 1 instead.")
+        elif not v.camera:
+            notes.append("I can see a picture but not the map's coordinates (#4183 X:… Y:… at the "
+                         "top left). Is the game on the map with no menu open?")
+        if not windowed and not self._cfg().get("game_window"):
+            notes.append("Mode: browser page. For the PC game, fill in the window title in box 1.")
+        if windowed:
+            notes.append(f"Mode: game window '{self.gb.window_title}', picture taken "
+                         f"{'in the background' if self.gb.last_capture == 'background' else 'from the screen'}.")
+        if is_blank(frame) or not v.camera:
+            titles = [t for _, t in list_windows()][:20]
+            if titles:
+                notes.append("Windows I can see: " + "; ".join(titles))
+        return notes
 
     def _area_warning(self) -> str:
         """A message if the game picture can't be found or doesn't fit, else ''."""
@@ -153,16 +196,20 @@ class Worker:
         for ln in lines:
             cv2.line(shot, ln.p1, ln.p2, (255, 0, 255), 4)
         cv2.imwrite(self.shot_path, shot)
+        notes = self._diagnose(v.frame, v)
         self.status.look = {
+            "notes": notes,
+            "size": [int(v.frame.shape[1]), int(v.frame.shape[0])],
             "camera": list(v.camera) if v.camera else None,
-            "zoom": game.zoom(v),
+            "zoom": game.zoom(v) if v.camera else "unknown (can't read the map)",
             "troops": [s.state for s in panel[2]] if panel else None,
             "marches": [f"{ln.color} line, {ln.dots} dots" for ln in lines],
             "armies": len(find_army_icons(v.frame)),
             "time": time.strftime("%H:%M:%S"),
             "area": game.area,
         }
-        self._set("ready", warn or "Here's what I see")
+        problem = next((n for n in notes if n.startswith(("The picture is blank", "I can see a picture"))), "")
+        self._set("ready", warn or problem or "Here's what I see")
 
     def _do_goto(self, x, y):
         game = self._game()

@@ -28,7 +28,20 @@ try:
     res = json.loads([ln for ln in out.stdout.splitlines() if ln.startswith("{")][-1])
     assert res["before"] == [4183, 209, 418], res
     assert res["jumped"] and res["after"] == [4183, 162, 374], res
-    print("OK")
+    print("OK: drove the game window")
+
+    # one screen, game covered by another window: can it still see the game?
+    cover = subprocess.Popen([str(edge), "--app=about:blank", "--window-size=1600,900",
+                              "--window-position=0,0", f"--user-data-dir={tempfile.mkdtemp()}",
+                              "--no-first-run"])
+    time.sleep(6)
+    out = subprocess.run([str(exe), "--window-look", "Fake RoK UI"], cwd=app_dir,
+                         capture_output=True, text=True, timeout=300)
+    print(out.stdout[-2000:], out.stderr[-2000:])
+    res = json.loads([ln for ln in out.stdout.splitlines() if ln.startswith("{")][-1])
+    print("covered window:", res)
+    assert res["camera"] == [4183, 162, 374] and res["capture"] == "background", res
+    print("OK: read the game while another window covered it")
 finally:
     win.kill()
     subprocess.run(["taskkill", "/F", "/IM", "msedge.exe"], capture_output=True)

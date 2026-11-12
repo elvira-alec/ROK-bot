@@ -79,6 +79,14 @@ def _client_rect(hwnd):
     return [pt.x, pt.y, rect.right - rect.left, rect.bottom - rect.top]
 
 
+def is_blank(frame) -> bool:
+    """All one colour (black / white / grey): nothing captured."""
+    if frame is None or frame.size == 0:
+        return True
+    small = frame[::8, ::8]
+    return float(small.std()) < 4.0
+
+
 # keys as the rest of the bot names them -> pyautogui names
 _KEYS = {"Control": "ctrl", "Escape": "esc", "Enter": "enter", "Backspace": "backspace",
          "Tab": "tab", "Delete": "delete"}
@@ -92,6 +100,9 @@ class DesktopWindow:
         self.hwnd = None
         self.page = None                           # (no browser page)
         self._area = None
+        self.capture = "auto"     # "auto": background capture if it works, else the screen
+        self.last_capture = None
+        self.window_title = None
 
     @classmethod
     def from_config(cls, cfg: dict):
@@ -116,6 +127,7 @@ class DesktopWindow:
             raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
                                f"first. Windows I can see: {titles}")
         self.hwnd, real_title = found
+        self.window_title = real_title
         log.info("Using the game window '%s'", real_title)
 
     def __exit__(self, *exc):
@@ -156,13 +168,59 @@ class DesktopWindow:
         ax, ay = (self._area[0], self._area[1]) if self._area else (0, 0)
         return int(wx + ax + x), int(wy + ay + y)
 
-    def screenshot(self, area=None) -> np.ndarray:
-        import mss
+    def _capture_background(self):
+        """Picture of the window even when other windows cover it (Windows' PrintWindow
+        with full-content rendering). Works for most games; returns None if Windows
+        hands back nothing usable."""
+        w, h = self.rect()[2:]
+        hdc = user32.GetDC(self.hwnd)
+        mem = gdi32.CreateCompatibleDC(hdc)
+        bmp = gdi32.CreateCompatibleBitmap(hdc, w, h)
+        old = gdi32.SelectObject(mem, bmp)
+        try:
+            ok = user32.PrintWindow(self.hwnd, mem, 3)      # client area + full content
+            if not ok:
+                return None
+
+            class BITMAPINFOHEADER(ctypes.Structure):
+                _fields_ = [("biSize", wintypes.DWORD), ("biWidth", wintypes.LONG),
+                            ("biHeight", wintypes.LONG), ("biPlanes", wintypes.WORD),
+                            ("biBitCount", wintypes.WORD), ("biCompression", wintypes.DWORD),
+                            ("biSizeImage", wintypes.DWORD), ("biXPelsPerMeter", wintypes.LONG),
+                            ("biYPelsPerMeter", wintypes.LONG), ("biClrUsed", wintypes.DWORD),
+                            ("biClrImportant", wintypes.DWORD)]
+            bi = BITMAPINFOHEADER()
+            bi.biSize = ctypes.sizeof(BITMAPINFOHEADER)
+            bi.biWidth, bi.biHeight = w, -h                 # top-down rows
+            bi.biPlanes, bi.biBitCount = 1, 32
+            buf = ctypes.create_string_buffer(w * h * 4)
+            gdi32.GetDIBits(mem, bmp, 0, h, buf, ctypes.byref(bi), 0)
+            frame = np.frombuffer(buf, np.uint8).reshape(h, w, 4)[..., :3].copy()
+        finally:
+            gdi32.SelectObject(mem, old)
+            gdi32.DeleteObject(bmp)
+            gdi32.DeleteDC(mem)
+            user32.ReleaseDC(self.hwnd, hdc)
+        return None if is_blank(frame) else frame
+
+    def _capture_screen(self):
+        """Picture of the window as it shows on the screen (it must be on top)."""
         self._front()
         x, y, w, h = self.rect()
-        with mss.mss() as sct:
+        with self._mss.mss() as sct:
             shot = np.array(sct.grab({"left": x, "top": y, "width": w, "height": h}))
-        frame = shot[..., :3].copy()               # BGRA -> BGR
+        return shot[..., :3].copy()                          # BGRA -> BGR
+
+    def screenshot(self, area=None) -> np.ndarray:
+        frame = None
+        if self.capture != "screen":
+            try:
+                frame = self._capture_background()
+            except Exception as e:
+                log.debug("background capture failed: %s", e)
+        self.last_capture = "background" if frame is not None else "screen"
+        if frame is None:
+            frame = self._capture_screen()
         if area:
             ax, ay, aw, ah = area
             frame = frame[ay:ay + ah, ax:ax + aw]
