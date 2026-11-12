@@ -154,6 +154,19 @@
     </table>
   </section>
 
+  <section id="phone-box">
+    <h2>📱 Use this panel on your phone</h2>
+    <label class="toggle"><input type="checkbox" id="panel_on_phone"> Let my phone open this panel (same Wi-Fi as this laptop)</label>
+    <div class="row"><button class="primary" onclick="save()">Save</button></div>
+    <p class="hint" id="phone-hint">After switching it on, Save, then close the black RoKWatcher window and start it again.
+      If Windows asks whether to allow RoKWatcher on networks, click <b>Allow</b>.</p>
+    <div id="phone-qr" hidden>
+      <p class="hint">Scan this with your phone's camera (or open the link on the phone). The link contains a secret key, so only you can use it.</p>
+      <div id="qr" style="background:#fff;display:inline-block;padding:6px;border-radius:8px;line-height:0"></div>
+      <p class="hint" style="word-break:break-all"><a id="phone-link" href="#" style="color:var(--accent)"></a></p>
+    </div>
+  </section>
+
   <section>
     <h2>Recent alerts</h2>
     <ul class="alerts" id="alerts"><li class="empty">No alerts yet</li></ul>
@@ -238,6 +251,7 @@ async function loadSettings() {
   $('hunt_radius').value = s.hunt_radius || 25;
   $('close-axes').textContent = s.axes_learned ? '(Done: map directions are learned.)' : '(Not done yet.)';
   $('auto_recall').checked = !!s.auto_recall;
+  $('panel_on_phone').checked = !!s.panel_on_phone;
   $('recall_scope').value = s.recall_scope === 'all' ? 'all' : 'threatened';
   sites = (s.sites || []).map(x => ({ ...x }));
   drawSites();
@@ -250,8 +264,9 @@ async function save() {
       game_window_zoom_key: $('game_window_zoom_key').checked ? 'ctrl' : '', ntfy_topic: $('ntfy_topic').value,
       discord_webhook: $('discord_webhook').value, sites, auto_recall: $('auto_recall').checked,
       player_name: $('player_name').value, hunt_radius: $('hunt_radius').value,
+      panel_on_phone: $('panel_on_phone').checked,
       recall_scope: $('recall_scope').value }) });
-  await loadSettings(); refresh();
+  await loadSettings(); refresh(); loadPhone();
   toast('Saved ✓', 'good');
 }
 
@@ -295,7 +310,23 @@ async function refresh() {
     $('view').src = '/view.png?' + Date.now(); $('view').hidden = false;
   }
 }
-loadSettings(); refresh(); setInterval(refresh, 1500);
+async function loadPhone() {
+  let ph;
+  try { ph = await (await fetch('/api/phone')).json(); } catch { return; }
+  if (ph.on_phone) {                                    // already on the phone:
+    $('phone-box').hidden = true;                       // the everyday controls go first
+    const main = document.querySelector('main');
+    const find = t => [...main.children].find(sec => sec.querySelector('h2')?.textContent.includes(t));
+    ['Log', 'Places to watch', 'Alerts and game page', 'When is he active?', 'Hunt his armies',
+     'Check it works', 'Recent alerts', 'Run it'].forEach(t => { const sec = find(t); if (sec) main.prepend(sec); });
+    return;
+  }
+  $('phone-qr').hidden = !(ph.enabled && ph.active && ph.url);
+  if (ph.url) { $('qr').innerHTML = ph.qr || ''; $('phone-link').textContent = ph.url; $('phone-link').href = ph.url; }
+  if (ph.enabled && !ph.active)
+    $('phone-hint').innerHTML = '<b>Switched on. Now close the black RoKWatcher window and start it again</b> to show the QR code.';
+}
+loadSettings(); refresh(); loadPhone(); setInterval(refresh, 1500);
 </script>
 </body>
 </html>

@@ -9,3 +9,4 @@ onnxruntime==1.29.0
 # only used when the game runs as its own program (Windows)
 mss>=9.0
 pyautogui>=0.9.54; sys_platform == "win32"
+segno>=1.6

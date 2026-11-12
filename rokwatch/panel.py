@@ -5,10 +5,15 @@
 
 from __future__ import annotations
 
+import hmac
 import json
 import logging
+import secrets
+import socket
 import threading
 import webbrowser
+from http.cookies import SimpleCookie
+from urllib.parse import parse_qs, urlsplit
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -30,6 +35,7 @@ EDITABLE = {
     "auto_recall": "patrol.auto_recall",
     "recall_scope": "patrol.recall_scope",
     "player_name": "hunt.player_name",
+    "panel_on_phone": "panel_on_phone",
     "hunt_radius": "hunt.radius",
 }
 
@@ -63,11 +69,37 @@ class Panel:
         logging.getLogger("rokwatch").addHandler(self.memlog)
         logging.getLogger("rokwatch").setLevel(logging.INFO)
 
+    def phone_key(self) -> str:
+        """Secret that a phone must present (in the link / QR code). Kept in setup.yaml."""
+        key = _get(config.load(self.cfg_path), "panel_key")
+        if not key:
+            key = secrets.token_urlsafe(12)
+            config.save_fields({"panel_key": key}, self.cfg_path)
+        return key
+
+    def phone_info(self, port, listening_on_lan):
+        enabled = bool(_get(config.load(self.cfg_path), "panel_on_phone"))
+        info = {"enabled": enabled, "active": listening_on_lan, "url": None, "qr": None}
+        if enabled and listening_on_lan:
+            url = f"http://{lan_ip()}:{port}/?key={self.phone_key()}"
+            info["url"] = url
+            try:
+                import io
+                import segno
+                buf = io.BytesIO()
+                segno.make(url, error="m").save(buf, kind="svg", scale=6, border=2, dark="#000",
+                                                  light="#fff")
+                info["qr"] = buf.getvalue().decode()
+            except Exception as e:     # the link alone still works
+                log.debug("QR code failed: %s", e)
+        return info
+
     def settings(self):
         cfg = config.load(self.cfg_path)
         out = {k: _get(cfg, v) for k, v in EDITABLE.items()}
         out["axes_learned"] = bool(_get(cfg, "patrol.axes"))
         out["close_axes_learned"] = bool(_get(cfg, "hunt.axes_close"))
+        out["panel_on_phone"] = bool(_get(cfg, "panel_on_phone"))
         return out
 
     def save(self, data: dict):
@@ -77,7 +109,7 @@ class Panel:
                 v = data[k]
                 if k == "sites":
                     v = _clean_sites(v)
-                elif k == "auto_recall":
+                elif k in ("auto_recall", "panel_on_phone"):
                     v = bool(v)
                 elif k == "recall_scope":
                     v = "all" if v == "all" else "threatened"
@@ -106,43 +138,93 @@ class Panel:
         }
 
 
-def make_handler(panel: Panel):
+def lan_ip() -> str:
+    """This computer's address on the home network (what the phone connects to)."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sk:
+            sk.connect(("10.255.255.255", 1))        # no packet is sent
+            return sk.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+
+
+def make_handler(panel: Panel, port_holder=None):
+    """port_holder: {"port": int, "lan": bool} filled in once the server is up."""
+    port_holder = port_holder if port_holder is not None else {"port": 0, "lan": False}
+
     class H(BaseHTTPRequestHandler):
         def log_message(self, *a):
             pass
 
-        def _send(self, code, body, ctype="application/json"):
+        def _send(self, code, body, ctype="application/json", cookie=None):
             data = body if isinstance(body, bytes) else json.dumps(body).encode()
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Cache-Control", "no-store")
+            if cookie:
+                self.send_header("Set-Cookie", f"rokkey={cookie}; Path=/; SameSite=Strict; HttpOnly")
             self.end_headers()
             self.wfile.write(data)
 
+        def _local(self) -> bool:
+            return self.client_address[0] in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+
+        def _key_given(self):
+            q = parse_qs(urlsplit(self.path).query).get("key", [""])[0]
+            c = SimpleCookie(self.headers.get("Cookie", "")).get("rokkey")
+            return q or (c.value if c else "")
+
+        def _allowed(self) -> bool:
+            """This laptop: always. Anything else (the phone): only with the secret key,
+            and only when 'panel on phone' is switched on."""
+            if self._local():
+                return True
+            if not _get(config.load(panel.cfg_path), "panel_on_phone"):
+                return False
+            return hmac.compare_digest(self._key_given(), panel.phone_key())
+
+        def _locked(self):
+            self._send(403, b"<h3 style='font-family:sans-serif'>Locked. Open the link or scan the "
+                            b"QR code shown in the panel on your laptop.</h3>",
+                       "text/html; charset=utf-8")
+
         def do_GET(self):
-            if self.path in ("/", "/index.html"):
-                return self._send(200, PAGE.read_bytes(), "text/html; charset=utf-8")
-            if self.path == "/api/state":
+            if not self._allowed():
+                return self._locked()
+            path = urlsplit(self.path).path
+            if path in ("/", "/index.html"):
+                key = self._key_given() if not self._local() else None
+                return self._send(200, PAGE.read_bytes(), "text/html; charset=utf-8", cookie=key)
+            if path == "/api/state":
                 return self._send(200, panel.state())
-            if self.path == "/api/settings":
+            if path == "/api/settings":
                 return self._send(200, panel.settings())
-            if self.path.startswith("/view.png"):
+            if path == "/api/phone":
+                if not self._local():
+                    return self._send(200, {"enabled": True, "active": True, "url": None,
+                                            "qr": None, "on_phone": True})
+                return self._send(200, panel.phone_info(port_holder["port"], port_holder["lan"]))
+            if path.startswith("/view.png"):
                 p = Path(panel.worker.shot_path)
                 return self._send(200, p.read_bytes(), "image/png") if p.exists() else \
                     self._send(404, {"error": "no view yet"})
             self._send(404, {"error": "not found"})
 
         def do_POST(self):
+            if not self._allowed():
+                return self._locked()
             n = int(self.headers.get("Content-Length") or 0)
             # only accept requests from the panel page itself (not other websites)
             origin = self.headers.get("Origin")
-            if origin and not origin.startswith(("http://127.0.0.1", "http://localhost")):
+            host = self.headers.get("Host", "")
+            if origin and not (origin.startswith(("http://127.0.0.1", "http://localhost"))
+                               or origin == f"http://{host}"):
                 return self._send(403, {"error": "forbidden"})
             try:
                 data = json.loads(self.rfile.read(n) or b"{}")
             except ValueError:
                 return self._send(400, {"error": "bad json"})
-            path = self.path
+            path = urlsplit(self.path).path
             if path == "/api/settings":
                 panel.save(data)
                 return self._send(200, {"ok": True})
@@ -170,12 +252,20 @@ def serve(cfg_path=config.DEFAULT_PATH, port=8765, open_browser=True):
     if not P(cfg_path).exists() and P("config.example.yaml").exists():
         P(cfg_path).write_text(P("config.example.yaml").read_text())
     panel = Panel(cfg_path)
+    # On the home network too (for the phone) only when switched on; key-protected.
+    phone = bool(_get(config.load(cfg_path), "panel_on_phone"))
+    host = "0.0.0.0" if phone else "127.0.0.1"
+    holder = {"port": port, "lan": phone}
     try:
-        srv = ThreadingHTTPServer(("127.0.0.1", port), make_handler(panel))
+        srv = ThreadingHTTPServer((host, port), make_handler(panel, holder))
     except OSError:  # port taken (maybe it's already open): use any free one
-        srv = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(panel))
+        srv = ThreadingHTTPServer((host, 0), make_handler(panel, holder))
+    holder["port"] = srv.server_port
     url = f"http://127.0.0.1:{srv.server_port}/"
     print(f"RoK watcher control panel: {url}  (keep this window open; Ctrl+C to quit)")
+    if phone:
+        print(f"On your phone (same Wi-Fi): http://{lan_ip()}:{srv.server_port}/?key={panel.phone_key()}")
+        print("If Windows asks whether to allow RoKWatcher on networks, click Allow (private).")
     if open_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     try:
