@@ -146,6 +146,16 @@ class Watcher:
         now = time.time() if now is None else now
         alerts: list[Alert] = []
 
+        texts = None
+        if self.cfg.get("read_notifications", True):
+            from . import screen
+            texts = screen.read_text(frame, (int(frame.shape[1] * 0.55), int(frame.shape[0] * 0.75),
+                                             int(frame.shape[1] * 0.45), int(frame.shape[0] * 0.25)))
+            for kind, text in screen.read_toasts(frame, texts):
+                title = {"scouted": "YOU'VE BEEN SCOUTED", "attacked": "YOU'RE UNDER ATTACK",
+                         "rallied": "A RALLY IS COMING AT YOU"}[kind]
+                alerts.append(Alert(f"toast-{kind}", title, f"The game says: {text}", urgent=True,
+                                    image=self._snapshot(frame, f"toast-{kind}")))
         if self.attack and (reason := self.attack.check(frame)):
             alerts.append(Alert("attack", "YOU ARE UNDER ATTACK",
                                 f"{reason}. Pull your troops back!", urgent=True,

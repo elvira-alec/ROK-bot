@@ -186,7 +186,11 @@ class Tracker:
         events = []
         for a in his:
             events += self._scout_events(a) if a.kind == "scout" else self._army_events(a)
-        mine = [a for a in his if a.kind == "army"]     # scouts don't count as troops
+            if a.kind == "hostile" and ("hostile",) not in a.alerted:
+                a.alerted.add(("hostile",))
+                events.append(("hostile", "A red (hostile) army is marching against you or "
+                                          "your alliance.", {"target": "you", "id": a.id}))
+        mine = [a for a in his if a.kind != "scout"]    # scouts don't count as troops
         def heading_home(a):
             if a.direction == "home":
                 return True
@@ -323,6 +327,7 @@ class Hunter:
         self.seen_text: dict = {}     # army id -> text read when we zoomed in (for checking)
         self.warning = AttackAlertDetector()
         self.warned = False
+        self.toasts: list = []
         if not self.log_path.exists():
             self.log_path.write_text("time_utc,army,x,y,state,dest_x,dest_y\n")
 
@@ -465,6 +470,8 @@ class Hunter:
             view = self.game.look()
             if self.warning.check(view.frame):
                 self.warned = True
+            for kind, text in screen.read_toasts(view.frame, view.texts):
+                self.toasts.append((kind, text))
             reader = self.read_view_out if self.method == "zoomed_out" else self.read_view
             for s in reader(view):
                 # the same army seen from two overlapping stops: keep one
@@ -475,6 +482,7 @@ class Hunter:
     def round(self, stop=None) -> list[Alert]:
         now = time.time()
         self.warned = False
+        self.toasts = []
         if self.method == "zoomed_out":
             self.game.zoom_to_patrol_level()
         sightings, visited = self.sweep(stop)
@@ -489,9 +497,14 @@ class Hunter:
         if self.warned:
             alerts.append(Alert("warning", "YOU'RE BEING SCOUTED OR ATTACKED",
                                 "The red warning is flashing in the game.", urgent=True))
+        for kind, text in dict(self.toasts).items():
+            title = {"scouted": "YOU'VE BEEN SCOUTED", "attacked": "YOU'RE UNDER ATTACK",
+                     "rallied": "A RALLY IS COMING AT YOU"}[kind]
+            alerts.append(Alert(f"toast-{kind}", title, f"The game says: {text}", urgent=True))
         for kind, msg, info in events:
-            urgent = kind in ("army_out", "scout_at") and bool(info.get("target"))
+            urgent = kind in ("army_out", "scout_at", "hostile") and bool(info.get("target"))
             title = {"army_out": "HE SENT AN ARMY OUT" + (" AT YOU" if urgent else ""),
+                     "hostile": "HIS ARMY IS MARCHING AGAINST YOU",
                      "scout_at": "HE'S SCOUTING YOU",
                      "pulling_back": "He's pulling his troops back",
                      "all_home": "All his troops are home"}[kind]

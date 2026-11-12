@@ -83,3 +83,20 @@ def test_hunter_ignores_his_city_label_on_real_screen(tmp_path):
     for name in ("enemy_city_close", "enemy_city_simple"):
         view = ScreenshotGame([name]).look()
         assert Hunter(None, cfg, [], str(tmp_path / "h.csv")).read_view(view) == []
+
+
+def test_patrol_real_scout_notification_and_red_army(tmp_path):
+    p = patrol(ScreenshotGame(["scouted_toast_simple", "scouted_toast_simple"]), tmp_path)
+    titles = [a.title for a in p.visit(p.sites[0])]
+    assert "YOU'VE BEEN SCOUTED" in titles, titles
+    assert "ENEMY ARMY MARCHING AT YOU" in titles, titles
+    assert "YOU'RE BEING SCOUTED OR ATTACKED" in titles, titles     # the red border too
+    log = (tmp_path / "a.csv").read_text()
+    assert "toast_scouted" in log and "hostile_army" in log
+
+
+def test_patrol_real_red_army_without_warning(tmp_path):
+    # red army diamond on the map, warning between pulses: still caught
+    p = patrol(ScreenshotGame(["attack_red_diamond_simple", "attack_red_diamond_simple"]), tmp_path)
+    titles = [a.title for a in p.visit(p.sites[0])]
+    assert "ENEMY ARMY MARCHING AT YOU" in titles, titles

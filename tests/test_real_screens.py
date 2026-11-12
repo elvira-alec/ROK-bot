@@ -61,7 +61,9 @@ def test_works_at_other_sizes():
         assert len(lines) == 1 and lines[0].length > 2500 * scale * 0.9, scale
 
 
-ARMIES = {"march_simple_view": 1, "my_armies_simple": 1, "scouted_simple_2": 1,
+NO_WARNING_BORDER = [n for n in ALL if not n.startswith(("scouted", "attack_his", "battle_close"))]
+
+ARMIES = {"attack_red_diamond_simple": 1, "scouted_toast_simple": 1, "march_simple_view": 1, "my_armies_simple": 1, "scouted_simple_2": 1,
           "scouted_simple_3": 2, "scouted_simple_4": 2, "scouted_simple_5": 1}
 
 
@@ -78,7 +80,7 @@ def test_army_icon(name):
         assert line.distance_to(found[0]) < 15  # it sits on its march line
 
 
-@pytest.mark.parametrize("name", [n for n in ALL if not n.startswith("scouted")])
+@pytest.mark.parametrize("name", NO_WARNING_BORDER)
 def test_red_territory_border_is_not_an_attack(name):
     det = AttackAlertDetector()
     img = load(name)
@@ -97,10 +99,15 @@ def test_patrol_ignores_march_just_passing_by():
 
 ocr = pytest.importorskip("rapidocr_onnxruntime")
 
-STATES_NEW = {"battle_me_attacking", "my_armies_simple", "his_army_marching_close"} | {
+STATES_NEW = {"battle_me_attacking", "my_armies_simple", "his_army_marching_close",
+              "attack_his_army_close", "attack_red_dashes_close", "attack_red_diamond_simple",
+              "battle_close_red_lines", "his_city_swords_simple"} | {
     n for n in ALL if n.startswith("scouted")}
 
-CAMERA = {"battle_me_attacking": (173, 375), "his_army_marching_close": (189, 384),
+CAMERA = {"attack_his_army_close": (174, 385), "attack_red_dashes_close": (180, 392),
+          "attack_red_diamond_simple": (178, 390), "scouted_toast_simple": (173, 385),
+          "his_city_swords_simple": (158, 369), "battle_close_red_lines": (186, 408),
+          "battle_me_attacking": (173, 375), "his_army_marching_close": (189, 384),
           "my_armies_simple": (176, 380), "scouted_his_city": (164, 375),
           "scouted_close_red_marker": (185, 395), "scouted_my_city": (210, 422),
           **{f"scouted_simple_{i}": (185, 398) for i in range(1, 6)},
@@ -109,10 +116,13 @@ CAMERA = {"battle_me_attacking": (173, 375), "his_army_marching_close": (189, 38
           "enemy_city_simple": (162, 375), "recall_panel": (205, 424),
           "march_simple_view": (417, 520), "march_close_view": (423, 521)}
 SIMPLE = {"enemy_city_simple", "march_simple_view", "search_bar_far_zoom", "search_bar_marching",
-          "my_armies_simple", *(f"scouted_simple_{i}" for i in range(1, 6))}
+          "my_armies_simple", *(f"scouted_simple_{i}" for i in range(1, 6)),
+          "attack_red_diamond_simple", "scouted_toast_simple", "his_city_swords_simple"}
 ZOOM = {"search_bar_far_zoom": "far", "search_bar_marching": "patrol", "enemy_city_simple": "patrol",
         "march_simple_view": "patrol", "my_armies_simple": "patrol",
-        **{f"scouted_simple_{i}": "patrol" for i in range(1, 6)}}
+        **{f"scouted_simple_{i}": "patrol" for i in range(1, 6)},
+        "attack_red_diamond_simple": "patrol", "scouted_toast_simple": "patrol",
+        "his_city_swords_simple": "patrol"}
 MARCHING = {"search_bar_far_zoom", "search_bar_marching", "my_armies_simple"}
 
 
@@ -240,9 +250,12 @@ def test_real_attack_glow_still_alerts():
 
 # ---------------------------------------------------------------- being scouted / attacked, battles
 
-WARNING_STRONG = ["scouted_close_red_marker", "scouted_his_city", "scouted_simple_4"]
+WARNING_STRONG = ["scouted_close_red_marker", "scouted_his_city", "scouted_simple_4",
+                  "attack_his_army_close", "scouted_toast_simple", "battle_close_red_lines"]
 WARNING_FAINT = ["scouted_simple_1", "scouted_simple_2", "scouted_simple_5"]   # pulse dimmer
-NO_WARNING = [n for n in ALL if not n.startswith("scouted")]
+NO_WARNING = [n for n in ALL if not n.startswith("scouted")
+              and n not in ("attack_his_army_close", "battle_close_red_lines",
+                            "attack_red_dashes_close")]   # (that one: warning between pulses)
 
 
 @pytest.mark.parametrize("name", WARNING_STRONG)
@@ -272,6 +285,9 @@ def test_no_warning_on_normal_screens(name):
 STATES = {"battle_me_attacking": ["fighting", "fighting", "stopped"],
           "my_armies_simple": ["marching"] * 3}
 STATES.update({n: ["returning"] * 3 for n in ALL if n.startswith("scouted")})
+STATES.update({n: ["returning"] * 3 for n in ("attack_his_army_close", "attack_red_dashes_close",
+                                              "attack_red_diamond_simple", "battle_close_red_lines")})
+STATES["his_city_swords_simple"] = ["gathering"] * 3
 
 
 @pytest.mark.parametrize("name", sorted(STATES))
@@ -293,7 +309,8 @@ def test_scout_lines_and_diamonds():
 
 # ---------------------------------------------------------------- armies vs scouts on the map
 
-ICONS = {"march_simple_view": ["army"], "my_armies_simple": ["army"],
+ICONS = {"attack_red_diamond_simple": ["hostile", "scout"], "scouted_toast_simple": ["hostile", "scout"],
+         "march_simple_view": ["army"], "my_armies_simple": ["army"],
          "scouted_simple_2": ["scout"], "scouted_simple_3": ["scout", "scout"],
          "scouted_simple_4": ["scout", "scout"], "scouted_simple_5": ["scout"]}
 CROPS = {"army_cavalry": "army", "army_siege": "army", "army_flag": "army", "scout_plain": "scout"}
@@ -324,7 +341,9 @@ ICON_SPOTS = [("my_armies_simple.png", (933, 991), "army"),        # sword
               ("scouted_simple_4.png", (1341, 726), "scout"),
               ("scouted_simple_5.png", (1443, 727), "scout"),
               ("scouted_simple_2.png", (1378, 839), "scout"),
-              ("scouted_simple_4.png", (1121, 929), "scout")]
+              ("scouted_simple_4.png", (1121, 929), "scout"),
+              ("attack_red_diamond_simple.png", (1046, 1031), "hostile"),   # red = against you
+              ("scouted_toast_simple.png", (1522, 681), "hostile")]
 
 
 def test_scouts_and_armies_never_swapped():
@@ -335,6 +354,8 @@ def test_scouts_and_armies_never_swapped():
     for f, (x, y), kind in ICON_SPOTS:
         im = cv2.imread(str(DIR / f))
         r = 34 if kind == "scout" else (60 if f.startswith("crops") else 46)
+        if f == "scouted_toast_simple.png":
+            r = 40     # a scout sits close by; keep it out of the cut-out
         patch = im[max(0, y - r):y + r, max(0, x - r):x + r]
         for scale in (0.7, 1.0, 1.3):
             p = cv2.resize(patch, None, fx=scale, fy=scale,
@@ -355,3 +376,40 @@ def test_scouts_and_armies_never_swapped():
                         missed += 1
     assert swapped == [], swapped
     assert missed <= total * 0.05, (missed, total)
+
+
+
+# ---------------------------------------------------------------- attacks: red armies, the game's notifications
+
+def test_red_diamond_is_a_hostile_army():
+    for name, spot in (("attack_red_diamond_simple", (1046, 1031)), ("scouted_toast_simple", (1522, 681))):
+        found = [(c, k) for c, k in screen.find_map_icons(load(name)) if k == "hostile"]
+        assert len(found) == 1 and abs(found[0][0][0] - spot[0]) < 15, (name, found)
+
+
+def test_hostile_march_lines_are_red():
+    for name in ("attack_his_army_close", "attack_red_diamond_simple", "scouted_toast_simple",
+                 "battle_close_red_lines"):
+        assert any(ln.color == "red" for ln in screen.find_march_lines(load(name))), name
+
+
+@pytest.mark.parametrize("name", ALL)
+def test_game_notification(name, texts):
+    got = screen.read_toasts(load(name), texts[name])
+    if name == "scouted_toast_simple":
+        assert [k for k, _ in got] == ["scouted"], got
+    else:
+        assert got == [], got
+
+
+@pytest.mark.parametrize("name", ["attack_his_army_close", "attack_red_dashes_close",
+                                  "battle_close_red_lines"])
+def test_his_name_over_his_attacking_army(name, texts):
+    found = screen.find_player(load(name), texts[name], "[P83L]JONH WICK")
+    assert any(lb.kind == "army" for lb in found), found
+
+
+def test_his_city_label_far_view(texts):
+    found = screen.find_player(load("his_city_swords_simple"), texts["his_city_swords_simple"],
+                               "[P83L]JONH WICK")
+    assert [lb.kind for lb in found] == ["city"], found

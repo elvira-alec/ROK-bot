@@ -257,6 +257,7 @@ class Patrol:
                 self.game.wait(1.0)
             view = self.game.look()
             frames.append(view.frame)
+            alerts += self._toasts_and_hostiles(site, view)
             if self.warning.check(view.frame):
                 self.activity.add("you", "mine", "warning", "red border: scouted or attacked")
                 alerts.append(Alert("warning", "YOU'RE BEING SCOUTED OR ATTACKED",
@@ -311,6 +312,25 @@ class Patrol:
             if self._new(f"chat-{c}", 0, now):
                 self.activity.add("chat", "info", "coords_posted", f"{c[0]},{c[1]}")
         return alerts
+
+    def _toasts_and_hostiles(self, site, view) -> list[Alert]:
+        """The game's own pop-ups ('You have been scouted') and red army diamonds
+        (armies marching against you or your alliance)."""
+        out = []
+        for kind, text in screen.read_toasts(view.frame, view.texts):
+            title = {"scouted": "YOU'VE BEEN SCOUTED", "attacked": "YOU'RE UNDER ATTACK",
+                     "rallied": "A RALLY IS COMING AT YOU"}[kind]
+            self.activity.add("you", "mine", f"toast_{kind}", text)
+            out.append(Alert(f"toast-{kind}", title, f"The game says: {text}", urgent=True,
+                             image=self._snapshot(view.frame, f"toast-{kind}")))
+        hostiles = [c for c, k in screen.find_map_icons(view.frame) if k == "hostile"]
+        if hostiles:
+            self.activity.add(site.name, site.kind, "hostile_army", f"{len(hostiles)} on screen")
+            out.append(Alert("hostile-army", "ENEMY ARMY MARCHING AT YOU",
+                             f"{len(hostiles)} red (hostile) army marker(s) on the map near "
+                             f"{site.name}.", urgent=True,
+                             image=self._snapshot(view.frame, "hostile")))
+        return out
 
     def _check_troops(self, view, alerts):
         panel = screen.troop_panel(view.frame, view.texts)

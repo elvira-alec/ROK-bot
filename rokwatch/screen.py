@@ -279,7 +279,7 @@ def find_army_icons(frame: np.ndarray) -> list[tuple]:
         # the four corners of the box are empty for a diamond
         k = max(2, int(0.2 * min(w, h)))
         corners = [filled[:k, :k], filled[:k, -k:], filled[-k:, :k], filled[-k:, -k:]]
-        if max(c.mean() for c in corners) > 0.25:
+        if max(c.mean() for c in corners) > 0.25 or not _diamond_not_round(filled > 0):
             continue
         # needs both the grey fill and the white symbol
         f = fill[y:y + h, x:x + w][comp > 0].mean() / 255
@@ -557,6 +557,47 @@ def _best_glyph(frame, centre, h, among):
     return best if score >= 0.4 else None
 
 
+def _badge_column(frame, top, h):
+    """Status badge circles (green / orange / red / purple) in the column below `top`.
+    Returns [(centre, hue)] from top to bottom."""
+    x, y = top
+    x0, x1 = max(0, int(x - 0.025 * h)), int(x + 0.025 * h)
+    y0, y1 = int(y + 0.04 * h), int(0.86 * h)
+    hsv = cv2.cvtColor(frame[y0:y1, x0:x1], cv2.COLOR_BGR2HSV)
+    # each status colour on its own, so a badge doesn't merge with an orange
+    # background or a gold portrait frame next to it
+    ranges = [((40, 120, 90), (80, 255, 255)),     # green: gathering / marching
+              ((9, 150, 120), (25, 255, 255)),     # orange: returning
+              ((0, 150, 90), (8, 255, 255)),       # red: fighting / stopped
+              ((170, 150, 90), (180, 255, 255)),
+              ((125, 100, 90), (165, 255, 255))]   # purple: scouts
+    out = []
+    for lo, hi in ranges:
+        mask = cv2.inRange(hsv, np.array(lo, np.uint8), np.array(hi, np.uint8))
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+        n, lab, st, ce = cv2.connectedComponentsWithStats(mask)
+        for i in range(1, n):
+            bx, by, bw, bh, a = st[i]
+            if not (0.016 * h <= max(bw, bh) <= 0.04 * h and 0.7 < bw / max(1, bh) < 1.4):
+                continue
+            if a < 0.4 * bw * bh:
+                continue
+            ring = lab[by:by + bh, bx:bx + bw] == i
+            # a badge: round, with a white symbol in the middle
+            mid = hsv[by + bh // 3:by + 2 * bh // 3, bx + bw // 3:bx + 2 * bw // 3]
+            if mid.size and ((mid[..., 1] < 70) & (mid[..., 2] > 180)).mean() < 0.1:
+                continue
+            hue = float(np.median(hsv[by:by + bh, bx:bx + bw][ring][:, 0]))
+            out.append(((int(ce[i][0]) + x0, int(ce[i][1]) + y0), hue))
+    out.sort(key=lambda o: o[0][1])
+    dedup = []
+    for c, hue in out:
+        if not dedup or abs(c[1] - dedup[-1][0][1]) >= 0.03 * h:
+            dedup.append((c, hue))
+    out = dedup
+    return out
+
+
 def badge_state(frame, centre, h) -> str:
     """What a commander's status badge says, from its colour and symbol."""
     x, y = centre
@@ -597,8 +638,25 @@ def troop_panel(frame: np.ndarray, texts: list[Text]):
     t, used, total = anchor
     cx, cy = t.center
     slots = []
+    # The spacing changes with how many rows the panel has, so look for the badge
+    # circles in the column under the counter rather than assuming positions.
+    found = _badge_column(frame, (int(cx + _BADGE_DX * h), cy), h)
+    bx = int(np.median([c[0] for c, _ in found])) if found else int(cx + _BADGE_DX * h)
+    # first commander badge: near the usual spot under the counter
+    y_first = cy + _BADGE_DY * h
+    near_first = [c for c, _ in found if abs(c[1] - y_first) < 0.035 * h]
+    if near_first:
+        y_first = near_first[0][1]
+    # spacing: measured from badges that follow each other, else the usual one
+    ys = [c[1] for c, _ in found if c[1] >= y_first - 2]
+    gaps = [b - a for a, b in zip(ys, ys[1:]) if 0.08 * h <= b - a <= 0.12 * h]
+    step = float(np.median(gaps)) if gaps else _BADGE_STEP * h
+    commanders = []
     for i in range(used):
-        badge = (int(cx + _BADGE_DX * h), int(cy + (_BADGE_DY + i * _BADGE_STEP) * h))
+        want = y_first + i * step
+        hit = [c for c, _ in found if abs(c[1] - want) < 0.03 * h]
+        commanders.append(hit[0] if hit else (bx, int(want)))
+    for i, badge in enumerate(commanders):
         if badge[1] >= h:
             break
         slots.append(TroopSlot(i, badge, (int(badge[0] - 0.027 * h), int(badge[1] - 0.034 * h)),
@@ -780,7 +838,55 @@ def find_map_icons(frame: np.ndarray):
         if all(np.hypot(cx - f[0][0], cy - f[0][1]) > 0.5 * max(w, h) for f in found):
             if icon_kind(frame, (int(cx), int(cy))) == "army":
                 found.append(((int(cx), int(cy)), "army"))
+    for c in find_hostile_icons(frame):
+        if all(np.hypot(c[0] - f[0][0], c[1] - f[0][1]) > 0.03 * H for f in found):
+            found.append((c, "hostile"))
     return found
+
+
+def _diamond_not_round(comp) -> bool:
+    """A diamond is empty at its diagonals (|dx|+|dy| > half the size); a round button
+    or a pile of rocks isn't."""
+    h, w = comp.shape
+    pts = [(0.5 + dx * 0.33, 0.5 + dy * 0.33) for dx in (-1, 1) for dy in (-1, 1)]
+    filled = 0
+    for fx, fy in pts:
+        x, y = int(fx * w), int(fy * h)
+        win = comp[max(0, y - 2):y + 3, max(0, x - 2):x + 3]
+        filled += win.mean() > 0.5
+    return filled <= 1
+
+
+def find_hostile_icons(frame: np.ndarray) -> list[tuple]:
+    """Armies marching against you / your alliance on the zoomed-out map: a crimson
+    diamond with a white troop symbol (measured: hue ~177, saturation ~180)."""
+    H, W = frame.shape[:2]
+    s = H / 1320.0
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    red = (cv2.inRange(hsv, np.array((165, 120, 90), np.uint8), np.array((180, 255, 240), np.uint8))
+           | cv2.inRange(hsv, np.array((0, 120, 90), np.uint8), np.array((6, 255, 240), np.uint8)))
+    white = cv2.inRange(hsv, np.array((0, 0, 210), np.uint8), np.array((180, 50, 255), np.uint8))
+    blob = cv2.morphologyEx(red | white, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+    n, lab, st, ce = cv2.connectedComponentsWithStats(blob)
+    out = []
+    for i in range(1, n):
+        x, y, w, h, a = st[i]
+        if not (40 * s <= w <= 120 * s and 40 * s <= h <= 120 * s and 0.75 < w / h < 1.33):
+            continue
+        if y < 0.08 * H or y + h > 0.88 * H or x > 0.9 * W:
+            continue                                      # HUD
+        comp = (lab[y:y + h, x:x + w] == i)
+        if not 0.38 <= comp.mean() <= 0.7:
+            continue                                      # a diamond fills about half its box
+        k = max(2, int(0.2 * min(w, h)))
+        corners = [comp[:k, :k], comp[:k, -k:], comp[-k:, :k], comp[-k:, -k:]]
+        if max(c.mean() for c in corners) > 0.3 or not _diamond_not_round(comp):
+            continue
+        r_in = red[y:y + h, x:x + w][comp].mean() / 255
+        w_in = white[y:y + h, x:x + w][comp].mean() / 255
+        if r_in >= 0.4 and 0.08 <= w_in <= 0.5:           # mostly red, with a white symbol
+            out.append((int(ce[i][0]), int(ce[i][1])))
+    return out
 
 
 def _icon_size(frame, c):
@@ -792,3 +898,33 @@ def _icon_size(frame, c):
     light = ((hsv[..., 2] > 120) & (hsv[..., 1] < 70)).any(axis=0)
     idx = np.nonzero(light)[0]
     return float(idx.max() - idx.min() + 1) if len(idx) else 0.05 * H
+
+
+# ---------------------------------------------------------------- the game's own notifications
+
+TOASTS = [
+    # (kind, words that must all appear, letters only, upper case)
+    ("scouted", ("SCOUTED",)),
+    ("attacked", ("ATTACK",)),
+    ("rallied", ("RALLY",)),
+]
+
+
+def read_toasts(frame: np.ndarray, texts: list[Text]) -> list[tuple[str, str]]:
+    """Pop-up notifications the game shows at the bottom right, e.g.
+    'You have been scouted - Enemy scouted Troops.' Returns [(kind, text)]."""
+    H, W = frame.shape[:2]
+    box = [t for t in texts if t.box[0] > 0.55 * W and t.box[1] > 0.75 * H
+           and len(re.sub(r"[^A-Za-z]", "", t.text)) >= 4]
+    if not box:
+        return []
+    joined = " ".join(t.text for t in sorted(box, key=lambda t: (t.box[1], t.box[0])))
+    letters = re.sub(r"[^A-Z]", "", joined.upper())
+    out = []
+    for kind, words in TOASTS:
+        if all(w in letters for w in words):
+            out.append((kind, joined))
+    # "You have been s..." cut off by the screen edge: the second line says what
+    if not out and "YOUHAVEBEEN" in letters and "SCOUT" in letters:
+        out.append(("scouted", joined))
+    return out
