@@ -100,12 +100,14 @@ class Tracker:
     One look can't tell which way an army walks along its line, so the
     direction comes from how it moved since the last sweep."""
 
-    def __init__(self, city, my_sites, near_city=6.0, match_dist=12.0, near_site=8.0):
+    def __init__(self, city, my_sites, near_city=6.0, match_dist=12.0, near_site=8.0,
+                 approach=20.0):
         self.city = tuple(city)
         self.my_sites = my_sites          # [(name, (x, y))]
         self.near_city = near_city
         self.match_dist = match_dist
         self.near_site = near_site
+        self.approach = approach          # "moving close" distance (tiles)
         self.armies: list[Army] = []
         self._next = 1
         self.sweeps = 0
@@ -225,15 +227,42 @@ class Tracker:
             hit = self._site_near(a.dest) or self.target_of(a) or hit
         if a.direction == "home":
             return out
-        if hit and ("at", hit) not in a.alerted:
-            a.alerted.add(("at", hit))
-            out.append(("army_out", f"He has an army on its way toward {hit}.",
-                        {"target": hit, "id": a.id}))
+        if hit:
+            if ("at", hit) not in a.alerted:
+                a.alerted.add(("at", hit))
+                out.append(("army_out", f"He has an army on its way toward {hit}.",
+                            {"target": hit, "id": a.id}))
+            return out          # aimed at it: "moving close" would only repeat that
+        # Not aimed at a spot, but the march ends close to one (moving in without
+        # targeting yet - the game shows no warning for that)
+        close = self._close_to(a)
+        if close:
+            if ("close", close[0]) not in a.alerted:
+                a.alerted.add(("close", close[0]))
+                out.append(("army_close", f"His army is moving close to {close[0]} (its march "
+                                          f"ends about {close[1]:.0f} tiles away).",
+                            {"target": close[0], "id": a.id}))
+            return out          # already told; "sent an army out" would only repeat it
         elif a.direction == "out" and "out" not in a.alerted and not hit:
             a.alerted.add("out")
             dest = f" (heading for about {a.dest[0]:.0f},{a.dest[1]:.0f})" if a.dest else ""
             out.append(("army_out", f"He sent an army out{dest}.", {"target": None, "id": a.id}))
         return out
+
+    def _close_to(self, a: Army):
+        """(spot name, distance) when one end of its march is within `approach` tiles of
+        one of your spots (and it isn't walking away home)."""
+        if not a.ends or a.direction == "home":
+            return None
+        best = None
+        for e in a.ends:
+            if self.at_home(e):
+                continue
+            for name, pos in self.my_sites:
+                d = math.dist(e, pos)
+                if d <= self.approach and (best is None or d < best[1]):
+                    best = (name, d)
+        return best
 
     def _scout_events(self, a: Army):
         """His scout on a route to (or pointing at) one of your spots."""
@@ -319,8 +348,12 @@ class Hunter:
         self.axes = self.axes_out if self.method == "zoomed_out" else self.axes_close
         self.checks_per_sweep = int(h.get("checks_per_sweep", 3))
         self.my_sites = my_sites
-        self.tracker = Tracker(self.city, my_sites, h.get("near_city", 6),
-                               h.get("match_distance", 12), h.get("near_site", 8))
+        self.tracker = Tracker(self.city, list(my_sites), h.get("near_city", 6),
+                               h.get("match_distance", 12), h.get("near_site", 8),
+                               h.get("moving_close", 20))
+        self.fixed_sites = list(my_sites)
+        self.refresh_spots = float(h.get("track_my_gathering_minutes", 10)) * 60
+        self._spots_at = 0.0
         self.log_path = Path(log_path)
         self.debug_dir = debug_dir
         self.auto_recall = bool(cfg.get("patrol", {}).get("auto_recall", False))
@@ -431,6 +464,28 @@ class Hunter:
         self.game.zoom_to_patrol_level()
         return done
 
+    def update_my_spots(self):
+        """Where are my gathering troops right now? Tap each gathering troop's portrait
+        and read the resource point's coordinates from its info box (viewing only)."""
+        try:
+            panel = self.game.troops()
+        except Exception as e:
+            log.warning("hunt: couldn't read your troops: %s", e)
+            return
+        if not panel:
+            return
+        spots = []
+        for slot in panel[2]:
+            if slot.state != "gathering":
+                continue
+            loc = self.game.troop_location(slot)
+            self.game.close_popups()
+            if loc:
+                spots.append((f"your troop {slot.index + 1} (gathering at {loc[0]},{loc[1]})", loc))
+        self.tracker.my_sites = self.fixed_sites + spots
+        if spots:
+            log.info("hunt: your gathering troops are at %s", [s[1] for s in spots])
+
     def is_his(self, a) -> bool:
         """His for sure (name read), or not checked yet but on a route that starts or
         ends at his city (almost always his own army)."""
@@ -483,6 +538,9 @@ class Hunter:
         now = time.time()
         self.warned = False
         self.toasts = []
+        if self.refresh_spots and now - self._spots_at >= self.refresh_spots:
+            self._spots_at = now
+            self.update_my_spots()
         if self.method == "zoomed_out":
             self.game.zoom_to_patrol_level()
         sightings, visited = self.sweep(stop)
@@ -502,8 +560,9 @@ class Hunter:
                      "rallied": "A RALLY IS COMING AT YOU"}[kind]
             alerts.append(Alert(f"toast-{kind}", title, f"The game says: {text}", urgent=True))
         for kind, msg, info in events:
-            urgent = kind in ("army_out", "scout_at", "hostile") and bool(info.get("target"))
+            urgent = kind in ("army_out", "scout_at", "hostile", "army_close") and bool(info.get("target"))
             title = {"army_out": "HE SENT AN ARMY OUT" + (" AT YOU" if urgent else ""),
+                     "army_close": "HIS ARMY IS MOVING CLOSE TO YOU",
                      "hostile": "HIS ARMY IS MARCHING AGAINST YOU",
                      "scout_at": "HE'S SCOUTING YOU",
                      "pulling_back": "He's pulling his troops back",

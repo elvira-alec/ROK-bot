@@ -63,7 +63,7 @@ def test_works_at_other_sizes():
 
 NO_WARNING_BORDER = [n for n in ALL if not n.startswith(("scouted", "attack_his", "battle_close"))]
 
-ARMIES = {"attack_red_diamond_simple": 1, "scouted_toast_simple": 1, "march_simple_view": 1, "my_armies_simple": 1, "scouted_simple_2": 1,
+ARMIES = {"his_armies_near_night": 2, "attack_red_diamond_simple": 1, "scouted_toast_simple": 1, "march_simple_view": 1, "my_armies_simple": 1, "scouted_simple_2": 1,
           "scouted_simple_3": 2, "scouted_simple_4": 2, "scouted_simple_5": 1}
 
 
@@ -101,10 +101,10 @@ ocr = pytest.importorskip("rapidocr_onnxruntime")
 
 STATES_NEW = {"battle_me_attacking", "my_armies_simple", "his_army_marching_close",
               "attack_his_army_close", "attack_red_dashes_close", "attack_red_diamond_simple",
-              "battle_close_red_lines", "his_city_swords_simple"} | {
+              "battle_close_red_lines", "his_city_swords_simple", "his_armies_near_night"} | {
     n for n in ALL if n.startswith("scouted")}
 
-CAMERA = {"attack_his_army_close": (174, 385), "attack_red_dashes_close": (180, 392),
+CAMERA = {"his_armies_near_night": (184, 383), "attack_his_army_close": (174, 385), "attack_red_dashes_close": (180, 392),
           "attack_red_diamond_simple": (178, 390), "scouted_toast_simple": (173, 385),
           "his_city_swords_simple": (158, 369), "battle_close_red_lines": (186, 408),
           "battle_me_attacking": (173, 375), "his_army_marching_close": (189, 384),
@@ -117,12 +117,13 @@ CAMERA = {"attack_his_army_close": (174, 385), "attack_red_dashes_close": (180, 
           "march_simple_view": (417, 520), "march_close_view": (423, 521)}
 SIMPLE = {"enemy_city_simple", "march_simple_view", "search_bar_far_zoom", "search_bar_marching",
           "my_armies_simple", *(f"scouted_simple_{i}" for i in range(1, 6)),
-          "attack_red_diamond_simple", "scouted_toast_simple", "his_city_swords_simple"}
+          "attack_red_diamond_simple", "scouted_toast_simple", "his_city_swords_simple",
+          "his_armies_near_night"}
 ZOOM = {"search_bar_far_zoom": "far", "search_bar_marching": "patrol", "enemy_city_simple": "patrol",
         "march_simple_view": "patrol", "my_armies_simple": "patrol",
         **{f"scouted_simple_{i}": "patrol" for i in range(1, 6)},
         "attack_red_diamond_simple": "patrol", "scouted_toast_simple": "patrol",
-        "his_city_swords_simple": "patrol"}
+        "his_city_swords_simple": "patrol", "his_armies_near_night": "patrol"}
 MARCHING = {"search_bar_far_zoom", "search_bar_marching", "my_armies_simple"}
 
 
@@ -288,6 +289,7 @@ STATES.update({n: ["returning"] * 3 for n in ALL if n.startswith("scouted")})
 STATES.update({n: ["returning"] * 3 for n in ("attack_his_army_close", "attack_red_dashes_close",
                                               "attack_red_diamond_simple", "battle_close_red_lines")})
 STATES["his_city_swords_simple"] = ["gathering"] * 3
+STATES["his_armies_near_night"] = ["gathering"] * 2       # 2 of 4 troops out
 
 
 @pytest.mark.parametrize("name", sorted(STATES))
@@ -309,7 +311,8 @@ def test_scout_lines_and_diamonds():
 
 # ---------------------------------------------------------------- armies vs scouts on the map
 
-ICONS = {"attack_red_diamond_simple": ["hostile", "scout"], "scouted_toast_simple": ["hostile", "scout"],
+ICONS = {"his_armies_near_night": ["army", "army"],      # sword + sword-in-stone, at night
+         "attack_red_diamond_simple": ["hostile", "scout"], "scouted_toast_simple": ["hostile", "scout"],
          "march_simple_view": ["army"], "my_armies_simple": ["army"],
          "scouted_simple_2": ["scout"], "scouted_simple_3": ["scout", "scout"],
          "scouted_simple_4": ["scout", "scout"], "scouted_simple_5": ["scout"]}
@@ -413,3 +416,14 @@ def test_his_city_label_far_view(texts):
     found = screen.find_player(load("his_city_swords_simple"), texts["his_city_swords_simple"],
                                "[P83L]JONH WICK")
     assert [lb.kind for lb in found] == ["city"], found
+
+
+
+def test_night_armies_on_his_march_line(texts):
+    img = load("his_armies_near_night")
+    lines = screen.find_march_lines(img)
+    assert [ln.color for ln in lines] == ["white"], lines        # chat box dots aren't a line
+    armies = [c for c, k in screen.find_map_icons(img) if k == "army"]
+    assert len(armies) == 2 and all(lines[0].distance_to(c) < 25 for c in armies)
+    used, total, _ = screen.troop_panel(img, texts["his_armies_near_night"])
+    assert (used, total) in ((2, 4), (None, None))

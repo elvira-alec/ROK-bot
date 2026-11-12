@@ -202,6 +202,7 @@ def _chains(pts, H, min_dots):
 def find_march_lines(frame: np.ndarray, min_dots=8, colors=None) -> list[MarchLine]:
     H = frame.shape[0]
     lines = []
+    chat_top = 0.86 * H                       # dotted text underlines in the chat box
     for name, ranges in (colors or DOT_COLORS).items():
         pts = _dot_centers(frame, ranges, H)
         for members, spacing in _chains(pts, H, min_dots):
@@ -215,6 +216,8 @@ def find_march_lines(frame: np.ndarray, min_dots=8, colors=None) -> list[MarchLi
             if off.max() > 6 * H / 1320.0:
                 continue
             a, b = p[t.argmin()], p[t.argmax()]
+            if a[1] > chat_top and b[1] > chat_top:
+                continue
             lines.append(MarchLine((int(a[0]), int(a[1])), (int(b[0]), int(b[1])), name,
                                    len(members), spacing))
     return _merge_lines(lines, H)
@@ -260,9 +263,19 @@ def find_army_icons(frame: np.ndarray) -> list[tuple]:
     a white troop symbol. Returns centre points."""
     H = frame.shape[0]
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-    fill = cv2.inRange(hsv, np.array((95, 12, 120), np.uint8), np.array((130, 60, 215), np.uint8))
+    # grey-lavender by day, mauve at night (hue ~115 by day, ~150 at night)
+    fill = cv2.inRange(hsv, np.array((95, 8, 120), np.uint8), np.array((165, 60, 215), np.uint8))
     glyph = cv2.inRange(hsv, np.array((0, 0, 215), np.uint8), np.array((180, 40, 255), np.uint8))
-    m = cv2.morphologyEx(fill | glyph, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+    # drop small white specks (the dots of a march line running into the icon), so the
+    # line doesn't get glued onto the diamond; symbols and a scout's lit face are bigger
+    # (at night the dots are greyish and fall in the fill colours too, so filter both)
+    both = fill | glyph
+    gn, glab, gst, _ = cv2.connectedComponentsWithStats(both)
+    small = np.isin(glab, [j for j in range(1, gn) if gst[j][4] < 90 * (H / 1320.0) ** 2])
+    both[small] = 0
+    fill[small] = 0
+    glyph[small] = 0
+    m = cv2.morphologyEx(both, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
     n, labels, stats, cents = cv2.connectedComponentsWithStats(m)
     s = H / 1320.0
     lo, hi = 26 * s, 110 * s

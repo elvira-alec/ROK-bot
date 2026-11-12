@@ -102,6 +102,17 @@ def test_tracker_picks_the_spot_it_is_really_aimed_at():
     assert ev[0][2]["target"] == "logging camp", ev
 
 
+def test_tracker_moving_close_without_targeting():
+    tr = Tracker(CITY, SITES)
+    # his army marching from out in the field to a point ~14 tiles from your camp
+    ev = tr.update([ArmySeen((180, 410), True, ((175, 405), (190, 425)), 0)], 0)
+    assert [e[0] for e in ev] == ["army_close"] and ev[0][2]["target"] == "logging camp", ev
+    assert tr.update([ArmySeen((182, 412), True, ((175, 405), (190, 425)), 1)], 1) == []   # once
+    # far away: nothing
+    tr2 = Tracker(CITY, SITES)
+    assert tr2.update([ArmySeen((120, 330), True, ((110, 320), (130, 340)), 0)], 0) == []
+
+
 def test_tracker_pulling_back_even_if_lines_missed():
     tr = Tracker(CITY, SITES)
     tr.update([ArmySeen((150, 390), False, None, 0), ArmySeen((180, 360), False, None, 0)], 0)
@@ -121,9 +132,9 @@ def game(tmp_path):
         yield Game(gb, settle=0.4)
 
 
-def hunter(game, tmp_path, radius=20, method="close"):
+def hunter(game, tmp_path, radius=20, method="close", track=0):
     cfg = {"hunt": {"player_name": NAME, "city": list(CITY), "radius": radius, "axes_close": AXES,
-                    "method": method, "checks_per_sweep": 4},
+                    "method": method, "checks_per_sweep": 4, "track_my_gathering_minutes": track},
            "patrol": {"axes": AXES}}     # the test page draws every zoom at the same scale
     return Hunter(game, cfg, SITES, str(tmp_path / "his.csv"))
 
@@ -235,3 +246,22 @@ def test_zoomed_out_his_scout_coming(game, tmp_path):
     debug = [(a.kind, a.owner, a.tile, a.moving, a.ends) for a in h.tracker.armies]
     assert [a.title for a in alerts] == ["HE'S SCOUTING YOU"], ([a.title for a in alerts], debug)
     assert [a["kind"] for a in h.tracker.summary()] == ["scout"]
+
+
+
+def test_tracks_your_gathering_troops_and_warns_when_he_moves_close(game, tmp_path):
+    """Your troops gather at camp / stone / farm on the test page. The hunter reads where
+    they are by itself; then his army marches to a point near (not onto) the farm."""
+    cfg_sites = []                                    # nothing typed in by hand
+    h = Hunter(game, {"hunt": {"player_name": NAME, "city": list(CITY), "radius": 30,
+                               "axes_close": AXES, "method": "zoomed_out", "checks_per_sweep": 4,
+                               "track_my_gathering_minutes": 10},
+                      "patrol": {"axes": AXES}}, cfg_sites, str(tmp_path / "h.csv"))
+    js(game, f"sim.march([165, 385], [195, 436], 'white', 0.3, 0.001, '{NAME}')")   # ends ~15 from camp
+    alerts = h.round()
+    spots = [pos for _, pos in h.tracker.my_sites]
+    assert sorted(spots) == sorted([(205, 424), (200, 410), (215, 430)]), spots
+    titles = [a.title for a in alerts]
+    assert "HIS ARMY IS MOVING CLOSE TO YOU" in titles, titles
+    msg = alerts[titles.index("HIS ARMY IS MOVING CLOSE TO YOU")].message
+    assert "205,424" in msg, msg              # names your troop's spot it found by itself
