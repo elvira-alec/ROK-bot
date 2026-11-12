@@ -184,3 +184,30 @@ def test_tells_leaving_from_returning(game, tmp_path):
     # once worked out, it isn't reported again
     time.sleep(2)
     assert p.visit(SITES[0]) == []
+
+
+def test_fixed_zoom_presets(game):
+    """Zoom is set by wheel notches from fully zoomed out, so it's the same every time."""
+    game.notch_wait = 0.15
+    assert js(game, "sim.state.zoom") == 0                 # close 3D view
+    assert game.measure_zoom() == 2                        # 2 notches in from fully out
+    assert js(game, "sim.state.zoom") == 0                 # and put back
+    game.set_zoom(1, anchor=True)
+    assert js(game, "sim.state.zoom") == 1 and game.zoom() == "patrol"
+    game.set_zoom(2)                                       # relative: 1 notch in
+    assert js(game, "sim.state.zoom") == 0
+    js(game, "sim.state.zoom = 2; sim.state.simple = true")   # someone scrolled by hand
+    game.set_zoom(1, anchor=True)
+    assert js(game, "sim.state.zoom") == 1
+
+
+def test_pan_to_drags_instead_of_typing(game):
+    axes = learn_axes(game)
+    assert axes
+    typed = js(game, "sim.state.typed || ''")
+    assert game.pan_to(220, 425, axes)
+    cam = js(game, "[sim.state.cam.x, sim.state.cam.y]")
+    assert abs(cam[0] - 220) <= 2 and abs(cam[1] - 425) <= 2, cam
+    assert js(game, "sim.state.typed || ''") == typed      # no coordinates typed
+    assert game.pan_to(100, 300, axes)                     # far away: types them in
+    assert js(game, "[sim.state.cam.x, sim.state.cam.y]") == [100, 300]

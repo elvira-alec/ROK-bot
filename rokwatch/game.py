@@ -36,12 +36,20 @@ class Game:
         self.area = area
         self.settle = settle
         self.goto_cfg = goto_cfg or {}
+        self._good_tap = None
+        self.notch_wait = 0.25
+        self._zoom_now = None          # notches in from fully out, when known
         if area and hasattr(browser, "set_area"):
             browser.set_area(area)
 
     # ---------------------------------------------------------------- looking
     def frame(self):
-        return self.b.screenshot(self.area)
+        f = self.b.screenshot(self.area)
+        try:
+            self.b.last_frame = f         # for the panel's live view
+        except AttributeError:
+            pass
+        return f
 
     def look(self, frame=None) -> View:
         frame = self.frame() if frame is None else frame
@@ -74,9 +82,11 @@ class Game:
                 log.warning("goto: can't see the coordinates bar (menu open?)")
                 self.close_popups()
                 continue
-            # tap the magnifier (found by its shape, so never the star next to it)
-            self.b.click(*screen.search_button(v.frame, bar[3]))
-            self.wait(1.0)
+            # tap the magnifier (found by its shape, so never the star next to it).
+            # If the search bar doesn't open (e.g. Favorites opened instead), close
+            # that and try the next spot.
+            if not self._open_search(v, bar[3]):
+                continue
             if self._fill_coord_dialog(x, y):
                 self.wait(self.settle + 1.0)
                 v = self.look()
@@ -85,6 +95,117 @@ class Game:
                 log.warning("goto %s,%s: camera is at %s (try %d)", x, y, v.camera, attempt + 1)
             self.close_popups()
         return False
+
+    def _open_search(self, v, coords_text) -> bool:
+        H = v.frame.shape[0]
+        first = screen.search_button(v.frame, coords_text)
+        tx, ty, tw, th = coords_text.box
+        spots = [first, (int(tx + tw - 0.012 * H), first[1]), (int(tx + tw * 0.92), first[1])]
+        if self._good_tap is not None:            # the spot that worked last time goes first
+            spots.insert(0, (int(tx + tw + self._good_tap * H), first[1]))
+        tried = []
+        for sx, sy in spots:
+            if any(abs(sx - t) < 0.008 * H for t in tried):
+                continue
+            tried.append(sx)
+            self.b.click(int(sx), int(sy))
+            self.wait(0.9)
+            v2 = self.look()
+            if screen.find_search_bar(v2.frame, v2.texts) or self._find_fields(v2):
+                self._good_tap = (sx - tx - tw) / H
+                return True
+            log.warning("goto: tapped %d,%d but the coordinate search didn't open", sx, sy)
+            self.close_popups()
+        return False
+
+    # ------------------------------------------------- fixed zoom (wheel notches)
+    def _small(self, frame=None):
+        import cv2
+        f = self.frame() if frame is None else frame
+        g = cv2.cvtColor(f, cv2.COLOR_BGR2GRAY)
+        return cv2.resize(g, (160, max(8, int(160 * g.shape[0] / g.shape[1]))),
+                          interpolation=cv2.INTER_AREA).astype(np.float32)
+
+    def zoom_all_out(self, max_notches=60) -> int:
+        """Scroll out until the picture stops changing (fully zoomed out).
+        Returns how many notches it took."""
+        H, W = self.frame().shape[:2]
+        prev = self._small()
+        still = 0
+        for n in range(1, max_notches + 1):
+            self.b.wheel(W // 2, H // 2, 100)
+            time.sleep(self.notch_wait)
+            cur = self._small()
+            # share of the picture that changed (marching icons are only a few pixels)
+            if float(np.mean(np.abs(cur - prev) > 12)) < 0.004:
+                still += 1
+                if still >= 2:
+                    return n - 2
+            else:
+                still = 0
+            prev = cur
+        return max_notches
+
+    def set_zoom(self, notches_in: int, anchor=False):
+        """The same zoom every time: all the way out, then N notches in. When the zoom
+        is already known it just scrolls the difference (quicker)."""
+        H, W = self.frame().shape[:2]
+        if anchor or self._zoom_now is None:
+            self.zoom_all_out()
+            self._zoom_now = 0
+        diff = int(notches_in) - self._zoom_now
+        for _ in range(abs(diff)):
+            self.b.wheel(W // 2, H // 2, -100 if diff > 0 else 100)
+            time.sleep(self.notch_wait)
+        self._zoom_now = int(notches_in)
+        self.wait(0.6)
+
+    def measure_zoom(self) -> int:
+        """How many notches in from fully zoomed out the view is now (and put it back)."""
+        n = self.zoom_all_out()
+        H, W = self.frame().shape[:2]
+        for _ in range(n):
+            self.b.wheel(W // 2, H // 2, -100)
+            time.sleep(self.notch_wait)
+        self.wait(0.6)
+        return n
+
+    # ------------------------------------------------------------- panning
+    def camera_fast(self):
+        """Camera (x, y) from the coordinate readout only (much quicker than look())."""
+        f = self.frame()
+        c = screen.camera_coords(f)
+        return (c[1], c[2]) if c else None
+
+    def pan_to(self, x, y, axes, max_drags=4, close_enough=2.0) -> bool:
+        """Drag the map to (x, y) instead of typing coordinates: fast for nearby spots.
+        axes: tiles-per-pixel matrix learned at the current zoom. Falls back to goto."""
+        if not axes:
+            return self.goto(x, y)
+        A = np.array(axes, float)
+        try:
+            Ainv = np.linalg.inv(A)
+        except np.linalg.LinAlgError:
+            return self.goto(x, y)
+        H, W = self.frame().shape[:2]
+        cam = self.camera_fast()
+        for _ in range(max_drags):
+            if cam is None:
+                break
+            d = np.array([x - cam[0], y - cam[1]], float)
+            if np.hypot(*d) <= close_enough:
+                return True
+            p = -(Ainv @ d)                       # drag the map this many pixels
+            far = max(abs(p[0]) / (0.38 * W), abs(p[1]) / (0.38 * H))
+            if far > max_drags:                   # too far to drag: type it in
+                break
+            if far > 1:
+                p = p / far
+            cx, cy = W // 2 - int(p[0]) // 2, H // 2 - int(p[1]) // 2
+            self.b.drag(cx, cy, cx + int(p[0]), cy + int(p[1]))
+            time.sleep(0.25)
+            cam = self.camera_fast()
+        return self.goto(x, y)
 
     def _fill_coord_dialog(self, x, y) -> bool:
         """Type X and Y into the coordinate search box and confirm.

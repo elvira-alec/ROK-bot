@@ -41,6 +41,12 @@ In the panel, tick **Let my phone open this panel**. A QR code appears right awa
 
 Scan it with the phone camera. The link has a secret key in it, so nobody else can open the panel. When Windows asks whether RoKWatcher may use networks, tick **both** boxes (Private and Public) and click **Allow**. Tailscale often counts as a "Public" network.
 
+## Hunting: set the zoom once
+
+In **Hunt his armies**, zoom the game by hand to the widest view where army icons still show, and press **Remember this zoom for sweeping**. Then zoom in until names show over armies and press **Remember this zoom for reading names**. From then on the bot gets to exactly those zooms the same way every time: it zooms all the way out, then scrolls back in the same number of notches. It also learns the map directions at each zoom. While sweeping it drags the map to nearby spots, which is much quicker than typing coordinates, and only types coordinates for far-away jumps.
+
+The bar under the title shows what it's doing and how far along it is. **Live view** shows a small picture of what it sees, updated about every 2 seconds.
+
 ## Snapshots (to improve the bot)
 
 The bot keeps pictures of what it sees in the **`snapshots`** folder, each with a `.json` of what it read from it:

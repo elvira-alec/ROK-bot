@@ -453,7 +453,7 @@ def test_search_button_hits_magnifier_not_star(name, texts):
 def test_search_button_fallback_never_hits_star(name, texts, monkeypatch):
     f = load(name)
     cam = screen.camera_coords(f, texts[name])
-    monkeypatch.setattr(screen, "find_magnifier", lambda frame: None)
+    monkeypatch.setattr(screen, "find_magnifier", lambda frame, near=None: None)
     x, _ = screen.search_button(f, cam[3])
     assert x < _star_left(f, x) - 8
 

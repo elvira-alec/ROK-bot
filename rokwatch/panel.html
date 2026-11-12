@@ -57,6 +57,15 @@
   .snaps { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 12px; }
   .snaps a { display: block; color: var(--muted); font-size: 11px; text-decoration: none; overflow: hidden; }
   .snaps img { width: 100%; aspect-ratio: 16/8; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); display: block; }
+  #now { position: sticky; top: 52px; z-index: 2; background: var(--panel); border-bottom: 1px solid var(--line);
+         padding: 6px 22px 8px; font-size: 13px; }
+  #now[hidden] { display: none; }
+  #now .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+  .bar { height: 6px; background: var(--panel2); border-radius: 99px; overflow: hidden; margin-top: 5px; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--good); transition: width .4s; }
+  .bar.spin i { width: 30% !important; animation: slide 1.2s linear infinite; }
+  @keyframes slide { from { margin-left: -30%; } to { margin-left: 100%; } }
+  #live-img { width: 100%; border-radius: 8px; border: 1px solid var(--line); margin-top: 10px; display: block; background: #000; }
   .notes { margin: 10px 0 0; padding-left: 18px; color: var(--warn); font-size: 13px; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
   .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
@@ -89,7 +98,14 @@
   <span class="pill" id="phase">stopped</span>
   <span id="msg">Loading...</span>
 </header>
+<div id="now" hidden><div class="t" id="now-t"></div><div class="bar" id="now-bar"><i id="now-fill"></i></div></div>
 <main>
+  <section id="live-box">
+    <h2>👁 Live view</h2>
+    <label class="toggle"><input type="checkbox" id="live-on" checked> Show what the bot sees (small picture, about every 2 seconds)</label>
+    <img id="live-img" alt="" hidden>
+  </section>
+
   <section>
     <h2><span class="step">1</span> Alerts and game page</h2>
     <label for="game_url">Page where you play Rise of Kingdoms in the browser</label>
@@ -150,6 +166,15 @@
       <button class="go" id="b-hunt" onclick="post('hunt')">Start hunting</button>
       <button class="danger" onclick="post('stop')">Stop</button>
     </div>
+    <p class="hint"><b>Set the zoom once (recommended):</b> zoom the game by hand to where you can still see the army
+      icons but as much map as possible, then press the first button. Then zoom in until names show over armies
+      and press the second. The bot then uses exactly those zooms every time (it zooms all the way out and
+      scrolls back in the same number of notches) and learns the map directions at each.</p>
+    <div class="row">
+      <button onclick="post('remember_zoom', { kind: 'sweep' })">Remember this zoom for sweeping</button>
+      <button onclick="post('remember_zoom', { kind: 'close' })">Remember this zoom for reading names</button>
+    </div>
+    <p class="hint" id="zoom-set"></p>
     <p class="hint">Hunting sweeps the zoomed-out map around his city (wide view, armies show as grey
       diamonds), then zooms in on each new army just long enough to read the name over it, and
       follows the ones that are his. Before the first hunt, press <b>Learn map directions</b> once
@@ -238,7 +263,7 @@ function busy(btn, on) {
 }
 const LABELS = { open: 'Connecting to the game', look: 'Looking at the screen', goto: 'Jumping',
   axes: 'Learning map directions', recall: 'Recalling troops', start: 'Starting patrol',
-  hunt: 'Starting hunt', stop: 'Stopping', test_alert: 'Sending a test alert', snap: 'Saving a snapshot' };
+  hunt: 'Starting hunt', stop: 'Stopping', test_alert: 'Sending a test alert', snap: 'Saving a snapshot', remember_zoom: 'Measuring the zoom' };
 async function post(cmd, body = {}) {
   const btn = document.activeElement;
   busy(btn, true);
@@ -275,6 +300,8 @@ async function loadSettings() {
   for (const k of ['game_url', 'game_window', 'ntfy_topic', 'discord_webhook', 'player_name']) $(k).value = s[k] || '';
   $('game_window_zoom_key').checked = s.game_window_zoom_key === 'ctrl';
   $('hunt_radius').value = s.hunt_radius || 25;
+  $('zoom-set').textContent = (s.zoom_notches != null ? `Sweeping zoom: ${s.zoom_notches} notches in. ` : 'Sweeping zoom not set yet. ')
+    + (s.close_notches != null ? `Name-reading zoom: ${s.close_notches} notches in.` : 'Name-reading zoom not set yet.');
   $('close-axes').textContent = s.axes_learned ? '(Done: map directions are learned.)' : '(Not done yet.)';
   $('auto_recall').checked = !!s.auto_recall;
   $('panel_on_phone').checked = !!s.panel_on_phone;
@@ -298,7 +325,7 @@ async function save() {
 }
 
 function facts(el, pairs) { el.innerHTML = pairs.map(([k, v]) => `<span>${esc(k)}</span><span>${esc(v)}</span>`).join(''); }
-let lastLook = null, lastMsg = null, lastSnaps = null;
+let lastLook = null, lastMsg = null, lastSnaps = null, lastLive = null;
 async function refresh() {
   let st;
   try { st = await (await fetch('/api/state')).json(); } catch { $('msg').textContent = 'Panel not running'; return; }
@@ -316,6 +343,19 @@ async function refresh() {
     `<li class="${a.urgent ? 'urgent' : ''}"><b>${esc(a.title)}</b>${esc(a.message)}<br><small>${esc(a.time)}</small></li>`).join('')
     : '<li class="empty">No alerts yet</li>';
   $('report').textContent = st.report;
+  const busyNow = st.phase === 'patrolling' || st.phase === 'busy' || st.phase === 'opening';
+  $('now').hidden = !busyNow;
+  if (busyNow) {
+    $('now-t').textContent = st.doing || st.message;
+    const p = st.progress;
+    $('now-bar').classList.toggle('spin', !(p && p[1]));
+    if (p && p[1]) $('now-fill').style.width = Math.round(100 * p[0] / p[1]) + '%';
+  }
+  if (st.live && st.live !== lastLive && $('live-on').checked && !document.hidden) {
+    lastLive = st.live;
+    $('live-img').src = '/live.jpg?w=' + (innerWidth < 700 ? 480 : 720) + '&t=' + Date.now();
+    $('live-img').hidden = false;
+  }
   const sn = st.snaps || [], key = sn.map(x => x.name).join();
   if (key !== lastSnaps) {
     lastSnaps = key;
@@ -353,7 +393,7 @@ async function loadPhone() {
     const main = document.querySelector('main');
     const find = t => [...main.children].find(sec => sec.querySelector('h2')?.textContent.includes(t));
     ['Log', 'Places to watch', 'Alerts and game page', 'When is he active?', 'Hunt his armies',
-     'Check it works', 'Snapshots', 'Recent alerts', 'Run it'].forEach(t => { const sec = find(t); if (sec) main.prepend(sec); });
+     'Check it works', 'Snapshots', 'Recent alerts', 'Run it', 'Live view'].forEach(t => { const sec = find(t); if (sec) main.prepend(sec); });
     return;
   }
   phoneInfo = ph; drawRoute();

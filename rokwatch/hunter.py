@@ -345,6 +345,11 @@ class Hunter:
         self.method = h.get("method", "zoomed_out")
         self.axes_close = h.get("axes_close")
         self.axes_out = cfg.get("patrol", {}).get("axes")
+        zn, cn = h.get("zoom_notches"), h.get("close_notches")
+        self.zoom_notches = int(zn) if zn not in (None, "") else None
+        self.close_notches = int(cn) if cn not in (None, "") else None
+        self.progress = (0, 0, "")
+        self.on_progress = None
         self.axes = self.axes_out if self.method == "zoomed_out" else self.axes_close
         self.checks_per_sweep = int(h.get("checks_per_sweep", 3))
         self.my_sites = my_sites
@@ -433,12 +438,13 @@ class Hunter:
             return (0 if touches else 1, math.dist(a.tile, self.city))
         todo.sort(key=likely)
         todo = todo[:self.checks_per_sweep]
-        if not self.game.zoom_to_close():
+        if not self.zoom_close():
             log.warning("hunt: couldn't zoom in to read names")
             return 0
         done = 0
-        for a in todo:
+        for i, a in enumerate(todo):
             a.checks += 1
+            self._progress(i, len(todo), f"Zooming in on army #{a.id} to read the name")
             if not self.game.goto(int(round(a.tile[0])), int(round(a.tile[1]))):
                 continue
             self.game.wait()
@@ -461,8 +467,29 @@ class Hunter:
             done += 1
             log.info("hunt: army #%d at %.0f,%.0f is %s", a.id, a.tile[0], a.tile[1],
                      a.owner or "unclear")
-        self.game.zoom_to_patrol_level()
+        self.zoom_out()
         return done
+
+    # ---- zoom: a fixed number of wheel notches in from fully zoomed out, when set
+    def zoom_out(self, anchor=False):
+        if self.zoom_notches is not None:
+            self.game.set_zoom(self.zoom_notches, anchor=anchor)
+            return True
+        return self.game.zoom_to_patrol_level()
+
+    def zoom_close(self):
+        if self.close_notches is not None:
+            self.game.set_zoom(self.close_notches)
+            return True
+        return self.game.zoom_to_close()
+
+    def _progress(self, done, total, doing):
+        self.progress = (done, total, doing)
+        if self.on_progress:
+            try:
+                self.on_progress(done, total, doing)
+            except Exception:
+                pass
 
     def update_my_spots(self):
         """Where are my gathering troops right now? Tap each gathering troop's portrait
@@ -514,10 +541,15 @@ class Hunter:
         v0 = self.game.look()
         seen: list[ArmySeen] = []
         visited = 0
-        for pt in sweep_points(self.city, self.radius, self.axes, v0.frame.shape):
+        pts = list(sweep_points(self.city, self.radius, self.axes, v0.frame.shape))
+        for i, pt in enumerate(pts):
             if stop and stop():
                 break
-            if not self.game.goto(*pt):
+            self._progress(i, len(pts), f"Sweeping around his city: spot {i + 1} of {len(pts)} ({pt[0]},{pt[1]})")
+            # nearby spots: drag the map (quick); far ones: type the coordinates
+            moved = (self.game.pan_to(*pt, self.axes) if self.method == "zoomed_out"
+                     else self.game.goto(*pt))
+            if not moved:
                 log.warning("hunt: couldn't jump to %s", pt)
                 continue
             self.game.wait()
@@ -542,7 +574,8 @@ class Hunter:
             self._spots_at = now
             self.update_my_spots()
         if self.method == "zoomed_out":
-            self.game.zoom_to_patrol_level()
+            self._progress(0, 1, "Setting the zoom")
+            self.zoom_out(anchor=True)
         sightings, visited = self.sweep(stop)
         if self.method == "zoomed_out":
             self.tracker.match(sightings, now)

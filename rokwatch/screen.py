@@ -972,8 +972,9 @@ _MAGNIFIER_PNG = (
 _magnifier = None
 
 
-def find_magnifier(frame: np.ndarray):
-    """(x, y, score) of the magnifier's centre in the top bar, or None."""
+def find_magnifier(frame: np.ndarray, near: Text | None = None):
+    """(x, y, score) of the magnifier's centre in the top bar, or None.
+    near: the coordinates text; the search then stays in its row."""
     global _magnifier
     if _magnifier is None:
         import base64
@@ -982,15 +983,22 @@ def find_magnifier(frame: np.ndarray):
     H, W = frame.shape[:2]
     s = H / 1320
     best = None
-    for k in (1.0, 0.9, 1.1, 0.8, 1.2):          # windows a bit off the measured size
+    x0, x1, y0, y1 = 0, int(0.5 * W), 0, int(0.09 * H)
+    if near is not None and near.box[2] < 0.45 * W:
+        tx, ty, tw, th = near.box
+        cy = ty + th // 2
+        x0, x1 = max(0, tx + tw // 3), min(W, tx + tw + int(0.07 * H))
+        y0, y1 = max(0, cy - int(0.05 * H)), min(H, cy + int(0.05 * H))
+    g = frame[y0:y1, x0:x1].min(axis=2).astype(np.float32)
+    # UI size isn't always proportional to the window height: try a range of sizes
+    for k in (1.0, 0.9, 1.1, 0.8, 1.25, 0.7, 1.4, 0.6, 1.6):
         T = cv2.resize(_magnifier, None, fx=s * k, fy=s * k, interpolation=cv2.INTER_AREA)
-        g = frame[0:int(0.09 * H), 0:int(0.5 * W)].min(axis=2).astype(np.float32)
         if T.shape[0] < 8 or g.shape[0] <= T.shape[0] or g.shape[1] <= T.shape[1]:
             continue
         r = cv2.matchTemplate(g, T, cv2.TM_CCOEFF_NORMED)
         _, mv, _, ml = cv2.minMaxLoc(r)
         if best is None or mv > best[2]:
-            best = (ml[0] + T.shape[1] // 2, ml[1] + T.shape[0] // 2, float(mv))
+            best = (x0 + ml[0] + T.shape[1] // 2, y0 + ml[1] + T.shape[0] // 2, float(mv))
         if mv > 0.9:
             break
     return best if best and best[2] >= 0.7 else None
@@ -999,7 +1007,7 @@ def find_magnifier(frame: np.ndarray):
 def search_button(frame: np.ndarray, coords_text: Text | None = None) -> tuple:
     """Where to tap to open the coordinate search: the centre of the magnifier right
     after the '#4183 X:… Y:…' readout (NOT the orange star next to it)."""
-    m = find_magnifier(frame)
+    m = find_magnifier(frame, coords_text)
     if m:
         return m[0], m[1]
     # not found (unusual skin?): just after the readout, measured on real screens

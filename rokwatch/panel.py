@@ -114,11 +114,31 @@ class Panel:
             info["url"], info["qr"] = first["url"], first["qr"]
         return info
 
+    def live_id(self):
+        f = getattr(self.worker.gb, "last_frame", None) if self.worker.gb else None
+        return id(f) if f is not None else None
+
+    def live_jpeg(self, width=640, quality=55):
+        """Small, low-quality picture of what the bot last saw (for the live view)."""
+        import cv2
+        f = getattr(self.worker.gb, "last_frame", None) if self.worker.gb else None
+        if f is None:
+            return None
+        key = (id(f), width)
+        if getattr(self, "_live_key", None) != key:
+            h, w = f.shape[:2]
+            small = cv2.resize(f, (width, max(1, int(h * width / w))), interpolation=cv2.INTER_AREA)
+            self._live = cv2.imencode(".jpg", small, [cv2.IMWRITE_JPEG_QUALITY, quality])[1].tobytes()
+            self._live_key = key
+        return self._live
+
     def settings(self):
         cfg = config.load(self.cfg_path)
         out = {k: _get(cfg, v) for k, v in EDITABLE.items()}
         out["axes_learned"] = bool(_get(cfg, "patrol.axes"))
         out["close_axes_learned"] = bool(_get(cfg, "hunt.axes_close"))
+        out["zoom_notches"] = _get(cfg, "hunt.zoom_notches")
+        out["close_notches"] = _get(cfg, "hunt.close_notches")
         out["panel_on_phone"] = bool(_get(cfg, "panel_on_phone"))
         se = _get(cfg, "snapshots.every_minutes")
         out["snap_every"] = 10 if se is None else se
@@ -161,6 +181,8 @@ class Panel:
             "last_site": st.last_site, "alerts": st.alerts, "look": st.look,
             "armies": st.armies,
             "snaps": snapshots.listing(limit=24),
+            "progress": st.progress, "doing": st.doing,
+            "live": self.live_id(),
             "log": list(self.memlog.lines)[-80:],
             "report": activity_report(_get(cfg, "patrol.activity_log") or "activity.csv"),
         }
@@ -309,6 +331,15 @@ def make_handler(panel: Panel, port_holder=None):
                 self.end_headers()
                 self.wfile.write(data)
                 return
+            if path.startswith("/live.jpg"):
+                q = parse_qs(urlsplit(self.path).query)
+                try:
+                    width = max(240, min(1280, int(q.get("w", ["640"])[0])))
+                except ValueError:
+                    width = 640
+                data = panel.live_jpeg(width)
+                return self._send(200, data, "image/jpeg") if data else \
+                    self._send(404, {"error": "nothing seen yet"})
             if path.startswith("/view.png"):
                 p = Path(panel.worker.shot_path)
                 return self._send(200, p.read_bytes(), "image/png") if p.exists() else \
@@ -337,6 +368,9 @@ def make_handler(panel: Panel, port_holder=None):
                     "/api/stop": "stop", "/api/look": "look", "/api/axes": "axes",
                     "/api/recall": "recall", "/api/test_alert": "test_alert",
                     "/api/hunt": "hunt"}
+            if path == "/api/remember_zoom":
+                panel.worker.send("remember_zoom", kind="close" if data.get("kind") == "close" else "sweep")
+                return self._send(200, {"ok": True})
             if path in cmds:
                 panel.worker.send(cmds[path])
                 return self._send(200, {"ok": True})

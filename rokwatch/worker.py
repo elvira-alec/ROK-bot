@@ -43,6 +43,8 @@ class Status:
     look: dict | None = None                     # result of the last "what do you see"
     armies: list = field(default_factory=list)   # his armies, from the last hunt sweep
     snaps: int = 0                               # snapshots saved this session
+    progress: list | None = None                 # [done, total] of the current job
+    doing: str = ""                              # what it's doing right now (short)
 
 
 class Worker:
@@ -71,6 +73,10 @@ class Worker:
     # ------------------------------------------------------------ worker thread
     def _set(self, phase, message):
         self.status.phase, self.status.message = phase, message
+        if phase in ("ready", "stopped", "error"):
+            self.status.progress, self.status.doing = None, ""
+        elif phase == "busy":
+            self.status.doing = message
         log.info(message)
 
     def _cfg(self):
@@ -290,6 +296,25 @@ class Worker:
         what = "hunting (close zoom)" if zoom == "close" else "patrol (zoomed-out map)"
         self._set("ready", f"Learned the map directions for {what}.")
 
+    def _do_remember_zoom(self, kind="sweep"):
+        """Use the zoom you've set by hand from now on: count wheel notches from fully
+        zoomed out, and learn the map directions at this zoom."""
+        from .patrol import learn_axes
+        game = self._game()
+        what = "hunting sweeps" if kind == "sweep" else "reading names"
+        self._set("busy", f"Measuring this zoom for {what} (zooming out and back)...")
+        n = game.measure_zoom()
+        self.status.doing = "Learning map directions at this zoom (small drags)"
+        m = learn_axes(game)
+        upd = {("hunt.zoom_notches" if kind == "sweep" else "hunt.close_notches"): n}
+        if m is not None:
+            upd["patrol.axes" if kind == "sweep" else "hunt.axes_close"] = m
+        config.save_fields(upd, self.cfg_path)
+        self.status.doing = ""
+        self._set("ready", f"Remembered: {n} scroll notches in from fully zoomed out, for {what}."
+                  + ("" if m is not None else " (Couldn't learn the map directions: is the "
+                                              "coordinate readout visible?)"))
+
     def _do_recall(self):
         game = self._game()
         self._set("busy", "Recalling gathering troops...")
@@ -323,6 +348,11 @@ class Worker:
             self._set("ready", "Can't hunt yet: " + "; ".join(problems))
             return
         self.hunter = hunter
+
+        def prog(done, total, doing):
+            self.status.progress = [done, total]
+            self.status.doing = doing
+        hunter.on_progress = prog
         notifier = Notifier.from_config(cfg.get("notify", {}))
         self.stop_patrol.clear()
         self.status.round = 0
@@ -364,10 +394,12 @@ class Worker:
         self._set("patrolling", "Patrolling " + ", ".join(s.name for s in patrol.sites))
         self.status.round = 0
         while not self.stop_patrol.is_set() and (max_rounds is None or self.status.round < max_rounds):
-            for site in patrol.sites:
+            for i, site in enumerate(patrol.sites):
                 if self.stop_patrol.is_set():
                     break
                 self.status.last_site = site.name
+                self.status.progress = [i, len(patrol.sites)]
+                self.status.doing = f"Checking {site.name} ({site.x},{site.y})"
                 for a in patrol.visit(site):
                     self._alert(notifier, a)
                 self._maybe_sample()
