@@ -296,11 +296,15 @@ def test_sweeps_then_follows_his_armies_then_watches_his_city(game, tmp_path):
     print("track round took", round(took, 1), "s;", js(game, "sim.state.clicks.length") - clicks, "clicks")
 
 
-def test_red_eye_means_scouted():
+def test_red_eye_means_scouted_red_swords_mean_attacked():
     import cv2
     from rokwatch import screen
     real = Path(__file__).resolve().parent / "real_screens"
-    for n in ("scouted_my_city", "scouted_his_city", "attack_red_dashes_close"):
+    for n in ("scouted_my_city", "scouted_his_city", "scouted_close_red_marker"):
         assert screen.danger_icons(cv2.imread(str(real / f"{n}.png"))) == {"scouted"}, n
+    # crossed swords (also bottom right): you're being attacked
+    for n in ("icons/attacked_sword_1", "icons/attacked_sword_2", "attack_red_dashes_close",
+              "battle_close_red_lines"):
+        assert screen.danger_icons(cv2.imread(str(real / f"{n}.png"))) == {"attacked"}, n
     for n in ("own_city_gathering", "march_simple_view", "his_city_swords_simple", "recall_panel"):
         assert screen.danger_icons(cv2.imread(str(real / f"{n}.png"))) == set(), n

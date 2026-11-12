@@ -1029,25 +1029,33 @@ def search_button(frame: np.ndarray, coords_text: Text | None = None) -> tuple:
 # ---------------------------------------------------------------- danger icons
 
 def danger_icons(frame: np.ndarray) -> set:
-    """Big red round icons the game shows while something is coming at you:
-    an eye bottom right ('scouted') and a sword bottom left ('attacked').
-    (Red notification badges are much smaller.)"""
+    """Big red round icons the game shows bottom right while something is coming at
+    you: an eye ('scouted') or crossed swords ('attacked'). Told apart by the white
+    symbol: the eye is wider than tall with a red pupil, the swords cross in white in
+    the middle. (Red notification badges are much smaller.)"""
     H, W = frame.shape[:2]
-    y0 = int(0.6 * H)
-    hsv = cv2.cvtColor(frame[y0:], cv2.COLOR_BGR2HSV)
+    y0, x0 = int(0.55 * H), int(0.55 * W)
+    roi = frame[y0:, x0:]
+    hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
     red = (cv2.inRange(hsv, np.array((0, 170, 150), np.uint8), np.array((8, 255, 255), np.uint8))
            | cv2.inRange(hsv, np.array((172, 170, 150), np.uint8), np.array((180, 255, 255), np.uint8)))
-    n, _, st, c = cv2.connectedComponentsWithStats(red)
+    n, _, st, _ = cv2.connectedComponentsWithStats(red)
     found = set()
     for i in range(1, n):
         x, y, w, h, a = st[i]
         if not (0.055 * H <= w <= 0.13 * H and 0.8 < w / h < 1.25 and 0.5 <= a / (w * h) <= 0.8):
             continue
-        cx = c[i][0]
-        if cx > 0.78 * W:
-            found.add("scouted")
-        elif cx < 0.25 * W:
-            found.add("attacked")
+        g = hsv[y + int(.15 * h):y + int(.85 * h), x + int(.15 * w):x + int(.85 * w)]
+        white = cv2.inRange(g, np.array((0, 0, 200), np.uint8), np.array((180, 90, 255), np.uint8))
+        ys, xs = np.where(white > 0)
+        if len(xs) < 0.03 * white.size:
+            continue
+        aspect = (xs.max() - xs.min() + 1) / (ys.max() - ys.min() + 1)
+        gh, gw = white.shape
+        mid = white[int(.4 * gh):int(.6 * gh), int(.4 * gw):int(.6 * gw)]
+        centre_white = float(np.mean(mid > 0)) if mid.size else 0.0
+        eye = aspect > 1.17 or centre_white < 0.15
+        found.add("scouted" if eye else "attacked")
     return found
 
 
