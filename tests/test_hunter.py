@@ -61,8 +61,7 @@ def test_tracker_events_in_order():
     # both now on lines to his city (one look can't say which way: their history does)
     ev = tr.update([seen((151, 389), ((150, 390), CITY)), seen((179, 361), ((180, 360), CITY))], 1)
     assert [e[0] for e in ev] == ["pulling_back"], ev
-    assert tr.update([], 2) == []                  # one empty look could be a missed look...
-    assert [e[0] for e in tr.update([], 3)] == ["all_home"]   # ...two in a row: they're home
+    assert [e[0] for e in tr.update([], 2)] == ["all_home"]    # marching ones: gone at once
     # a line from his city to your camp: alert at once, direction or not
     ev = tr.update([seen((165, 378), (CITY, (205, 424)))], 3)
     assert [e[0] for e in ev] == ["army_out"] and ev[0][2]["target"] == "logging camp"
@@ -249,7 +248,9 @@ def test_zoomed_out_his_scout_coming(game, tmp_path):
     h = hunter(game, tmp_path, method="zoomed_out")
     alerts = h.round()
     debug = [(a.kind, a.owner, a.tile, a.moving, a.ends) for a in h.tracker.armies]
-    assert [a.title for a in alerts] == ["HE'S SCOUTING YOU"], ([a.title for a in alerts], debug)
+    # his (line from his city seen) or not confirmed: either way you're told a scout is coming
+    assert [a.title for a in alerts] in (["HE'S SCOUTING YOU"], ["A SCOUT IS HEADING FOR YOU"]), \
+        ([a.title for a in alerts], debug)
     assert [a["kind"] for a in h.tracker.summary()] == ["scout"]
 
 

@@ -211,8 +211,10 @@ class Tracker:
             for a in unmatched:
                 if looked_at(a):
                     a.missed += 1
-                    # gone only after its spot was in view twice without it (one look can miss)
-                    (gone if a.missed >= 2 else current).append(a)
+                    # something that stays put (a farm, a parked army) is gone only after its
+                    # spot was in view twice without it (one look can miss); a marching one
+                    # simply isn't there any more
+                    (gone if a.missed >= 2 or a.moving else current).append(a)
                 elif now - a.last_seen < 900:
                     current.append(a)
             self.gone = gone
@@ -220,7 +222,7 @@ class Tracker:
             gone = []
             for a in unmatched:
                 a.missed += 1
-                (gone if a.missed >= 2 else current).append(a)
+                (gone if a.missed >= 2 or a.moving else current).append(a)
             self.gone = gone
         self.armies = current
 
@@ -324,7 +326,11 @@ class Tracker:
         if a.direction == "home" or not hit or ("scout", hit) in a.alerted:
             return []
         a.alerted.add(("scout", hit))
-        return [("scout_at", f"His scout is on its way to {hit}. An attack often follows.",
+        his = a.owner == "him" or (a.owner is None and a.ends and any(self.at_home(e) for e in a.ends))
+        if his:
+            return [("scout_at", f"His scout is on its way to {hit}. An attack often follows.",
+                     {"target": hit, "id": a.id})]
+        return [("scout_any", f"A scout (not confirmed his) is on its way to {hit}.",
                  {"target": hit, "id": a.id})]
 
     def _route_points_at(self, ends):
@@ -461,7 +467,10 @@ class Hunter:
         self.warning = AttackAlertDetector()
         from .activity import ActivityLog
         self.activity = ActivityLog()
-        self.full_sweep_every = float(h.get("full_sweep_minutes", 4)) * 60
+        # after the first sweep it only follows his armies (+ his city); a new sweep only
+        # when one of them goes missing away from home, or as a safety check now and then
+        self.full_sweep_every = float(h.get("full_sweep_minutes", 30)) * 60
+        self._need_sweep = False
         self.focus: dict = {}          # army id -> {"follow", "alert_moves", "alert_home"} (panel)
         self._last_full = 0.0
         self._rounds = 0
@@ -537,7 +546,8 @@ class Hunter:
         """Zoom in on armies we don't know the owner of and find out: a marching army
         shows its owner's name over it; a gathering one only in the resource point's
         box (tap it). His first (near his city or on a route to / from it)."""
-        todo = [a for a in armies if a.owner is None and a.checks < 3]
+        # scouts are gone before we could zoom in on them: not worth it
+        todo = [a for a in armies if a.owner is None and a.checks < 3 and a.kind != "scout"]
         if not todo:
             return 0
 
@@ -753,10 +763,10 @@ class Hunter:
         """sweep: search the whole area around his city (first time and every few minutes);
         track: follow the armies of his we know about (+ a look at his city);
         base: none of his armies out: keep an eye on his city."""
-        if self.method != "zoomed_out" or not self._last_full or \
+        if self.method != "zoomed_out" or not self._last_full or self._need_sweep or \
                 now - self._last_full >= self.full_sweep_every:
             return "sweep"
-        if any(a.owner != "other" for a in self.tracker.armies):
+        if any(a.owner != "other" and a.kind != "scout" for a in self.tracker.armies):
             return "track"
         return "base"
 
@@ -764,13 +774,15 @@ class Hunter:
         """Where to look: each tracked army's likely spot now, plus his city; spots close
         together are looked at in one go. Ordered so the camera moves the least."""
         vw, vh = view_size_tiles(self.axes, frame_shape)
-        followed = [a for a in self.tracker.armies if (self.focus.get(a.id) or {}).get("follow")]
+        followed = [a for a in self.tracker.armies if (self.focus.get(a.id) or {}).get("follow")
+                    and a.kind != "scout"]
         if followed and self._rounds % 3:
             # following some closely: just those (the rest every third round)
             pts = [predict(a, now) for a in followed]
         else:
-            pts = [predict(a, now) for a in self.tracker.armies if a.owner != "other"]
-            pts.append(tuple(self.city))
+            # his armies (scouts move too fast to follow), and always his city
+            pts = [tuple(self.city)] + [predict(a, now) for a in self.tracker.armies
+                                        if a.owner != "other" and a.kind != "scout"]
         merged = []
         for p in pts:
             if all(abs(p[0] - q[0]) > 0.3 * vw or abs(p[1] - q[1]) > 0.3 * vh for q in merged):
@@ -878,9 +890,19 @@ class Hunter:
             log.debug("toast check failed", exc_info=True)
         if self.method == "zoomed_out":
             self.tracker.match(sightings, now, covered)
+            lost = [a for a in getattr(self.tracker, "gone", [])
+                    if a.owner == "him" and a.kind == "army" and a.moving and a.direction != "home"
+                    and not self.tracker.at_home(a.tile)]
+            if self.mode == "sweep":
+                self._need_sweep = False
+            elif lost:
+                log.info("hunt: lost track of %d of his armies; searching the area again", len(lost))
+                self._need_sweep = True
             if self.mode == "sweep" or any(a.owner is None for a in self.tracker.armies):
                 self.identify(self.tracker.armies)
-            events = self.tracker.events(self.is_his)
+            # his armies; plus any scout not known to be someone else's (heading for you
+            # is worth knowing, and scouts are too quick to zoom in on)
+            events = self.tracker.events(lambda a: self.is_his(a) or (a.kind == "scout" and a.owner is None))
         else:
             events = self.tracker.update(sightings, now)
         self._log()
@@ -924,11 +946,12 @@ class Hunter:
                      "rallied": "A RALLY IS COMING AT YOU"}[kind]
             alerts.append(Alert(f"toast-{kind}", title, f"The game says: {text}", urgent=True))
         for kind, msg, info in events:
-            urgent = kind in ("army_out", "scout_at", "hostile", "army_close") and bool(info.get("target"))
+            urgent = kind in ("army_out", "scout_at", "scout_any", "hostile", "army_close") and bool(info.get("target"))
             title = {"army_out": "HE SENT AN ARMY OUT" + (" AT YOU" if urgent else ""),
                      "army_close": "HIS ARMY IS MOVING CLOSE TO YOU",
                      "hostile": "HIS ARMY IS MARCHING AGAINST YOU",
                      "scout_at": "HE'S SCOUTING YOU",
+                     "scout_any": "A SCOUT IS HEADING FOR YOU",
                      "pulling_back": "He's pulling his troops back",
                      "all_home": "All his troops are home",
                      "farm_left": "He pulled a farmer back"}[kind]

@@ -241,3 +241,33 @@ def test_farm_out_of_view_is_not_gone(tmp_path):
     for k in range(3):
         t.match([], 60 * (k + 1), covered=[vis])
     assert t.armies and t.events() == []
+
+
+def test_after_the_first_sweep_it_only_follows_his_armies(tmp_path):
+    import time as _t
+    from rokwatch.hunter import ArmySeen
+    h = Hunter(Game(Clicky(), settle=0), {"hunt": {"player_name": NAME, "city": [162, 374]},
+                                          "patrol": {"axes": [[0.012, 0.004], [-0.004, 0.012]]}},
+               [], str(tmp_path / "h.csv"))
+    h.game.camera_fast = lambda: (162, 374)
+    now = _t.time()
+    assert h.plan(now) == "sweep"                          # first: search the area
+    h._last_full = now
+    t = h.tracker
+    t.match([ArmySeen((200.0, 410.0), False, None, now, kind="farm"),
+             ArmySeen((150.0, 360.0), True, ((140.0, 350.0), (160.0, 372.0)), now),
+             ArmySeen((180.0, 380.0), True, ((175.0, 375.0), (190.0, 390.0)), now, kind="scout")], now)
+    for a in t.armies:
+        a.owner = "him"
+    assert h.plan(now + 600) == "track"                    # no new sweep after 10 minutes
+    pts = h.track_points(now + 600, (1042, 1852))
+    assert (162, 374) in pts and len(pts) == 3             # his city + farm + army, not the scout
+    assert all(abs(p[0] - 180) > 3 for p in pts)
+    h._need_sweep = True                                   # lost one of them away from home
+    assert h.plan(now + 600) == "sweep"
+    h._need_sweep = False
+    assert h.plan(now + 31 * 60) == "sweep"                # safety check every 30 minutes
+    # scouts aren't zoomed in on
+    called = []
+    h.zoom_close = lambda: called.append(1) or True
+    assert h.identify([a for a in t.armies if a.kind == "scout"]) == 0 and called == []
