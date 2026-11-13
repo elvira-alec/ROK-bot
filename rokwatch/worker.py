@@ -136,6 +136,16 @@ class Worker:
             self._last_sample = time.time()
             self._auto_snap("sample")
 
+    def _do_record_army(self):
+        from .armyrec import ArmyRecorder
+        game = self._game()
+        name = (self._cfg().get("hunt") or {}).get("player_name", "")
+        self._set("busy", "Recording the army...")
+        rec = ArmyRecorder(game, name, progress=lambda m: setattr(self.status, "doing", m))
+        folder, n = rec.run()
+        self._set("ready", f"Army recording done: {n} pictures in {folder}. Download it under "
+                           "Snapshots ('Download the army recording') and send it in.")
+
     def _do_snap(self, note=""):
         from . import snapshots
         game = self._game()

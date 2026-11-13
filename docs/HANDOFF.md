@@ -282,6 +282,10 @@ frames, and find the first step that went wrong. Turn that frame into a regressi
   tapping the magnifier, and again to find the X/Y boxes (2.6 s); the name check at close zoom
   read the whole screen (1.5–2 s); pans used two drags. Now: strip reader ~0.13 s, the bar row
   only (~0.2 s), the middle of the screen only (~0.35 s), one drag covers 60% of the view.
+- (v1.13) The user reported armies not being recognised, maybe when zooming in makes the
+  diamond turn into 3D troops. Their recording had no marching army in it (only his 4
+  farms, tracked fine, rounds 4-5 s). Added the army recorder (`armyrec.py`) to get that
+  evidence: full-size frames through every zoom step plus detections per frame.
 - (v1.12) Fixed waits trimmed: closing a box waits only until it's gone (was a flat 0.35 s),
   click-to-type 0.06 s, name re-read 0.2 s. The debug recording now logs how long every
   control took (`action.ms`) and every screen capture (`frame.capture_ms`): use these to find

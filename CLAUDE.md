@@ -112,6 +112,7 @@ boxes, the user's snapshots including the Spanish photos).
 | `rokwatch/worker.py` | One worker thread runs the commands from the panel (open, look, goto, remember_zoom sweep/close, hunt, start (simple patrol), stop, snap…). |
 | `rokwatch/panel.py`, `panel.html` | Web panel: 1 Connect, 2 Who to watch (saved targets), 3 Set up the zoom (two buttons), 4 Watch; His armies (list + map, per-army chips); Activity; Live view; More (phone, updates, snapshots, places, tools, log, Quit). Closes the program when the page is closed (option). |
 | `rokwatch/updater.py` | Update check via the `github.com/elvira-alec/ROK-bot/releases/latest` redirect (no API limit); API and PowerShell as fallbacks. |
+| `rokwatch/armyrec.py` | "Record a marching army" (More > Snapshots): films the army at full size through every zoom step in and out (twice), with what the detectors saw per frame (`events.jsonl`), a video and the close-up text. `army_rec/<time>/`, downloaded via `/api/army_rec.zip`. Use it to tune army recognition at the close zoom. |
 | `rokwatch/snapshots.py` | "Save snapshot" plus automatic samples and alert pictures, each with a `.json` of what was read. **This is how the user sends evidence.** |
 
 ## 4. Problems already hit (don't reintroduce them)

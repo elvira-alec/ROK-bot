@@ -422,6 +422,19 @@ def make_handler(panel: Panel, port_holder=None):
                     return self._send(404, {"error": "no such snapshot"})
                 ctype = {".png": "image/png", ".jpg": "image/jpeg"}.get(p.suffix, "application/json")
                 return self._send(200, p.read_bytes(), ctype)
+            if path == "/api/army_rec.zip":
+                from .armyrec import newest_zip
+                data = newest_zip()
+                if not data:
+                    return self._send(404, {"error": "no army recording yet"})
+                self.send_response(200)
+                self.send_header("Content-Type", "application/zip")
+                self.send_header("Content-Disposition",
+                                 f'attachment; filename="rok-army-{time.strftime("%Y%m%d-%H%M")}.zip"')
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
             if path == "/api/trace.zip":
                 from .trace import TRACE
                 data = TRACE.zip_bytes()
@@ -523,6 +536,9 @@ def make_handler(panel: Panel, port_holder=None):
                 msg = panel.install_update()
                 return self._send(200, {"ok": msg == "Updating", "message": msg,
                                         "version": panel.updating})
+            if path == "/api/record_army":
+                panel.worker.send("record_army")
+                return self._send(200, {"ok": True})
             if path == "/api/auto_zoom":
                 panel.worker.send("auto_zoom")
                 return self._send(200, {"ok": True})

@@ -326,6 +326,13 @@
     </div>
     <p class="hint">Debug recording keeps every picture the bot looks at and every click, drag, scroll and key it
       sends, with timings and what it decided. Start it, let the problem happen, stop it, and send the .zip.</p>
+    <div class="row">
+      <button onclick="recordArmy()"><svg class="i"><use href="#i-camera"/></svg> Record a marching army</button>
+      <a href="/api/army_rec.zip" style="color:var(--accent)">Download the army recording (.zip)</a>
+    </div>
+    <p class="hint">Put the game at your searching zoom with a marching army on screen (not watching), then press.
+      For about a minute it films the army, zooms in on it step by step, films it close up and zooms back out,
+      twice, at full quality. Don't touch the game meanwhile. Then download the .zip and send it.</p>
     <div class="snaps" id="snaps"></div>
   </section>
   <section>
@@ -419,6 +426,10 @@ async function updateNow() {
   const r = await (await fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).json();
   if (r.ok) showUpdating(r.version);
   else toast(r.message || 'Update failed', 'bad');
+}
+async function recordArmy() {
+  await fetch('/api/record_army', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  toast('Recording the army: about a minute, hands off the game', 'good');
 }
 let traceOn = false;
 async function toggleTrace() {
