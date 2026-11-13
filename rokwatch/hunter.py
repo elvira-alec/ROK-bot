@@ -78,15 +78,41 @@ class ArmySeen:
     checks: int = 0
 
 
-def predict(a, now):
-    """Where a moving army probably is now (from its last two sightings)."""
-    if not a.moving or len(a.history) < 2:
-        return a.tile
+DEFAULT_SPEED = 4.0       # tiles a minute: a guess for a march seen only once
+
+
+def _speed(a):
+    """Tiles a minute, from its last two sightings (None if it can't tell yet)."""
+    if len(a.history) < 2:
+        return None
     (t0, p0), (t1, p1) = a.history[-2], a.history[-1]
-    if t1 - t0 <= 0:
-        return p1
-    k = min(now - t1, 120) / (t1 - t0)
-    return (p1[0] + (p1[0] - p0[0]) * k, p1[1] + (p1[1] - p0[1]) * k)
+    if t1 - t0 < 3:
+        return None
+    return math.dist(p0, p1) / ((t1 - t0) / 60)
+
+
+def predict(a, now):
+    """Where a marching army probably is now: along its march line, toward where the
+    line goes, at the speed it was seen going - never past the end of the line."""
+    if not a.moving:
+        return a.tile
+    t1, p1 = (a.history[-1] if a.history else (a.last_seen, a.tile))
+    dt = min(max(0.0, now - t1), 300) / 60
+    target = a.dest
+    if target is None and a.ends:                 # no direction yet: the far end of its line
+        target = max(a.ends, key=lambda e: math.dist(e, p1))
+    if target is not None:
+        d = math.dist(p1, target)
+        if d < 0.5:
+            return target
+        go = min(d, (_speed(a) or DEFAULT_SPEED) * dt)
+        return (p1[0] + (target[0] - p1[0]) * go / d, p1[1] + (target[1] - p1[1]) * go / d)
+    if len(a.history) >= 2:                       # no line: keep going the way it went
+        (t0, p0), _ = a.history[-2], a.history[-1]
+        if t1 - t0 > 0:
+            k = min(now - t1, 120) / (t1 - t0)
+            return (p1[0] + (p1[0] - p0[0]) * k, p1[1] + (p1[1] - p0[1]) * k)
+    return p1
 
 
 @dataclass
@@ -177,10 +203,16 @@ class Tracker:
         current = []
         for s in sorted(sightings, key=lambda s: s.tile):
             same = [a for a in unmatched if a.kind == getattr(s, "kind", "army")]
-            best = min(same, key=lambda a: math.dist(a.tile, s.tile), default=None)
-            # farms don't move and sit close together: only the same spot is the same farm
-            limit = 3.0 if getattr(s, "kind", "army") == "farm" else self.match_dist
-            if best and math.dist(best.tile, s.tile) <= limit:
+            # compare with where each one should be by now (marching ones move on)
+            best = min(same, key=lambda a: math.dist(predict(a, now), s.tile), default=None)
+            if getattr(s, "kind", "army") == "farm":
+                limit = 3.0          # farms don't move and sit close together: same spot only
+            elif best is not None and best.moving:
+                # the longer since it was seen, the further it may be off the prediction
+                limit = self.match_dist + 0.5 * (_speed(best) or DEFAULT_SPEED) * (now - best.last_seen) / 60
+            else:
+                limit = self.match_dist
+            if best and math.dist(predict(best, now), s.tile) <= limit:
                 unmatched.remove(best)
                 a, prev_tile, prev_moving = best, best.tile, best.moving
             else:
@@ -214,7 +246,9 @@ class Tracker:
                     # something that stays put (a farm, a parked army) is gone only after its
                     # spot was in view twice without it (one look can miss); a marching one
                     # simply isn't there any more
-                    (gone if a.missed >= 2 or a.moving else current).append(a)
+                    # stays put: gone after two looks without it; marching: also searched
+                    # once more further along its line before giving up on it
+                    (gone if a.missed >= 2 else current).append(a)
                 elif now - a.last_seen < 900:
                     current.append(a)
             self.gone = gone
@@ -222,7 +256,7 @@ class Tracker:
             gone = []
             for a in unmatched:
                 a.missed += 1
-                (gone if a.missed >= 2 or a.moving else current).append(a)
+                (gone if a.missed >= 2 else current).append(a)
             self.gone = gone
         self.armies = current
 
@@ -820,8 +854,16 @@ class Hunter:
             pts = [predict(a, now) for a in followed]
         else:
             # his armies (scouts move too fast to follow), and always his city
-            pts = [tuple(self.city)] + [predict(a, now) for a in self.tracker.armies
-                                        if a.owner != "other" and a.kind != "scout"]
+            pts = [tuple(self.city)]
+            for a in self.tracker.armies:
+                if a.owner == "other" or a.kind == "scout":
+                    continue
+                pts.append(predict(a, now))
+                if a.moving and a.missed:
+                    # not where we expected last time: also look further along its line
+                    ahead = predict(a, now + 60)
+                    end = a.dest or (max(a.ends, key=lambda e: math.dist(e, a.tile)) if a.ends else None)
+                    pts += [ahead] + ([end] if end else [])
         merged = []
         for p in pts:
             if all(abs(p[0] - q[0]) > 0.3 * vw or abs(p[1] - q[1]) > 0.3 * vh for q in merged):

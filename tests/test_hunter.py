@@ -61,7 +61,8 @@ def test_tracker_events_in_order():
     # both now on lines to his city (one look can't say which way: their history does)
     ev = tr.update([seen((151, 389), ((150, 390), CITY)), seen((179, 361), ((180, 360), CITY))], 1)
     assert [e[0] for e in ev] == ["pulling_back"], ev
-    assert [e[0] for e in tr.update([], 2)] == ["all_home"]    # marching ones: gone at once
+    assert tr.update([], 2) == []                  # not seen once: searched for again first...
+    assert [e[0] for e in tr.update([], 3)] == ["all_home"]   # ...still not there: home
     # a line from his city to your camp: alert at once, direction or not
     ev = tr.update([seen((165, 378), (CITY, (205, 424)))], 3)
     assert [e[0] for e in ev] == ["army_out"] and ev[0][2]["target"] == "logging camp"

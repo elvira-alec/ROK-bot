@@ -3,7 +3,10 @@ point's box (tap it at the close zoom). Real screenshots in real_screens/gather.
 
 from pathlib import Path
 
+import math
+
 import cv2
+import pytest
 
 from rokwatch import screen
 from rokwatch.game import Game
@@ -271,3 +274,33 @@ def test_after_the_first_sweep_it_only_follows_his_armies(tmp_path):
     called = []
     h.zoom_close = lambda: called.append(1) or True
     assert h.identify([a for a in t.armies if a.kind == "scout"]) == 0 and called == []
+
+
+def test_marching_army_followed_along_its_line(tmp_path):
+    from rokwatch.hunter import ArmySeen, Tracker, predict
+    t = Tracker((162, 374), [("my city", (210, 422))])
+    line = ((165.0, 377.0), (205.0, 417.0))                    # from his city toward you
+    t.match([ArmySeen((170.0, 382.0), True, line, 0)], 0)
+    t.match([ArmySeen((173.0, 385.0), True, ((173.0, 385.0), (205.0, 417.0)), 30)], 30)
+    a = t.armies[0]
+    # 30 s later it should be ~3 tiles further along the line (6 tiles/min), toward its end
+    px, py = predict(a, 60)
+    assert 175 < px < 177.5 and 387 < py < 389.5, (px, py)
+    far = predict(a, 10_000)                                        # never past the end of its line
+    assert math.dist((173, 385), far) <= math.dist((173, 385), (205, 417)) + 0.5
+    # seen again 2 minutes later, 12 tiles on: still the same army (wider tolerance)
+    t.match([ArmySeen((186.0, 398.0), True, ((186.0, 398.0), (205.0, 417.0)), 150)], 150)
+    assert len(t.armies) == 1 and t.armies[0].id == a.id
+    # not where it should be: kept, and the next look also searches further along the line
+    h = Hunter(Game(Clicky(), settle=0), {"hunt": {"player_name": NAME, "city": [162, 374]},
+                                          "patrol": {"axes": [[0.012, 0.004], [-0.004, 0.012]]}},
+               [], str(tmp_path / "h.csv"))
+    h.game.camera_fast = lambda: (186, 398)
+    h.tracker = t
+    a.owner = "him"
+    t.match([], 200, covered=[lambda p: True])
+    assert t.armies and t.armies[0].missed == 1
+    pts = h.track_points(200, (1042, 1852))
+    assert len(pts) >= 3 and any(math.dist(p, (205, 417)) < 4 for p in pts), pts
+    t.match([], 260, covered=[lambda p: True])
+    assert t.armies == [] and [g.id for g in t.gone] == [a.id]   # given up: lost (a new sweep)
