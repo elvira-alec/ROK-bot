@@ -47,21 +47,37 @@ def sweep_points(centre, radius, axes, frame_shape, overlap=0.8):
     drawn at an angle, so a square grid of tiles would leave gaps)."""
     h, w = frame_shape[:2]
     A = np.array(axes, float)
-    a = A @ np.array([w * overlap, 0.0])      # one screen to the right, in tiles
-    b = A @ np.array([0.0, h * overlap])      # one screen down, in tiles
+    # the part of the screen that shows map: not under the side panels, the troop list,
+    # the top bar or the chat (the same area `_on_screen` counts as looked at)
+    vis_w, vis_h = (0.88 - 0.14) * w, (0.84 - 0.12) * h
+    a = A @ np.array([vis_w * overlap, 0.0])      # one view to the right, in tiles
+    b = A @ np.array([0.0, vis_h * overlap])      # one view down, in tiles
     step = min(np.linalg.norm(a), np.linalg.norm(b))
     n = int(math.ceil(radius / max(step, 1e-6))) + 1
     reach = radius + max(np.linalg.norm(a), np.linalg.norm(b)) / 2
     c = np.array(centre, float)
-    pts = []
+    cells = []
     for i in range(-n, n + 1):
         for j in range(-n, n + 1):
             p = c + i * a + j * b
             if np.linalg.norm(p - c) <= reach:
-                pts.append((int(round(p[0])), int(round(p[1]))))
-    pts = list(dict.fromkeys(pts))
-    pts.sort(key=lambda q: (q[0] - centre[0]) ** 2 + (q[1] - centre[1]) ** 2)
-    return pts
+                # a spiral: ring by ring outward, going round each ring in order, so every
+                # stop is next to the previous one (sorting by distance alone made it hop
+                # from one side of his city to the other)
+                ring = max(abs(i), abs(j))
+                ang = (math.atan2(j, i) + 2 * math.pi) % (2 * math.pi)
+                cells.append((ring, ang, (int(round(p[0])), int(round(p[1])))))
+    # within each ring, always the nearest stop not done yet (the circle leaves gaps in
+    # the outer ring, so going round by angle alone could still jump)
+    out, last = [], tuple(centre)
+    for ring in sorted({r for r, _, _ in cells}):
+        todo = list(dict.fromkeys(q for r, _, q in sorted(cells) if r == ring and q not in out))
+        while todo:
+            nxt = min(todo, key=lambda q: math.dist(q, last))
+            todo.remove(nxt)
+            out.append(nxt)
+            last = nxt
+    return out
 
 
 # ---------------------------------------------------------------- what we know about him
@@ -366,19 +382,32 @@ class Tracker:
             out.append(("army_out", f"He sent an army out{dest}.", {"target": None, "id": a.id}))
         return out
 
+    PAST_EDGE = 15.0          # tiles: how far a march line may run on past where the screen cut it
+
     def _close_to(self, a: Army):
-        """(spot name, distance) when one end of its march is within `approach` tiles of
-        one of your spots (and it isn't walking away home)."""
+        """(spot name, distance) when its march passes within `approach` tiles of one of
+        your spots (and it isn't walking away home). Uses the closest point of its path,
+        followed a little past the end we saw: a line running off the screen is cut
+        there, which isn't where the army is going."""
         if not a.ends or a.direction == "home":
             return None
+        e1, e2 = a.ends
+        if self.at_home(e1) or self.at_home(e2):
+            start, far = (e1, e2) if self.at_home(e1) else (e2, e1)
+        else:                       # no end at his city: towards the end away from him
+            start, far = sorted((e1, e2), key=lambda e: math.dist(e, self.city))
+        length = math.dist(start, far)
+        if length < 1:
+            return None
+        ux, uy = (far[0] - start[0]) / length, (far[1] - start[1]) / length
+        reach = length + self.PAST_EDGE
         best = None
-        for e in a.ends:
-            if self.at_home(e):
-                continue
-            for name, pos in self.my_sites:
-                d = math.dist(e, pos)
-                if d <= self.approach and (best is None or d < best[1]):
-                    best = (name, d)
+        for name, pos in self.my_sites:
+            t = (pos[0] - start[0]) * ux + (pos[1] - start[1]) * uy
+            t = max(0.0, min(reach, t))
+            d = math.dist(pos, (start[0] + ux * t, start[1] + uy * t))
+            if d <= self.approach and (best is None or d < best[1]):
+                best = (name, d)
         return best
 
     def _scout_events(self, a: Army):

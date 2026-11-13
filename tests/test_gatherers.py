@@ -453,3 +453,31 @@ def test_after_checking_it_looks_again_and_checks_what_else_is_there(tmp_path):
     extra = h._check_new_here([first])
     assert checked == [(176.0, 372.0), (175.0, 360.0), (178.0, 356.0)]     # the two above too
     assert len(extra) == 2
+
+
+def test_search_goes_round_in_a_spiral_not_back_and_forth():
+    """Stops around his city: his city first, then ring by ring, each next to the last
+    (sorting by distance alone hopped across his city: 124 screens of travel vs 39)."""
+    from rokwatch.hunter import sweep_points
+    axes = [[0.012, 0.004], [-0.004, 0.012]]
+    pts = sweep_points((162, 374), 40, axes, (1042, 1852))
+    step = 0.8 * 1852 * math.hypot(*axes[0])
+    hops = [math.dist(pts[k], pts[k + 1]) / step for k in range(len(pts) - 1)]
+    assert pts[0] == (162, 374)
+    assert sum(hops) < 1.1 * len(pts)                       # ~one screen per stop
+    assert sum(h <= 1.05 for h in hops) >= 0.9 * len(hops)  # nearly all moves are next door
+    # covers the same area: every stop is within reach of his city
+    assert all(math.dist(p, (162, 374)) <= 40 + step for p in pts)
+
+
+def test_moving_close_uses_the_path_not_where_the_screen_cut_the_line():
+    from rokwatch.hunter import Army, Tracker
+    t = Tracker((162, 374), [("your troop", (200, 410))])
+    a = Army(1, (170.0, 393.0), 0, 0, moving=True)
+    a.ends = ((165.0, 385.0), (178.0, 407.0))          # line cut by the screen edge here
+    hit = t._close_to(a)
+    assert hit and hit[0] == "your troop" and hit[1] < 20, hit   # its path passes ~17.5 away
+    a.ends = ((165.0, 385.0), (150.0, 420.0))          # heading the other way: not close
+    assert t._close_to(a) is None
+    a.ends, a.direction = ((165.0, 385.0), (178.0, 407.0)), "home"
+    assert t._close_to(a) is None                      # walking home: not a threat
