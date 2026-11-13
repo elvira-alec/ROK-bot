@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -164,14 +165,35 @@ try {
 '''
 
 
-def launch_updater(info: dict) -> None:
-    """Start the updater window (it waits for this program to close)."""
+UPDATER_EXE = "RoKWatcherUpdater.exe"
+
+
+def _spawn(cmd):
+    """Start a program that keeps running after this one closes."""
+    detached = 0x00000008 | 0x00000200          # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    try:                                        # also leave any job we're in (else it can die with us)
+        return subprocess.Popen(cmd, creationflags=detached | 0x01000000, close_fds=True,
+                                cwd=tempfile.gettempdir())
+    except OSError:
+        return subprocess.Popen(cmd, creationflags=detached, close_fds=True, cwd=tempfile.gettempdir())
+
+
+def launch_updater(info: dict, appdir: Path | None = None) -> None:
+    """Start the updater (a separate program, run from a temp copy so it can replace
+    the files in the RoKWatcher folder) and return; the caller then closes RoKWatcher."""
+    appdir = Path(appdir or app_dir())
+    exe = appdir / UPDATER_EXE
+    if exe.exists():
+        tmp = Path(tempfile.gettempdir()) / f"RoKWatcherUpdater-{os.getpid()}.exe"
+        shutil.copy2(exe, tmp)
+        _spawn([str(tmp), "--pid", str(os.getpid()), "--url", info["url"],
+                "--appdir", str(appdir), "--version", info["version"]])
+        log.info("Updater started for version %s (%s)", info["version"], tmp)
+        return
+    # older downloads without the updater program: the PowerShell window
     script = Path(tempfile.gettempdir()) / "rokwatch_update.ps1"
     script.write_text(UPDATER_PS1, encoding="utf-8-sig")
-    flags = 0x00000008 | 0x00000200        # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
-    subprocess.Popen(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
-                      "-WindowStyle", "Hidden", "-File", str(script),
-                      "-WaitPid", str(os.getpid()), "-Url", info["url"],
-                      "-AppDir", str(app_dir()), "-Version", info["version"]],
-                     creationflags=flags, close_fds=True, cwd=tempfile.gettempdir())
-    log.info("Updater started for version %s", info["version"])
+    _spawn(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script),
+            "-WaitPid", str(os.getpid()), "-Url", info["url"], "-AppDir", str(appdir),
+            "-Version", info["version"]])
+    log.info("Updater (PowerShell) started for version %s", info["version"])

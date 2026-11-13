@@ -21,7 +21,15 @@ PyInstaller.__main__.run([
     "--add-data", f"rokwatch/hud{sep}rokwatch/hud",
     *sys.argv[1:],
 ])
+# the updater: a small separate program (one file, no console) that installs new versions
+PyInstaller.__main__.run([
+    "updater_app.py", "--name", "RoKWatcherUpdater", "--onefile", "--noconsole", "--noconfirm",
+    "--distpath", "dist/updater", "--workpath", "build/updater",
+])
 out = Path("dist/RoKWatcher")
+upd = Path("dist/updater") / ("RoKWatcherUpdater.exe" if os.name == "nt" else "RoKWatcherUpdater")
+if upd.exists():
+    shutil.copy(upd, out / upd.name)
 shutil.copy("config.example.yaml", out / "config.example.yaml")
 (out / "templates" / "attack").mkdir(parents=True, exist_ok=True)
 print(f"Built {out.resolve()}")

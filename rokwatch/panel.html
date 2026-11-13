@@ -239,6 +239,12 @@
   <details id="more" style="grid-column:1/-1">
     <summary style="cursor:pointer;font-weight:600;padding:6px 0">More: phone panel, updates, snapshots, places, tools, log</summary>
     <div class="more-grid">
+  <section>
+    <h2><svg class="i"><use href="#i-stop"/></svg> Program</h2>
+    <p class="hint" style="margin-top:0">RoK Watcher runs in the background (no window of its own); this page is how you
+      control it. Opening RoKWatcher.exe again brings this page back.</p>
+    <div class="row"><button class="danger" onclick="quitApp()">Quit RoK Watcher</button></div>
+  </section>
   <section id="phone-box">
     <h2><svg class="i"><use href="#i-phone"/></svg> Use this panel on your phone</h2>
     <label class="toggle"><input type="checkbox" id="panel_on_phone" onchange="save()"> Let my phone open this panel</label>
@@ -367,8 +373,9 @@ async function forgetTarget() {
     body: JSON.stringify({ forget_target: name }) });
   loadSettings();
 }
-let updatingTo = null, lastUpdSeen = null;
+let updatingTo = null, lastUpdSeen = null, updatingFrom = null, updatingSince = 0;
 function showUpdating(v) {
+  if (updatingTo !== v) { updatingSince = Date.now(); updatingFrom = $('ver').textContent.replace(/^v/, '') || null; }
   updatingTo = v; $('upd-screen').hidden = false; $('upd').hidden = true;
   $('upd-s-t').textContent = `Updating RoK Watcher to ${v}…`;
 }
@@ -376,6 +383,12 @@ async function updateNow() {
   const r = await (await fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).json();
   if (r.ok) showUpdating(r.version);
   else toast(r.message || 'Update failed', 'bad');
+}
+async function quitApp() {
+  if (!confirm('Quit RoK Watcher? Watching stops until you open RoKWatcher.exe again.')) return;
+  try { await fetch('/api/quit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); } catch {}
+  document.body.innerHTML = '<div style="display:grid;place-items:center;height:100vh;font:16px system-ui;color:#95a1b8">'
+    + 'RoK Watcher has been closed. Open RoKWatcher.exe to start it again.</div>';
 }
 async function checkNow() {
   const btn = document.activeElement; busy(btn, true);
@@ -503,9 +516,18 @@ let lastLook = null, lastMsg = null, lastSnaps = null, lastLive = null;
 async function refresh() {
   let st;
   try { st = await (await fetch('/api/state')).json(); } catch {
-    $('msg').textContent = updatingTo ? 'Updating…' : 'Panel not running'; return; }
+    $('msg').textContent = updatingTo ? 'Updating…' : 'Panel not running';
+    if (updatingTo && Date.now() - updatingSince > 240000)
+      $('upd-s-m').innerHTML = 'This is taking longer than it should. If no update window is showing, the update '
+        + 'was blocked: open RoKWatcher.exe again, or download the new version from GitHub.';
+    return; }
   $('ver').textContent = st.version && st.version !== 'dev' ? 'v' + st.version : '';
   if (updatingTo && st.version === updatingTo) { location.reload(); return; }   // new version is up
+  if (updatingTo && !st.updating && updatingFrom && st.version === updatingFrom && Date.now() - updatingSince > 8000) {
+    $('upd-screen').hidden = true; updatingTo = null;                           // the old one came back
+    toast("The update didn't install, so the old version was started again. Details are in the update "
+          + 'log (rokwatch-update.log in your Temp folder). You can also download it from GitHub.', 'bad');
+  }
   if (st.updating) showUpdating(st.updating);
   const us = st.update_status || {};
   $('upd-info').innerHTML = `You have version <b>${esc(st.version)}</b>. `

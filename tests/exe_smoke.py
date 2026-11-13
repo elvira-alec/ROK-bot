@@ -67,4 +67,8 @@ try:
     assert look["troops"][:3] == ["gathering"] * 3, look
     print("OK")
 finally:
+    try:
+        call("/api/quit", post=True)        # it runs in the background: ask it to quit
+    except OSError:
+        pass
     proc.kill()

@@ -1,12 +1,15 @@
-"""Windows build check: the real updater window installs a zip over an old copy.
+"""Windows build check: a real update, the way the panel does it.
 
     python tests/updater_smoke.py RoKWatcher-windows.zip
 
-Pretends an old RoKWatcher (with your settings and snapshots) is installed, runs the
-updater against the zip (served locally), and checks: the program files were
-replaced, your files are still there, and the new version was started again."""
+An "old" RoKWatcher (with your settings and snapshots) runs `--test-update URL`:
+that starts the separate updater program and closes itself, exactly like pressing
+Update now. Checks: the updater survived RoKWatcher closing, replaced the program
+files, kept your files, and RoKWatcher came back (the panel answers with the new
+version) - then quits it."""
 
 import http.server
+import json
 import shutil
 import socketserver
 import subprocess
@@ -14,52 +17,60 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.request
 import zipfile
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from rokwatch import updater  # noqa: E402
 
 zip_path = Path(sys.argv[1]).resolve()
 work = Path(tempfile.mkdtemp())
 app = work / "RoKWatcher"
 with zipfile.ZipFile(zip_path) as z:
     z.extractall(work)
-new_version = (app / "_internal" / "rokwatch" / "version.txt").read_text().strip()
-# make it look like an old install with the user's own files
-(app / "_internal" / "rokwatch" / "version.txt").write_text("0.9")
+vfile = app / "_internal" / "rokwatch" / "version.txt"
+new_version = vfile.read_text().strip()
+assert (app / "RoKWatcherUpdater.exe").exists(), "the updater program isn't in the download"
+vfile.write_text("0.9")                                   # pretend it's an old install
 (app / "config.yaml").write_text("notify: {ntfy_topic: keep-me}\n")
 (app / "snapshots").mkdir()
 (app / "snapshots" / "mine.jpg").write_bytes(b"x")
 
-# serve the zip
 handler = lambda *a, **k: http.server.SimpleHTTPRequestHandler(*a, directory=str(zip_path.parent), **k)
 srv = socketserver.TCPServer(("127.0.0.1", 0), handler)
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 url = f"http://127.0.0.1:{srv.server_address[1]}/{zip_path.name}"
 
-# a stand-in for the running RoKWatcher that closes after a moment
-dummy = subprocess.Popen(["ping", "-n", "4", "127.0.0.1"], stdout=subprocess.DEVNULL)
-script = work / "upd.ps1"
-script.write_text(updater.UPDATER_PS1, encoding="utf-8-sig")
 t0 = time.time()
-r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script),
-                    "-WaitPid", str(dummy.pid), "-Url", url, "-AppDir", str(app),
-                    "-Version", new_version], timeout=600)
-print("updater finished in", round(time.time() - t0), "s, exit", r.returncode)
+r = subprocess.run([str(app / "RoKWatcher.exe"), "--test-update", url, new_version], cwd=app, timeout=60)
+print("old RoKWatcher handed over and closed, exit", r.returncode)
 
-got = (app / "_internal" / "rokwatch" / "version.txt").read_text().strip()
-assert got == new_version, ("program files not replaced", got, new_version)
+
+def state():
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:8765/api/state", timeout=2) as resp:
+            return json.loads(resp.read())
+    except OSError:
+        return None
+
+
+st = None
+for _ in range(240):                                      # up to 4 minutes
+    if vfile.read_text().strip() == new_version:
+        st = state()
+        if st and st.get("version") == new_version:
+            break
+    time.sleep(1)
+log = Path(tempfile.gettempdir()) / "rokwatch-update.log"
+print("update log:\n" + (log.read_text(errors="replace") if log.exists() else "(none)"))
+assert vfile.read_text().strip() == new_version, "program files weren't replaced"
 assert "keep-me" in (app / "config.yaml").read_text(), "settings were lost"
 assert (app / "snapshots" / "mine.jpg").exists(), "snapshots were lost"
-# it started the new version again ("--updated")
-time.sleep(5)
-out = subprocess.run(["powershell", "-NoProfile", "-Command",
-                      "Get-CimInstance Win32_Process -Filter \"Name='RoKWatcher.exe'\" | "
-                      "Select-Object -ExpandProperty CommandLine"], capture_output=True, text=True).stdout
-print("running:", out.strip())
-assert "--updated" in out, "the new version wasn't started"
-subprocess.run(["taskkill", "/F", "/IM", "RoKWatcher.exe"], capture_output=True)
+assert st and st["version"] == new_version, ("the new version didn't start", st)
+print(f"OK: 0.9 -> {new_version} in {time.time() - t0:.0f} s, panel back")
+try:
+    urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:8765/api/quit", data=b"{}",
+                                                  headers={"Content-Type": "application/json"}), timeout=5)
+except OSError:
+    pass
 srv.shutdown()
+time.sleep(2)
 shutil.rmtree(work, ignore_errors=True)
-print("OK: updated", "0.9 ->", new_version)

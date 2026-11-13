@@ -462,6 +462,11 @@ def make_handler(panel: Panel, port_holder=None):
                     "/api/stop": "stop", "/api/look": "look", "/api/axes": "axes",
                     "/api/recall": "recall", "/api/test_alert": "test_alert",
                     "/api/hunt": "hunt"}
+            if path == "/api/quit":
+                log.info("Quit from the panel")
+                panel.worker.send("stop")
+                threading.Timer(0.8, lambda: os._exit(0)).start()
+                return self._send(200, {"ok": True})
             if path == "/api/update":
                 if data.get("action") == "later":
                     panel.update_at = None
