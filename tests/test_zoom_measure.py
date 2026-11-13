@@ -182,3 +182,51 @@ def test_self_calibration_moves_to_find_resource_points():
     g = Game(sim, settle=0)
     cfg, msg = g.auto_calibrate()
     assert cfg and cfg["gap"] == 5, (cfg, msg)
+
+
+def test_zoom_out_stops_where_the_level_numbers_vanish():
+    """A searching zoom set too far out (numbers gone): it stops at the last step with
+    numbers, and remembers the shorter distance."""
+    sim = TagSim(13)
+    g = Game(sim, settle=0)
+    g.zoom_cfg = {"gap": 7, "t_out": 1, "t_in": 7}
+    g._at = "close"
+    g.to_sweep()
+    assert sim.level == 8 and sim.lowest >= 7, (sim.level, sim.lowest)
+    assert g.zoom_cfg["gap"] == 5
+    assert g.to_close() and sim.level == 13
+    assert g.to_sweep() and sim.level == 8
+
+
+class BoxSim(TagSim):
+    """An open info box: the game ignores the mouse wheel until it's closed (a drag)."""
+    box = False
+
+    def wheel(self, x, y, dy):
+        if not self.box:
+            super().wheel(x, y, dy)
+
+    def drag(self, x0, y0, x1, y1, steps=15):
+        self.box = False
+
+    def screenshot(self, area=None):
+        out = super().screenshot(area)
+        if self.box:
+            h, w = out.shape[:2]
+            out[int(0.2 * h):int(0.65 * h), int(0.5 * w):int(0.82 * w)] = (235, 235, 235)
+        return out
+
+
+def test_open_box_is_closed_before_zooming_out():
+    """The recording: a farm box left open made the zoom do nothing, and the bot kept
+    zooming out. Now the box is closed first and it lands on the searching zoom."""
+    sim = BoxSim(13)
+    g = Game(sim, settle=0)
+    g.zoom_cfg = {"gap": 5, "t_out": 1, "t_in": 5}
+    g._at = "close"
+    sim.box = True
+    from rokwatch import screen
+    assert screen.find_info_box(sim.screenshot())
+    assert g.to_sweep() and sim.level == 8 and not sim.box
+    sim.box = True                                   # and on the way in
+    assert g.to_close() and sim.level == 13 and not sim.box

@@ -44,10 +44,29 @@ def newer(latest, current) -> bool:
 API = f"https://api.github.com/repos/{REPO}/releases/latest"
 
 
+def ssl_context():
+    """Windows' own certificates plus the standard list that ships with the program.
+    Windows only fetches some root certificates when a browser first needs them, so
+    Python can find them missing ('CERTIFICATE_VERIFY_FAILED ... unable to get issuer
+    certificate'); the bundled list covers that."""
+    import ssl
+    ctx = ssl.create_default_context()
+    try:
+        import certifi
+        ctx.load_verify_locations(certifi.where())
+    except Exception:
+        pass
+    return ctx
+
+
+def urlopen(req, timeout):
+    return urllib.request.urlopen(req, timeout=timeout, context=ssl_context())
+
+
 def _fetch_urllib(timeout):
     req = urllib.request.Request(API, headers={"Accept": "application/vnd.github+json",
                                                "User-Agent": "RoKWatcher-updater"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with urlopen(req, timeout) as r:
         return json.load(r)
 
 
@@ -72,7 +91,7 @@ def _latest_from_web(timeout):
     """The newest release from GitHub's web page (it redirects to /releases/tag/vX.Y).
     Unlike the API this has no 60-checks-an-hour limit."""
     req = urllib.request.Request(WEB_LATEST, headers={"User-Agent": "RoKWatcher-updater"}, method="HEAD")
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with urlopen(req, timeout) as r:
         final = r.geturl()
     tag = final.rstrip("/").rsplit("/", 1)[-1]
     if "/releases/tag/" not in final or not parse(tag):

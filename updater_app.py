@@ -66,9 +66,22 @@ def wait_for_exit(pid, timeout=40):
     return False
 
 
+def _ssl_context():
+    """Windows' certificates plus the bundled standard list (Windows can be missing a
+    root certificate it hasn't needed yet: 'unable to get issuer certificate')."""
+    import ssl
+    ctx = ssl.create_default_context()
+    try:
+        import certifi
+        ctx.load_verify_locations(certifi.where())
+    except Exception:
+        pass
+    return ctx
+
+
 def download(url, dest, progress):
     req = urllib.request.Request(url, headers={"User-Agent": "RoKWatcher-updater"})
-    with urllib.request.urlopen(req, timeout=60) as r, open(dest, "wb") as f:
+    with urllib.request.urlopen(req, timeout=60, context=_ssl_context()) as r, open(dest, "wb") as f:
         total = int(r.headers.get("Content-Length") or 0)
         got = 0
         while True:

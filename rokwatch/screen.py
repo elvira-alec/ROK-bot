@@ -26,6 +26,25 @@ def ocr_engine():
     return _ocr
 
 
+_ocr_strip = None
+
+
+def ocr_strip_engine():
+    """For small strips (the coordinates readout): the reader normally blows a strip up
+    until its short side is 736 px before finding the text (~5x bigger, ~1 s). This one
+    reads it at its own size (~0.1-0.2 s) - the text there is big enough."""
+    global _ocr_strip
+    if _ocr_strip is None:
+        from rapidocr_onnxruntime import RapidOCR
+        eng = RapidOCR()
+        for op in eng.text_detector.preprocess_op:
+            if hasattr(op, "limit_type"):
+                op.limit_type, op.limit_side_len = "max", 1280
+        eng.width_height_ratio = -1          # a long strip is still looked through for text
+        _ocr_strip = eng
+    return _ocr_strip
+
+
 @dataclass
 class Text:
     text: str
@@ -38,14 +57,15 @@ class Text:
         return (x + w // 2, y + h // 2)
 
 
-def read_text(frame: np.ndarray, region=None) -> list[Text]:
-    """All text on screen (or inside region = (x, y, w, h))."""
+def read_text(frame: np.ndarray, region=None, strip=False) -> list[Text]:
+    """All text on screen (or inside region = (x, y, w, h)). strip: a small strip, read
+    at its own size (much quicker)."""
     ox = oy = 0
     img = frame
     if region:
         ox, oy, w, h = (int(v) for v in region)
         img = frame[oy:oy + h, ox:ox + w]
-    res, _ = ocr_engine()(img)
+    res, _ = (ocr_strip_engine() if strip else ocr_engine())(img)
     out = []
     for box, text, conf in res or []:
         xs = [p[0] for p in box]
@@ -60,15 +80,23 @@ def find_text(texts: list[Text], pattern: str):
     return [t for t in texts if rx.search(t.text.replace(" ", ""))]
 
 
-COORD_RX = re.compile(r"#?(\d{3,5})?X[:：]?(\d{1,4})Y[:：]?(\d{1,4})", re.I)
+COORD_RX = re.compile(r"#?(\d{3,5})?X[:：;.\-]?(\d{1,4})[.,;:]?Y[:：;.\-]?(\d{1,4})", re.I)
 
 
 def parse_coords(s: str):
-    m = COORD_RX.search(s.replace(" ", "").replace("（", "(").replace("）", ")"))
+    s = s.replace(" ", "").replace("（", "(").replace("）", ")")
+    s = re.sub(r"(?<=X[:：;.\-])(\d*)[OoQD](?=\d*Y)", r"\g<1>0", s, flags=re.I)  # 'X:18QY' = X:180
+    m = COORD_RX.search(s)
     if not m:
         return None
     k = int(m.group(1)) if m.group(1) else None
-    return k, int(m.group(2)), int(m.group(3))
+    x, y = int(m.group(2)), int(m.group(3))
+    # the map is 0-1199: a 4th digit is the magnifier next to it read as a number
+    if x > 1199 and len(m.group(2)) == 4:
+        x //= 10
+    if y > 1199 and len(m.group(3)) == 4:
+        y //= 10
+    return k, x, y
 
 
 def camera_coords(frame: np.ndarray, texts: list[Text] | None = None):
@@ -100,13 +128,17 @@ def top_texts(frame: np.ndarray) -> list:
         # just the top-left strip; padded, because the text reader misreads a thin crop
         pad = 30
         up = 2.0 if h < 1000 else 1.0             # small windows: enlarge the digits
-        crop = frame[0:int(h * 0.08), 0:int(w * 0.4)]
+        x_end = int(w * 0.4)
+        m = find_magnifier(frame)                 # stop at the magnifier: it reads as a 'Q' / '9'
+        if m and 0.1 * w < m[0] < 0.5 * w:
+            x_end = int(m[0] - 0.004 * h)
+        crop = frame[0:int(h * 0.08), 0:x_end]
         if up != 1.0:
             crop = cv2.resize(crop, None, fx=up, fy=up, interpolation=cv2.INTER_CUBIC)
         crop = cv2.copyMakeBorder(crop, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=(0, 0, 0))
         texts = [Text(t.text, (int((t.box[0] - pad) / up), int((t.box[1] - pad) / up),
                                int(t.box[2] / up), int(t.box[3] / up)), t.conf)
-                 for t in read_text(crop)]
+                 for t in read_text(crop, strip=True)]
     _top_cache.update(key=key, texts=texts)
     return texts
 
@@ -142,9 +174,9 @@ def is_simple_view(texts: list[Text], frame) -> bool:
     h = frame.shape[0]
     top = [t for t in texts if t.box[1] < h * 0.15]
     # power: "2,015,180" (English), "2 032 680" / "2.032.680" (Spanish...), or read without separators
-    return (not find_text(top, r"^VIP\d*$")
-            and not find_text(top, r"^\d{1,3}([ ,.\u00a0\u202f]\d{3})+$")
-            and not [t for t in top if re.fullmatch(r"\d{6,9}", t.text.replace(" ", ""))
+    return (not find_text(top, r"^VIP\w?\d*$")
+            and not find_text(top, r"^\D{0,2}\d{1,3}([ ,.\u00a0\u202f]\d{3})+$")
+            and not [t for t in top if re.fullmatch(r"\D{0,2}\d{6,10}", re.sub(r"[ ,.\u00a0\u202f]", "", t.text))
                      and "X" not in t.text.upper()])
 
 

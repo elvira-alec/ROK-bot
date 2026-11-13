@@ -92,6 +92,7 @@ class ArmySeen:
     kind: str = "army"          # "army", "scout" (plain diamond) or "farm" (gathering)
     id: int = 0
     checks: int = 0
+    info: dict = field(default_factory=dict)   # farm details read from its box (when checked)
     unsure: bool = False        # near the screen edge with no line: may be marching (lines
                                 # aren't drawn that far from the middle of the view)
 
@@ -276,6 +277,8 @@ class Tracker:
             if a.owner is None and getattr(s, "owner", None):
                 a.owner = s.owner
             a.checks = max(a.checks, getattr(s, "checks", 0))
+            if getattr(s, "info", None):
+                a.info = {**(a.info or {}), **s.info}
             a.history.append((now, s.tile))
             if s.moving and s.ends:
                 a.direction, a.dest = self._direction(a, prev_tile, prev_moving, s)
@@ -770,7 +773,7 @@ class Hunter:
                 self._farms_in_frame([o for o in others if o.kind == "farm"], ac)
         else:
             for attempt in range(2):          # a name can be missed on one look
-                v = self.game.look()
+                v = self.game.look_middle()
                 H, W = v.frame.shape[:2]
                 centre = (W / 2, H / 2)
                 near = [lb for lb in screen.find_player(v.frame, v.texts, self.name)
@@ -840,6 +843,13 @@ class Hunter:
                 break
         if not box:
             return False
+        try:
+            self._read_box_contents(a, box)
+        finally:
+            self.game.close_popups()                     # always closed (an open box blocks zooming)
+        return True
+
+    def _read_box_contents(self, a, box):
         time.sleep(0.12)                                 # let the text finish drawing
         f = self.game.frame()
         texts = screen.read_text(f, box)
@@ -864,8 +874,6 @@ class Hunter:
                 del hist[:-6]
             a.info = info
             self.farms.learn(details)
-        self.game.close_popups()
-        return True
 
     RESOURCE_RX = re.compile(r"(level|nivel|niveau|stufe)|camp|farm|quarry|mine|cropland|"
                              r"tala|campo|cantera|mina|cultivo", re.I)

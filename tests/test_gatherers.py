@@ -481,3 +481,57 @@ def test_moving_close_uses_the_path_not_where_the_screen_cut_the_line():
     assert t._close_to(a) is None
     a.ends, a.direction = ((165.0, 385.0), (178.0, 407.0)), "home"
     assert t._close_to(a) is None                      # walking home: not a threat
+
+
+def test_coordinates_read_with_glitches():
+    """What the quick reader of the top strip makes of the readout on real frames."""
+    from rokwatch.screen import parse_coords as p
+    assert p("#4183X:18QY:392Q") == (4183, 180, 392)      # a 0 read as Q, the magnifier as Q
+    assert p("#4183X:169Y-382") == (4183, 169, 382)
+    assert p("#4183X:162Y:3749") == (4183, 162, 374)      # the magnifier read as a 9
+    assert p("#4183X:180.Y:392") == (4183, 180, 392)
+    assert p("#4183 X:139 Y:358 Q") == (4183, 139, 358)
+    assert p("X:1100 Y:1150") == (None, 1100, 1150)
+
+
+def test_quick_top_strip_reads_like_the_slow_one():
+    for name, level, cam in [("zoom/close_3d.png", "close", (139, 358)),
+                             ("zoom/search_with_tags.png", "patrol", (138, 358)),
+                             ("attack_red_dashes_close.png", "close", (180, 392)),
+                             ("enemy_city_simple.png", "patrol", (162, 375))]:
+        f = cv2.imread(str(REAL / name))
+        t0 = time.time()
+        assert screen.view_level(f) == level, name
+        c = screen.camera_coords(f)
+        assert c and c[1:3] == cam, (name, c)
+
+
+def test_farm_box_closed_even_if_reading_fails():
+    """A problem while reading the box must still close it (an open box blocks the zoom)."""
+    from rokwatch.hunter import ArmySeen
+    closed = []
+
+    class G:
+        b = type("B", (), {"click": lambda self, x, y: None})()
+        def frame(self):
+            f = cv2.imread(str(REAL / "gather" / "camp_popup_gatherer.png"))
+            return f
+        def close_popups(self):
+            closed.append(1)
+
+    h = Hunter.__new__(Hunter)
+    h.game = G()
+    h._read_box_contents = lambda a, box: (_ for _ in ()).throw(RuntimeError("boom"))
+    with pytest.raises(RuntimeError):
+        h._read_farm_box(ArmySeen((165.0, 380.0), False, None, 0, kind="farm"), (100, 100))
+    assert closed
+
+
+def test_farm_details_kept_when_matched():
+    from rokwatch.hunter import ArmySeen, Tracker
+    t = Tracker((162, 374), [("camp", (205, 424))])
+    s = ArmySeen((170.0, 390.0), False, None, 0, kind="farm", owner="him")
+    s.info = {"what": "Level 6 Cropland", "reserves": 700000}
+    t.match([s], 0)
+    t.match([ArmySeen((170.0, 390.0), False, None, 30, kind="farm")], 30)
+    assert t.armies[0].info.get("what") == "Level 6 Cropland"

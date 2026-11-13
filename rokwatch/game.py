@@ -80,6 +80,21 @@ class Game:
             pass
         return v
 
+    def look_middle(self, reach=0.42) -> View:
+        """Only the text around the middle of the screen (within reach x height of it):
+        the name over the army it just jumped to. ~3x quicker than reading everything."""
+        frame = self.frame()
+        H, W = frame.shape[:2]
+        r = int(reach * H)
+        x0, y0 = max(0, W // 2 - r), max(0, H // 2 - r)
+        texts = screen.read_text(frame, (x0, y0, min(W, W // 2 + r) - x0, min(H, H // 2 + r) - y0))
+        v = View(frame, texts, None, False)
+        try:
+            self.b.last_view = v
+        except AttributeError:
+            pass
+        return v
+
     def zoom(self, view: View | None = None) -> str:
         v = view or self.look()
         return screen.zoom_level(v.frame, v.texts)
@@ -98,7 +113,7 @@ class Game:
         for attempt in range(tries):
             self.check_stop()
             f = self.frame()
-            c = screen.camera_coords(f) or screen.camera_coords(f, screen.read_text(f))
+            c = screen.camera_coords(f)                # the coordinates strip only (quick)
             if c and abs(c[1] - x) <= 1 and abs(c[2] - y) <= 1:
                 return True
             if self._quick_jump(f, x, y) or self._slow_jump(x, y):
@@ -145,10 +160,15 @@ class Game:
         cache = self._bar_cache
         if not (cache and abs(cache[2][0] * W - btn[0]) < 0.02 * H
                 and abs(cache[2][1] * H - btn[1]) < 0.02 * H):
-            v = self.look(f2)                      # first time: read the bar once
-            bar = screen.find_search_bar(v.frame, v.texts)
+            # first time: read the bar's row once (just that strip: quick)
+            x0, y0 = max(0, int(btn[0] - 0.5 * W)), max(0, int(btn[1] - 0.06 * H))
+            region = (x0, y0, int(min(W, btn[0] + 0.05 * H)) - x0, int(0.12 * H))
+            bar = screen.find_search_bar(f2, screen.read_text(f2, region, strip=True))
             if not bar:
-                return self._fill_coord_dialog(x, y, v)
+                v = self.look(f2)                  # the whole screen (slow)
+                bar = screen.find_search_bar(v.frame, v.texts)
+            if not bar:
+                return self._fill_coord_dialog(x, y, self.look(f2))
             self._bar_cache = cache = tuple((p[0] / W, p[1] / H) for p in
                                             (bar.x_field, bar.y_field, bar.button))
         xf, yf, go = ((int(p[0] * W), int(p[1] * H)) for p in cache)
@@ -226,14 +246,26 @@ class Game:
             prev = cur
         return prev
 
+    def _no_popup(self):
+        """An open info box makes the game ignore the zoom wheel: close it first."""
+        if screen.find_info_box(self.frame()):
+            self.close_popups()
+
     def _notch(self, out: bool):
         self.check_stop()
         from .trace import TRACE
         TRACE.event("notch", out=out)
         H, W = self._size or self.frame().shape[:2]
         self._size = (H, W)
+        before = self._small()
         self.b.wheel(W // 2, H // 2, 100 if out else -100)
-        return self._settled()
+        after = self._settled()
+        if self._changed(after, before) < 0.004 and screen.find_info_box(self.frame()):
+            # the zoom did nothing because a box is open: close it and do that step again
+            self.close_popups()
+            self.b.wheel(W // 2, H // 2, 100 if out else -100)
+            after = self._settled()
+        return after
 
     def steps(self, n: int):
         """n notches in (n > 0) or out (n < 0), each one finished before the next."""
@@ -256,6 +288,7 @@ class Game:
         """To your close zoom (names show, resource points can be tapped)."""
         from .trace import TRACE
         TRACE.event("zoom", to="close", at=self._at, cfg=self.zoom_cfg)
+        self._no_popup()
         if self._at == "close" and self.level() == "close":
             return True
         gap, t_out, t_in = self._zoom_numbers()
@@ -277,6 +310,7 @@ class Game:
         """Back to your searching zoom (never further out than the simplified map)."""
         from .trace import TRACE
         TRACE.event("zoom", to="sweep", at=self._at, cfg=self.zoom_cfg)
+        self._no_popup()
         lv = self.level()
         if self._at == "sweep" and lv == "patrol":
             return True
@@ -292,7 +326,7 @@ class Game:
                 self._notch(out=True)
                 j += 1
             if gap and t_out:
-                self.steps(-max(0, gap - t_out))     # the rest of the way to your zoom
+                self._out_keeping_tags(max(0, gap - t_out))   # the rest of the way to your zoom
         for _ in range(8):                           # too far out (icons gone): back in
             if self.level() != "far":
                 break
@@ -300,6 +334,27 @@ class Game:
         ok = self.level() == "patrol"
         self._at = "sweep" if ok else None
         return ok
+
+    def _out_keeping_tags(self, n):
+        """n notches out, but never past the last zoom where resource points still show
+        their level numbers: if the numbers vanish after a notch, one back in and stop
+        (and remember the shorter distance for next time)."""
+        prev = screen.count_level_tags(self.frame())
+        for i in range(n):
+            self._notch(out=True)
+            cur = screen.count_level_tags(self.frame())
+            if prev >= 3 and cur <= 1:
+                self._notch(out=False)
+                z = self.zoom_cfg
+                if z and z.get("gap"):
+                    new_gap = int(z["gap"]) - (n - i)
+                    if new_gap >= 1:
+                        log.info("Zoom: the level numbers vanished %d step(s) early; searching zoom "
+                                 "is now %d steps out from the close zoom", n - i, new_gap)
+                        z["gap"] = new_gap
+                        z["t_in"] = min(int(z.get("t_in") or new_gap), new_gap)
+                return
+            prev = cur
 
     def auto_calibrate(self, max_moves=6, progress=None):
         """Work out both zooms by itself:
@@ -535,7 +590,7 @@ class Game:
         self._fresh = (time.time(), f, c)
         return self._cam
 
-    def pan_to(self, x, y, axes, max_drags=3, close_enough=4.0) -> bool:
+    def pan_to(self, x, y, axes, max_drags=2, close_enough=4.0) -> bool:
         """Drag the map to (x, y): one drag for a nearby spot, from the camera position it
         already knows (the next look reads the real one). Far spots: typed in."""
         self.check_stop()
@@ -555,7 +610,7 @@ class Game:
         if np.hypot(*d) <= close_enough:
             return True
         p = -(Ainv @ d)                           # drag the map this many pixels
-        far = max(abs(p[0]) / (0.4 * W), abs(p[1]) / (0.4 * H))
+        far = max(abs(p[0]) / (0.6 * W), abs(p[1]) / (0.6 * H))   # one drag covers 60% of the view
         if far > max_drags:                       # too far to drag: type it in
             return self.goto(x, y)
         n = max(1, int(np.ceil(far)))

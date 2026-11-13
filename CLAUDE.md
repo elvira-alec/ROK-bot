@@ -150,6 +150,13 @@ boxes, the user's snapshots including the Spanish photos).
   only the troop's info box.
 - Unconfirmed armies were followed but hidden from the list. Now everything it follows is
   listed, and after 3 failed checks it stops following them.
+- Every zoom check and camera read took ~1 s: the text reader enlarged the small top strip
+  5x. Now a strip reader at its own size (~0.13 s). goto, the search bar and the name check
+  read only the strip / bar row / middle of the screen, not the whole screen.
+- A farm box left open blocked the zoom wheel and the bot zoomed out 10 notches. Now the box
+  is always closed, boxes are closed before zooming, and zooming out stops where the level
+  numbers vanish (`_out_keeping_tags`).
+- Update check SSL failure on Windows: certifi added. Phone section order was reversed.
 
 ## 5. Open work / to verify in the real game
 

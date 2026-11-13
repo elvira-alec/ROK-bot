@@ -731,8 +731,10 @@ async function loadPhone() {
     $('phone-box').hidden = true;                       // the everyday controls go first
     const main = document.querySelector('main');
     const find = t => [...main.children].find(sec => sec.querySelector('h2')?.textContent.includes(t));
-    ['Alerts to your phone', 'Who to watch', 'Connect to the game', 'Set up the zoom', 'Recent alerts',
-     'Watch', 'Activity', 'Live view', 'His armies'].forEach(t => { const sec = find(t); if (sec) main.prepend(sec); });
+    // top to bottom: what he's doing, then the steps 1-4 in order, then the rest
+    const order = ['Live view', 'His armies', 'Connect to the game', 'Who to watch', 'Set up the zoom',
+                   '4 Watch', 'Recent alerts', 'Alerts to your phone', 'Activity'];
+    order.slice().reverse().forEach(t => { const sec = find(t); if (sec) main.prepend(sec); });
     return;
   }
   phoneInfo = ph; drawRoute();

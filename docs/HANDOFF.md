@@ -138,7 +138,7 @@ frames, and find the first step that went wrong. Turn that frame into a regressi
 
 | Function | What it does |
 |---|---|
-| `camera_coords` / `top_texts` | OCR of the padded top-left strip (0.4W × 0.08H), enlarged on small windows. Cached per frame. |
+| `camera_coords` / `top_texts` | OCR of the padded top-left strip (0.4W × 0.08H, cut at the magnifier), enlarged on small windows. Uses `ocr_strip_engine()`: the reader at the strip's own size (~0.13 s; the default engine blows small images up to 736 px and took ~1 s). Cached per frame. `parse_coords` copes with the reader's slips (`X:18QY`, `Y-382`, a trailing 9 from the magnifier). |
 | `view_level` | `close` if the power or VIP block is in the strip. `far` if the globe button is present. Otherwise `patrol`. |
 | `count_level_tags` | Light tags with a dark number under resource points. ≥3 = level numbers shown, ≤1 = gone. |
 | `find_map_icons` | Army diamonds: grey-lavender by day, mauve at night. Plain diamond = scout, unless it's army-sized (≥46 px). Red diamond = hostile. |
@@ -159,6 +159,10 @@ frames, and find the first step that went wrong. Turn that frame into a regressi
   none are in view; checks before saving.
 - Manual two-button setup (`calibrate_close`) uses `measure_scale` drags; the user found it
   unreliable.
+- **Guards (v1.11):** an open info box is closed before any zoom (`_no_popup`), and a notch
+  that changes nothing while a box is open closes it and repeats. Stepping out past the
+  switch point (`_out_keeping_tags`) counts the level-number tags after each notch: if they
+  vanish, it steps back in and lowers `gap` for the session.
 
 ### 4.4 Panel API (`panel.py`)
 
@@ -273,12 +277,25 @@ frames, and find the first step that went wrong. Turn that frame into a regressi
 
 **Speed**
 - A 5 s idle pause between rounds. Removed.
+- (v1.11, from the user's debug recording) every zoom-level check and camera read was ~1 s of
+  OCR (the reader enlarged the small top strip 5x); goto read the whole screen before even
+  tapping the magnifier, and again to find the X/Y boxes (2.6 s); the name check at close zoom
+  read the whole screen (1.5–2 s); pans used two drags. Now: strip reader ~0.13 s, the bar row
+  only (~0.2 s), the middle of the screen only (~0.35 s), one drag covers 60% of the view.
+- (v1.11) A farm box left open (an error while reading it) made the zoom wheel do nothing,
+  so the bot zoomed out 10 notches. Fixes: the box is always closed (`finally`), boxes are
+  closed before zooming, zoom-out stops where the level numbers vanish, and the crash itself
+  (`ArmySeen` had no `info`) is fixed.
 - Reading the user's own troop spots read the whole screen per troop. Now only the troop's box.
 
 **Program and updates**
 - The PowerShell updater was silently blocked. Fix: a separate RoKWatcherUpdater.exe.
 - The update check hit the GitHub API rate limit. Fix: the releases/latest redirect.
 - No console window; single instance; Quit in the panel; closes with the page.
+- (v1.11) Update check failed with `CERTIFICATE_VERIFY_FAILED` on the user's PC (Windows
+  hadn't fetched GitHub's root certificate yet). Fix: Windows' store plus certifi's list.
+- (v1.11) On the phone the sections came out 4, 3, 1, 2 (a prepend loop reversed them). Now:
+  Live view, His armies, 1, 2, 3, 4, Recent alerts, Alerts, Activity.
 
 ---
 
