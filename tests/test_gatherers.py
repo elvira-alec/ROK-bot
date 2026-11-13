@@ -126,3 +126,17 @@ def test_stuck_state_from_a_real_snapshot():
     assert any(screen.parse_coords(t.text) == (None, 169, 389) or
                (screen.parse_coords(t.text) or (0, 0, 0))[1:] == (169, 389) for t in texts)
     assert screen.camera_coords(f) is None                        # profile covers the readout
+
+
+def test_army_list_marks_threats_first():
+    from rokwatch.hunter import ArmySeen, Tracker
+    t = Tracker((162, 374), [("my city", (210, 422)), ("stone", (185, 398))])
+    t.match([ArmySeen((170.0, 390.0), False, None, 0, kind="farm"),
+             ArmySeen((176.0, 386.0), True, ((165.0, 377.0), (184.0, 397.0)), 0)], 0)
+    for a in t.armies:
+        a.owner = "him"
+    t.armies[1].direction, t.armies[1].dest = "out", (184.0, 397.0)
+    rows = t.summary()
+    assert rows[0]["threat"] == "stone" and rows[0]["threat_how"] == "aimed"
+    assert rows[1]["state"] == "gathering" and rows[1]["threat"] is None
+    assert t.map_info()["city"] == [162, 374] and len(t.map_info()["mine"]) == 2

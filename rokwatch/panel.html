@@ -79,6 +79,19 @@
   .more-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; margin-top: 10px; }
   @media (max-width: 900px) { .more-grid { grid-template-columns: minmax(0, 1fr); } }
   details summary { list-style-position: inside; }
+  .his-wrap { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 12px; margin-top: 10px; align-items: start; }
+  @media (max-width: 560px) { .his-wrap { grid-template-columns: minmax(0, 1fr); } #radar { max-width: 260px; } }
+  #radar { width: 100%; background: var(--panel2); border-radius: 8px; border: 1px solid var(--line); }
+  .army { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 8px; align-items: center;
+          padding: 7px 8px; border-radius: 8px; background: var(--panel2); margin-bottom: 6px; border-left: 3px solid var(--line); }
+  .army.his { border-left-color: var(--accent); }
+  .army.threat { border-left-color: var(--bad); background: rgba(239,77,90,.14); }
+  .army .ic { font-size: 18px; text-align: center; }
+  .army .what { font-weight: 600; }
+  .army .what small { color: var(--muted); font-weight: 400; }
+  .army .threat-t { color: var(--bad); font-weight: 700; font-size: 12px; }
+  .army a.xy { color: var(--accent); cursor: pointer; text-decoration: none; font-variant-numeric: tabular-nums; }
+  .army .ago { color: var(--muted); font-size: 12px; text-align: right; white-space: nowrap; }
   .notes { margin: 10px 0 0; padding-left: 18px; color: var(--warn); font-size: 13px; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
   .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
@@ -120,14 +133,20 @@
 <div id="now" hidden><div class="t" id="now-t"></div><div class="bar" id="now-bar"><i id="now-fill"></i></div></div>
 <main>
   <section id="live-box">
-    <h2>👁 Live view &amp; his armies</h2>
+    <h2>👁 Live view</h2>
     <label class="toggle"><input type="checkbox" id="live-on" checked> Show what the bot sees (small picture, about every 2 seconds)</label>
     <img id="live-img" alt="" hidden>
-    <p class="hint" id="armies-none" style="margin-top:10px">His armies will be listed here once it's found some.</p>
-    <table id="armies-table" hidden style="margin-top:10px">
-      <thead><tr><th>Army</th><th>Where</th><th>Doing</th><th>Heading for</th><th>Seen</th></tr></thead>
-      <tbody id="armies"></tbody>
-    </table>
+  </section>
+
+  <section id="his-box">
+    <h2>🎯 His armies</h2>
+    <p id="his-sum" class="hint" style="margin:0">Nothing found yet. Press "Watch &amp; track him".</p>
+    <div class="his-wrap">
+      <svg id="radar" viewBox="0 0 300 300" role="img" aria-label="Map of his armies around his city and your spots"></svg>
+      <div id="his-list"></div>
+    </div>
+    <p class="hint">Tap the coordinates to move the game camera there. Red = heading for (or close to) your
+      city or troops. The map shows map coordinates (X to the right, Y up), not the game's tilted camera.</p>
   </section>
 
   <section>
@@ -368,6 +387,55 @@ async function updateLater() {
   await fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"action":"later"}' });
   refresh();
 }
+const ICON = { 'gathering': '⛏', 'parked / gathering': '⛺', 'marching out': '➜', 'going home': '↩',
+               'marching': '➜', 'scout': '👁', 'at his city': '🏰' };
+function ago(ts) {
+  if (!ts) return '';
+  const s = Math.max(0, Date.now() / 1000 - ts);
+  return s < 60 ? 'just now' : s < 3600 ? Math.round(s / 60) + ' min ago' : Math.round(s / 3600) + ' h ago';
+}
+function jumpTo(x, y) { $('gx').value = x; $('gy').value = y; post('goto', { x, y }); }
+function drawArmies(ar, radar) {
+  const his = ar.filter(a => a.his), threats = ar.filter(a => a.threat);
+  const count = k => his.filter(a => a.kind === k || a.state === k).length;
+  if (!ar.length) $('his-sum').textContent = 'None of his armies seen yet' + (radar ? ' (still looking, or all at home).' : '. Press "Watch & track him".');
+  else $('his-sum').innerHTML = `<b>${his.length}</b> confirmed his` + (ar.length > his.length ? `, ${ar.length - his.length} not checked yet` : '')
+    + ` · ⛏ ${count('gathering')} farming · ➜ ${his.filter(a => /march/.test(a.state)).length} marching · ↩ ${count('going home')} going home`
+    + (threats.length ? ` · <span style="color:var(--bad);font-weight:700">⚠ ${threats.length} coming at you</span>` : '');
+  $('his-list').innerHTML = ar.map(a => `<div class="army ${a.his ? 'his' : ''} ${a.threat ? 'threat' : ''}">
+      <div class="ic">${ICON[a.state] || '◆'}</div>
+      <div><div class="what">${esc(a.state)} ${a.his ? '' : '<small>(not confirmed his)</small>'}</div>
+        <a class="xy" onclick="jumpTo(${+a.x}, ${+a.y})">X:${esc(a.x)} Y:${esc(a.y)}</a>
+        ${a.dest ? ` <small class="hint">→ ${esc(a.dest[0])}, ${esc(a.dest[1])}</small>` : ''}
+        ${a.threat ? `<div class="threat-t">⚠ ${a.threat_how === 'aimed' ? 'heading for' : 'moving close to'} ${esc(a.threat)}</div>` : ''}</div>
+      <div class="ago">${esc(ago(a.seen_ts))}<br><small>${esc(a.dist_home)} from his city</small></div></div>`).join('');
+  drawRadar(ar, radar);
+}
+function drawRadar(ar, radar) {
+  const svg = $('radar');
+  if (!radar) { svg.innerHTML = '<text x="150" y="150" text-anchor="middle" fill="#95a1b8" font-size="12">map shows once it\'s watching</text>'; return; }
+  const pts = [radar.city, ...radar.mine.map(m => [m.x, m.y]), ...ar.map(a => [a.x, a.y]), ...ar.filter(a => a.dest).map(a => a.dest)];
+  let x0 = Math.min(...pts.map(p => p[0])), x1 = Math.max(...pts.map(p => p[0]));
+  let y0 = Math.min(...pts.map(p => p[1])), y1 = Math.max(...pts.map(p => p[1]));
+  const span = Math.max(x1 - x0, y1 - y0, 20) * 1.2, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  const X = x => 150 + (x - cx) / span * 280, Y = y => 150 - (y - cy) / span * 280;   // Y up
+  let g = '<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">'
+    + '<path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>';
+  for (let i = 1; i < 6; i++) g += `<line x1="${i * 50}" y1="0" x2="${i * 50}" y2="300" stroke="#2a3550" stroke-width="0.5"/><line x1="0" y1="${i * 50}" x2="300" y2="${i * 50}" stroke="#2a3550" stroke-width="0.5"/>`;
+  for (const m of radar.mine)
+    g += `<circle cx="${X(m.x)}" cy="${Y(m.y)}" r="5" fill="#35c46a"/><text x="${X(m.x) + 7}" y="${Y(m.y) + 4}" fill="#9fe0b4" font-size="9">${esc(m.name)}</text>`;
+  g += `<rect x="${X(radar.city[0]) - 6}" y="${Y(radar.city[1]) - 6}" width="12" height="12" rx="2" fill="#ef4d5a"/>`
+     + `<text x="${X(radar.city[0]) + 9}" y="${Y(radar.city[1]) + 4}" fill="#f3a0a7" font-size="9">his city</text>`;
+  for (const a of ar) {
+    const col = a.threat ? '#ef4d5a' : a.his ? '#3aa0ff' : '#95a1b8';
+    if (a.dest) g += `<line x1="${X(a.x)}" y1="${Y(a.y)}" x2="${X(a.dest[0])}" y2="${Y(a.dest[1])}" stroke="${col}" stroke-width="1.5" stroke-dasharray="3 3" marker-end="url(#ar)"/>`;
+    g += a.kind === 'farm'
+      ? `<path d="M${X(a.x)},${Y(a.y) - 5} L${X(a.x) + 5},${Y(a.y) + 4} L${X(a.x) - 5},${Y(a.y) + 4} z" fill="${col}"/>`
+      : `<path d="M${X(a.x)},${Y(a.y) - 5} L${X(a.x) + 5},${Y(a.y)} L${X(a.x)},${Y(a.y) + 5} L${X(a.x) - 5},${Y(a.y)} z" fill="${col}"/>`;
+    g += `<title>${esc(a.state)} at ${a.x},${a.y}</title>`;
+  }
+  svg.innerHTML = g;
+}
 function jump() { post('goto', { x: $('gx').value, y: $('gy').value }); }
 function snap() { post('snap', { note: $('snap_note').value }); $('snap_note').value = ''; }
 
@@ -480,11 +548,7 @@ async function refresh() {
       <img loading="lazy" src="/snap/${encodeURIComponent(x.name)}" alt="">${esc(x.time.slice(5))} ${esc(x.tag)}</a>`).join('')
       || '<span class="hint">None yet</span>';
   }
-  const ar = st.armies || [];
-  $('armies-table').hidden = !ar.length; $('armies-none').hidden = !!ar.length;
-  $('armies').innerHTML = ar.map(a => `<tr><td>#${esc(a.id)}</td><td>${esc(a.x)}, ${esc(a.y)}</td>
-    <td>${esc(a.state)}${a.his ? '' : ' <small>(not confirmed his yet)</small>'}</td><td>${a.dest ? esc(a.dest[0]) + ', ' + esc(a.dest[1]) : '-'}</td>
-    <td>${esc(a.last_seen)}</td></tr>`).join('');
+  drawArmies(st.armies || [], st.radar);
   const lg = $('log'), atEnd = lg.scrollTop + lg.clientHeight >= lg.scrollHeight - 5;
   lg.textContent = st.log.join('\n'); if (atEnd) lg.scrollTop = lg.scrollHeight;
   if (st.look && st.look.time !== lastLook) {
@@ -509,7 +573,7 @@ async function loadPhone() {
     const main = document.querySelector('main');
     const find = t => [...main.children].find(sec => sec.querySelector('h2')?.textContent.includes(t));
     ['Alerts to your phone', 'Who to watch', 'Connect to the game', 'Set up the zoom', 'Recent alerts',
-     'Watch', 'Live view'].forEach(t => { const sec = find(t); if (sec) main.prepend(sec); });
+     'Watch', 'Live view', 'His armies'].forEach(t => { const sec = find(t); if (sec) main.prepend(sec); });
     return;
   }
   phoneInfo = ph; drawRoute();

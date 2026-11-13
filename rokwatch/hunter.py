@@ -347,6 +347,19 @@ class Tracker:
                     best, best_off = name, off
         return best
 
+    def threat(self, a: Army):
+        """(spot name, how) when this army looks like it's coming for one of your spots:
+        'aimed' (its march points at it) or 'close' (its march ends near it)."""
+        if a.kind == "farm" or not a.moving or a.direction == "home":
+            return None
+        if a.ends:
+            hit = next((self._site_near(e) for e in a.ends if self._site_near(e)), None)
+            hit = hit or self._route_points_at(a.ends) or self.target_of(a)
+            if hit:
+                return hit, "aimed"
+        close = self._close_to(a)
+        return (close[0], "close") if close else None
+
     def summary(self, include=None):
         include = include or (lambda a: a.owner in (None, "him"))
 
@@ -358,12 +371,25 @@ class Tracker:
             if a.kind == "farm":
                 return "gathering"
             return "at his city" if self.at_home(a.tile) else "parked / gathering"
-        return [{"id": a.id, "x": round(a.tile[0]), "y": round(a.tile[1]), "state": state(a),
-                 "dest": [round(a.dest[0]), round(a.dest[1])] if a.dest else None,
-                 "last_seen": datetime.fromtimestamp(a.last_seen).strftime("%H:%M:%S"),
-                 "his": a.owner == "him", "kind": a.kind}
-                for a in self.armies if include(a)]
+        out = []
+        for a in self.armies:
+            if not include(a):
+                continue
+            th = self.threat(a)
+            out.append({"id": a.id, "x": round(a.tile[0]), "y": round(a.tile[1]), "state": state(a),
+                        "dest": [round(a.dest[0]), round(a.dest[1])] if a.dest else None,
+                        "last_seen": datetime.fromtimestamp(a.last_seen).strftime("%H:%M:%S"),
+                        "seen_ts": a.last_seen, "his": a.owner == "him", "kind": a.kind,
+                        "threat": th[0] if th else None, "threat_how": th[1] if th else None,
+                        "dist_home": round(math.dist(a.tile, self.city))})
+        # the dangerous ones first, then his confirmed ones, nearest to you first
+        out.sort(key=lambda r: (r["threat"] is None, not r["his"], r["dist_home"]))
+        return out
 
+    def map_info(self):
+        """For the panel's little map: his city and your spots."""
+        return {"city": [round(self.city[0]), round(self.city[1])],
+                "mine": [{"name": n, "x": round(p[0]), "y": round(p[1])} for n, p in self.my_sites]}
 
 # ---------------------------------------------------------------- the hunter
 

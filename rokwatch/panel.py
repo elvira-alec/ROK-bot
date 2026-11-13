@@ -273,7 +273,7 @@ class Panel:
             "can_self_update": updater.can_self_update(),
             "phase": st.phase, "message": st.message, "round": st.round,
             "last_site": st.last_site, "alerts": st.alerts, "look": st.look,
-            "armies": st.armies,
+            "armies": st.armies, "radar": st.radar,
             "snaps": snapshots.listing(limit=24),
             "progress": st.progress, "doing": st.doing,
             "live": self.live_id(),

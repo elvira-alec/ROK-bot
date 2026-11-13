@@ -44,6 +44,7 @@ class Status:
     look: dict | None = None                     # result of the last "what do you see"
     armies: list = field(default_factory=list)   # his armies, from the last hunt sweep
     snaps: int = 0                               # snapshots saved this session
+    radar: dict | None = None                    # his city + your spots, for the panel map
     progress: list | None = None                 # [done, total] of the current job
     doing: str = ""                              # what it's doing right now (short)
 
@@ -377,6 +378,7 @@ class Worker:
             mode = {"sweep": "Searching", "track": "Tracking", "base": "Watching his city"}.get(hunter.mode, "")
             self.status.doing = (mode + ": " if mode and not doing.startswith(mode) else "") + doing
             self.status.armies = hunter.tracker.summary()
+            self.status.radar = hunter.tracker.map_info()
             self._maybe_sample_quick()
         hunter.on_progress = prog
         notifier = Notifier.from_config(cfg.get("notify", {}))
