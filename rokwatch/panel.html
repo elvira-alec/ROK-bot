@@ -232,6 +232,20 @@
     </div>
   </section>
 
+  <section id="upd-box">
+    <h2>⬆ Updates</h2>
+    <p id="upd-info" style="margin:0">-</p>
+    <div class="row">
+      <button class="primary" onclick="checkNow()">Check for updates now</button>
+    </div>
+    <label for="update_every">Check by itself every <b id="update_every_v">30</b> minutes</label>
+    <input type="range" id="update_every" min="5" max="240" step="5" value="30"
+           oninput="$('update_every_v').textContent = this.value" onchange="save()">
+    <p class="hint">When a new version is found, a blue bar appears at the very top of this page. When nothing is
+      being watched it installs by itself after a minute (press "Not now" to stop that); while watching, it waits
+      for you to press "Update now".</p>
+  </section>
+
   <section id="snap-box">
     <h2>📸 Snapshots (pictures to send Claude)</h2>
     <p class="hint">Saves exactly what the bot sees, plus what it read from it. Save one whenever the bot gets
@@ -335,6 +349,18 @@ async function updateNow() {
   if (r.ok) showUpdating(r.version);
   else toast(r.message || 'Update failed', 'bad');
 }
+async function checkNow() {
+  const btn = document.activeElement; busy(btn, true);
+  try {
+    const r = await (await fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                 body: '{"action":"check"}' })).json();
+    const res = (r.status && r.status.result) || '';
+    toast(r.update ? `Version ${r.update.version} is available: see the blue bar at the top` : 'Checked: ' + res,
+          r.update ? 'good' : (/couldn/.test(res) ? 'bad' : ''));
+    if (r.update) window.scrollTo({ top: 0, behavior: 'smooth' });
+  } catch { toast("The bot isn't answering", 'bad'); }
+  busy(btn, false); refresh();
+}
 async function updateLater() {
   await fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"action":"later"}' });
   refresh();
@@ -374,6 +400,7 @@ async function loadSettings() {
   $('auto_recall').checked = !!s.auto_recall;
   $('panel_on_phone').checked = !!s.panel_on_phone;
   $('snap_every').value = s.snap_every ?? 10;
+  $('update_every').value = s.update_every || 30; $('update_every_v').textContent = $('update_every').value;
   $('recall_scope').value = s.recall_scope === 'all' ? 'all' : 'threatened';
   sites = (s.sites || []).map(x => ({ ...x }));
   drawSites();
@@ -388,6 +415,7 @@ async function save() {
       player_name: $('player_name').value, hunt_radius: $('hunt_radius').value,
       ...($('hunt_x').value && $('hunt_y').value ? { hunt_city: [$('hunt_x').value, $('hunt_y').value] } : {}),
       panel_on_phone: $('panel_on_phone').checked, snap_every: $('snap_every').value,
+      update_every: $('update_every').value,
       recall_scope: $('recall_scope').value }) });
   await loadSettings(); refresh(); loadPhone();
   toast('Saved ✓', 'good');
@@ -402,6 +430,10 @@ async function refresh() {
   $('ver').textContent = st.version && st.version !== 'dev' ? 'v' + st.version : '';
   if (updatingTo && st.version === updatingTo) { location.reload(); return; }   // new version is up
   if (st.updating) showUpdating(st.updating);
+  const us = st.update_status || {};
+  $('upd-info').innerHTML = `You have version <b>${esc(st.version)}</b>. `
+    + (us.time ? `Last checked ${esc(us.time)}: ${esc(us.result)}.` : 'Not checked yet.')
+    + (st.can_self_update === false ? ' <span class="hint">(This copy can\'t update itself: it isn\'t the Windows program.)</span>' : '');
   const u = st.update;
   $('upd').hidden = !u || !!st.updating;
   if (u && !st.updating) {
@@ -475,7 +507,7 @@ async function loadPhone() {
     const main = document.querySelector('main');
     const find = t => [...main.children].find(sec => sec.querySelector('h2')?.textContent.includes(t));
     ['Log', 'Places to watch', 'Alerts and game page', 'When is he active?', 'Hunt his armies',
-     'Check it works', 'Snapshots', 'Recent alerts', 'Run it', 'Live view'].forEach(t => { const sec = find(t); if (sec) main.prepend(sec); });
+     'Check it works', 'Updates', 'Snapshots', 'Recent alerts', 'Run it', 'Live view'].forEach(t => { const sec = find(t); if (sec) main.prepend(sec); });
     return;
   }
   phoneInfo = ph; drawRoute();

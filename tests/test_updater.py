@@ -63,3 +63,25 @@ def test_source_copy_says_download(tmp_path, monkeypatch):
     p.check_for_update()
     monkeypatch.setattr(updater, "can_self_update", lambda: False)
     assert "download it from GitHub" in p.install_update()
+
+
+def test_status_shows_result_and_errors(tmp_path, monkeypatch):
+    p = make(tmp_path, monkeypatch, current="1.1", latest="1.1")
+    p.check_for_update()
+    assert p.state()["update_status"]["result"].startswith("up to date")
+
+    def boom(timeout=10):
+        raise OSError("no internet")
+    monkeypatch.setattr(updater, "latest_release", boom)
+    p.check_for_update()
+    st = p.state()["update_status"]
+    assert "couldn't check" in st["result"] and "no internet" in st["result"] and st["time"]
+
+
+def test_check_interval_setting(tmp_path, monkeypatch):
+    p = make(tmp_path, monkeypatch)
+    assert p.check_every() == 30
+    p.save({"update_every": "90"})
+    assert p.check_every() == 90 and p.settings()["update_every"] == 90
+    p.save({"update_every": 1})
+    assert p.check_every() == 5                              # at least every 5 minutes

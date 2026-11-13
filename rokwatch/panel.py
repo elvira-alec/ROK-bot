@@ -45,6 +45,7 @@ EDITABLE = {
     "hunt_radius": "hunt.radius",
     "snap_every": "snapshots.every_minutes",
     "hunt_city": "hunt.city",
+    "update_every": "updates.check_minutes",
 }
 
 
@@ -81,21 +82,38 @@ class Panel:
         self.update_at = None       # when it installs by itself (None = waiting for you)
         self.updating = None        # version being installed
         self.last_request = 0.0
+        self.update_status = {"time": None, "result": "not checked yet"}
+        self.next_check = 0.0
+
+    def check_every(self) -> float:
+        """Minutes between update checks (setting, 5 to 240)."""
+        try:
+            return max(5.0, min(240.0, float(_get(config.load(self.cfg_path), "updates.check_minutes") or 30)))
+        except (TypeError, ValueError):
+            return 30.0
 
     # ------------------------------------------------------------ updates
     def check_for_update(self):
+        self.update_status["time"] = time.strftime("%H:%M:%S")
         try:
             info = updater.latest_release()
         except Exception as e:
-            log.debug("update check failed: %s", e)
+            log.warning("Update check failed: %s", e)
+            self.update_status["result"] = f"couldn't check: {e}"
             return None
-        if info and updater.newer(info["version"], self.version):
+        if not info:
+            self.update_status["result"] = "no releases found on GitHub"
+            return None
+        if updater.newer(info["version"], self.version):
+            self.update_status["result"] = f"version {info['version']} is available"
             if not self.update or self.update["version"] != info["version"]:
                 log.info("Version %s is available (you have %s)", info["version"], self.version)
                 self.update = info
                 busy = self.worker.status.phase in ("patrolling", "busy", "opening")
                 # installs by itself in a minute unless you're running something
                 self.update_at = None if busy else time.time() + 60
+        else:
+            self.update_status["result"] = f"up to date (newest is {info['version']})"
         return self.update
 
     def update_tick(self):
@@ -181,6 +199,7 @@ class Panel:
         out["close_notches"] = _get(cfg, "hunt.close_notches")
         out["panel_on_phone"] = bool(_get(cfg, "panel_on_phone"))
         out["targets"] = _get(cfg, "targets") or []
+        out["update_every"] = out["update_every"] or 30
         if not out["hunt_city"]:                      # older setups: his city from the places list
             enemy = next((x for x in (_get(cfg, "patrol.sites") or []) if x.get("kind") == "enemy"), None)
             out["hunt_city"] = [enemy["x"], enemy["y"]] if enemy else None
@@ -206,6 +225,11 @@ class Panel:
                         v = [int(v[0]), int(v[1])]
                     except (TypeError, ValueError, IndexError, KeyError):
                         continue
+                elif k == "update_every":
+                    try:
+                        v = int(max(5, min(240, float(v))))
+                    except (TypeError, ValueError):
+                        v = 30
                 elif k == "snap_every":
                     try:
                         v = max(0, min(240, float(v)))
@@ -244,6 +268,8 @@ class Panel:
             "update": self.update,
             "update_in": max(0, int(self.update_at - time.time())) if self.update_at else None,
             "updating": self.updating,
+            "update_status": self.update_status,
+            "can_self_update": updater.can_self_update(),
             "phase": st.phase, "message": st.message, "round": st.round,
             "last_site": st.last_site, "alerts": st.alerts, "look": st.look,
             "armies": st.armies,
@@ -441,7 +467,9 @@ def make_handler(panel: Panel, port_holder=None):
                     return self._send(200, {"ok": True})
                 if data.get("action") == "check":
                     info = panel.check_for_update()
-                    return self._send(200, {"ok": True, "update": info})
+                    panel.next_check = time.time() + panel.check_every() * 60
+                    return self._send(200, {"ok": True, "update": info,
+                                            "status": panel.update_status})
                 msg = panel.install_update()
                 return self._send(200, {"ok": msg == "Updating", "message": msg,
                                         "version": panel.updating})
@@ -465,13 +493,12 @@ def make_handler(panel: Panel, port_holder=None):
     return H
 
 
-def _update_loop(panel, every=1800):
+def _update_loop(panel):
     time.sleep(5)
-    nxt = 0.0
     while True:
-        if time.time() >= nxt:
+        if time.time() >= panel.next_check:
             panel.check_for_update()
-            nxt = time.time() + every
+            panel.next_check = time.time() + panel.check_every() * 60
         panel.update_tick()
         time.sleep(1)
 
