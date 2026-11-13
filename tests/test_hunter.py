@@ -148,7 +148,7 @@ def test_finds_his_armies_with_map_coordinates(game, tmp_path):
     js(game, f"sim.farmer('{NAME}', [155, 368]); sim.farmer('{NAME}', [172, 371]);"
              "sim.farmer('[XX]Someone Else', [165, 380])")
     h = hunter(game, tmp_path)
-    seen, stops = h.sweep()
+    seen, stops, *_ = h.sweep()
     tiles = sorted(s.tile for s in seen)
     assert len(tiles) == 2, tiles                     # his two, not the other player's
     for got, want in zip(tiles, [(155, 368), (172, 371)]):
@@ -182,7 +182,7 @@ def test_full_story(game, tmp_path):
 def test_bigger_area_takes_several_stops(game, tmp_path):
     js(game, f"sim.farmer('{NAME}', [130, 400])")      # off the first screen
     h = hunter(game, tmp_path, radius=45)
-    seen, stops = h.sweep()
+    seen, stops, *_ = h.sweep()
     assert stops > 1
     assert any(math.dist(s.tile, (130, 400)) < 1.5 for s in seen), [s.tile for s in seen]
 

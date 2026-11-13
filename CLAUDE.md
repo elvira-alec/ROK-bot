@@ -122,6 +122,16 @@ boxes, the user's snapshots including the Spanish photos).
 - The PowerShell updater was silently blocked. Fix: the separate updater exe.
 - The GitHub API rate limit. Fix: use the web redirect.
 - A 5 s idle pause between rounds. Removed.
+- Blind tap in the middle of the screen when no farm badge was found clicked **his city**.
+  Now it only taps a red badge near the middle.
+- Zoom steps waited up to 2 s each for a perfectly still picture (the map never is). Now
+  "nearly still", capped at 0.7 s; lost steps are caught by the switch-point check.
+- The same farm checked over and over: its zoomed-out estimate drifts a few tiles. Farms now
+  match within 5 tiles, or by their exact X:Y.
+- The first sweep restarted from the start after any problem (looping on the farms next to
+  his base). Now it carries on where it stopped and skips a bad spot.
+- After checking something it went straight on and ignored new things on screen. Now it
+  looks again and checks those too.
 
 ## 5. Open work / to verify in the real game
 

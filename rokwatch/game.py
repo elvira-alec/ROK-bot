@@ -203,22 +203,19 @@ class Game:
         """Share of the picture that's different (marching icons are only a few pixels)."""
         return float(np.mean(np.abs(a - b) > 12))
 
-    def _settled(self, timeout=2.0, min_wait=0.22):
-        """Wait until the zoom animation has completely finished (the picture is still
-        on two looks in a row), so the next notch can't get lost."""
+    def _settled(self, timeout=0.7, min_wait=0.15):
+        """Wait until the zoom step has finished: the picture has (nearly) stopped
+        changing. The real map always has something moving (water, flags, marches), so
+        'nearly' - a zoom step changes far more. Capped; a step that does get lost is
+        caught by the switch-point check."""
         time.sleep(min_wait)
         prev = self._small()
-        still = 0
         end = time.time() + timeout
         while time.time() < end:
-            time.sleep(0.1)
+            time.sleep(0.07)
             cur = self._small()
-            if self._changed(cur, prev) < 0.002:
-                still += 1
-                if still >= 2:
-                    return cur
-            else:
-                still = 0
+            if self._changed(cur, prev) < 0.012:
+                return cur
             prev = cur
         return prev
 
@@ -412,17 +409,18 @@ class Game:
             pass
         return v
 
-    def fresh_frame(self, max_wait=0.6):
-        """The picture as soon as it has finished drawing after a move: grab every ~50 ms
-        and take the first one that matches the previous (icons loaded, map still)."""
+    def fresh_frame(self, max_wait=0.4):
+        """The picture as soon as it has finished drawing after a move: grab every ~40 ms
+        and take the first one that (nearly) matches the previous - icons loaded, map
+        still (water and marches always move a little)."""
         f = self.frame()
         prev = self._small(f)
         end = time.time() + max_wait
         while time.time() < end:
-            time.sleep(0.05)
+            time.sleep(0.04)
             g = self.frame()
             cur = self._small(g)
-            if self._changed(cur, prev) < 0.003:
+            if self._changed(cur, prev) < 0.01:
                 return g
             f, prev = g, cur
         return f

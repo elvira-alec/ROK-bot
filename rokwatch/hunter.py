@@ -93,6 +93,13 @@ def _speed(a):
     return math.dist(p0, p1) / ((t1 - t0) / 60)
 
 
+def same_spot(a, b) -> bool:
+    """Two sightings in one round of the same thing: close together (marching ones may
+    have moved on a few tiles between the two looks)."""
+    lim = 8.0 if (a.moving or b.moving or getattr(a, "unsure", False) or getattr(b, "unsure", False)) else 4.0
+    return a.kind == b.kind and math.dist(a.tile, b.tile) <= lim
+
+
 def _r(x):
     return round(x, 1) if x is not None else None
 
@@ -211,15 +218,23 @@ class Tracker:
         for s in sorted(sightings, key=lambda s: s.tile):
             same = [a for a in unmatched if a.kind == getattr(s, "kind", "army")]
             # compare with where each one should be by now (marching ones move on)
-            best = min(same, key=lambda a: math.dist(predict(a, now), s.tile), default=None)
+            def where(a):
+                if a.kind == "farm" and a.info and a.info.get("xy"):
+                    # its exact X:Y or where the zoomed-out view put it, whichever is closer
+                    xy = tuple(a.info["xy"])
+                    return xy if math.dist(xy, s.tile) < math.dist(a.tile, s.tile) else a.tile
+                return predict(a, now)
+            best = min(same, key=lambda a: math.dist(where(a), s.tile), default=None)
             if getattr(s, "kind", "army") == "farm":
-                limit = 3.0          # farms don't move and sit close together: same spot only
+                # farms don't move; the zoomed-out estimate drifts a few tiles with where the
+                # camera is, so allow that (two farms seen together still pair up correctly)
+                limit = 5.0
             elif best is not None and best.moving:
                 # the longer since it was seen, the further it may be off the prediction
                 limit = self.match_dist + 0.5 * (_speed(best) or DEFAULT_SPEED) * (now - best.last_seen) / 60
             else:
                 limit = self.match_dist
-            if best and math.dist(predict(best, now), s.tile) <= limit:
+            if best and math.dist(where(best), s.tile) <= limit:
                 unmatched.remove(best)
                 a, prev_tile, prev_moving = best, best.tile, best.moving
             else:
@@ -265,7 +280,8 @@ class Tracker:
                     # simply isn't there any more
                     # stays put: gone after two looks without it; marching: also searched
                     # once more further along its line before giving up on it
-                    (gone if a.missed >= 2 else current).append(a)
+                    # (other players' armies: no second look, we don't follow them)
+                    (gone if a.missed >= 2 or a.owner == "other" else current).append(a)
                 elif now - a.last_seen < 900:
                     current.append(a)
             self.gone = gone
@@ -545,6 +561,8 @@ class Hunter:
         self.last_round = None
         self._scale_checked = 0.0
         self._last_refresh = 0.0
+        self._sweep_left: list = []        # sweep spots still to do (carried over between rounds)
+        self._sweep_total = 0
         from .farms import FarmBook
         self.farms = FarmBook()
         self.focus: dict = {}          # army id -> {"follow", "alert_moves", "alert_home"} (panel)
@@ -753,13 +771,14 @@ class Hunter:
             self.game.check_stop()
             f = self.game.frame()
             H, W = f.shape[:2]
-            badges = screen.find_gather_badges(f)
-            if badges:
-                bx, by = min(badges, key=lambda b: math.dist(b, (W / 2, H / 2)))
-                tap = (bx, int(by + 0.045 * H))          # the camp just under its badge
-            else:
-                tap = (W // 2, H // 2)
-            if self._read_farm_box(a, tap):
+            badges = [b for b in screen.find_gather_badges(f)
+                      if math.dist(b, (W / 2, H / 2)) < 0.3 * H]     # the farm we jumped to
+            if not badges:
+                # never tap blindly: near his base the middle of the screen is his city
+                time.sleep(0.15)
+                continue
+            bx, by = min(badges, key=lambda b: math.dist(b, (W / 2, H / 2)))
+            if self._read_farm_box(a, (bx, int(by + 0.045 * H))):   # the camp just under its badge
                 return
         log.info("hunt: couldn't open the resource point at %.0f,%.0f", a.tile[0], a.tile[1])
         self.game.close_popups()
@@ -910,42 +929,64 @@ class Hunter:
                 return True
         return False
 
-    def sweep(self, stop=None) -> tuple[list[ArmySeen], int]:
-        """Visit every point of the sweep grid. Returns (sightings, points visited)."""
+    def sweep(self, stop=None):
+        """Visit the sweep grid around his city. Carries on where it stopped last time
+        (a problem at one spot doesn't make it start over). Returns
+        (sightings, spots visited, what was on screen, finished)."""
         if self.ready():
             raise RuntimeError("; ".join(self.ready()))
-        v0 = self.game.look()
+        from .game import Stopped
+        if not self._sweep_left:
+            shape = self.game.frame().shape
+            self._sweep_left = list(sweep_points(self.city, self.radius, self.axes, shape))
+            self._sweep_total = len(self._sweep_left)
         seen: list[ArmySeen] = []
+        covered = []
         visited = 0
-        pts = list(sweep_points(self.city, self.radius, self.axes, v0.frame.shape))
-        for i, pt in enumerate(pts):
+        while self._sweep_left:
             if stop and stop():
                 break
-            self._progress(i, len(pts), f"Sweeping around his city: spot {i + 1} of {len(pts)} ({pt[0]},{pt[1]})")
-            # nearby spots: drag the map (quick); far ones: type the coordinates
-            t0 = time.time()
-            moved = (self.game.pan_to(*pt, self.axes) if self.method == "zoomed_out"
-                     else self.game.goto(*pt))
-            self.timing["move"] += time.time() - t0
-            if not moved:
-                log.warning("hunt: couldn't jump to %s", pt)
-                continue
-            visited += 1
-            if self.method == "zoomed_out":
-                view, sightings = self.look_spot()
-            else:
-                view = self.game.look()
-                self._dangers(view)
-                sightings = self.read_view(view)
-            here = []
-            for s in sightings:
-                # the same army seen from two overlapping stops: keep one
-                if all(math.dist(s.tile, o.tile) > 4 for o in seen):
-                    seen.append(s)
-                    here.append(s)
-            if self.method == "zoomed_out":
-                self._check_new_here(here)
-        return seen, visited
+            pt = self._sweep_left[0]
+            i = self._sweep_total - len(self._sweep_left)
+            self._progress(i, self._sweep_total,
+                           f"Searching around his city: spot {i + 1} of {self._sweep_total} ({pt[0]},{pt[1]})")
+            try:
+                t0 = time.time()
+                moved = (self.game.pan_to(*pt, self.axes) if self.method == "zoomed_out"
+                         else self.game.goto(*pt))
+                self.timing["move"] += time.time() - t0
+                if not moved:
+                    log.warning("hunt: couldn't get to %s", pt)
+                    self._sweep_left.pop(0)
+                    continue
+                if self.method == "zoomed_out":
+                    view, sightings = self.look_spot()
+                else:
+                    view = self.game.look()
+                    self._dangers(view)
+                    sightings = self.read_view(view)
+                visited += 1
+                if view.camera:
+                    covered.append(self._on_screen(view.camera[1:3], view.frame.shape))
+                here = [s for s in sightings if not any(same_spot(s, o) for o in seen)]
+                seen += here
+                if self.method == "zoomed_out":
+                    for s2, cov in self._check_new_here(here):
+                        seen += [s for s in s2 if not any(same_spot(s, o) for o in seen)]
+                        covered.append(cov)
+            except Stopped:
+                raise
+            except Exception as e:
+                log.warning("hunt: problem at %s (%s); skipping that spot", pt, e)
+                try:
+                    self.game.close_popups()
+                    self.zoom_out()
+                except Stopped:
+                    raise
+                except Exception:
+                    pass
+            self._sweep_left.pop(0)
+        return seen, visited, covered, not self._sweep_left
 
     def _dangers(self, view):
         self._dangers_frame(view.frame)
@@ -959,6 +1000,8 @@ class Hunter:
         """sweep: search the whole area around his city (first time and every few minutes);
         track: follow the armies of his we know about (+ a look at his city);
         base: none of his armies out: keep an eye on his city."""
+        if self._sweep_left:                # a search that was cut short: carry on with it
+            return "sweep"
         if self.method != "zoomed_out" or not self._last_full or self._need_sweep or \
                 now - self._last_full >= self.full_sweep_every:
             return "sweep"
@@ -1019,12 +1062,11 @@ class Hunter:
                 continue
             shape = view.frame.shape
             covered.append(self._on_screen(view.camera[1:3], shape))
-            here = []
-            for s in sightings:
-                if all(math.dist(s.tile, o.tile) > 4 for o in seen):
-                    seen.append(s)
-                    here.append(s)
-            self._check_new_here(here)
+            here = [s for s in sightings if not any(same_spot(s, o) for o in seen)]
+            seen += here
+            for s2, cov in self._check_new_here(here):
+                seen += [s for s in s2 if not any(same_spot(s, o) for o in seen)]
+                covered.append(cov)
         return seen, covered
 
     def _on_screen(self, cam, shape):
@@ -1039,12 +1081,35 @@ class Hunter:
             return 0.14 * W < px < 0.88 * W and 0.12 * H < py < 0.84 * H
         return visible
 
-    def _check_new_here(self, found):
+    def _check_new_here(self, found, again=2):
         """Armies / farms just seen that aren't known yet: find out whose they are right
-        away (zoom in, check, zoom back out), before moving on."""
+        away (zoom in, check, zoom back out), then look again where it is now and do the
+        same for anything new on screen. Returns [(sightings, on-screen test)] of those
+        extra looks."""
+        extra = []
+        new = self._unknown(found)
+        while new:
+            t0 = time.time()
+            self.identify(new, limit=6)
+            self.timing["check"] += time.time() - t0
+            if again <= 0:
+                break
+            again -= 1
+            view, seen2 = self.look_spot()        # what's on screen now (e.g. more farms)
+            if not view.camera:
+                break
+            extra.append((seen2, self._on_screen(view.camera[1:3], view.frame.shape)))
+            done = list(new)
+            new = [s for s in self._unknown(seen2) if not any(same_spot(s, d) for d in done)]
+        return extra
+
+    def _unknown(self, found):
+        """Of these sightings, the ones whose owner isn't known yet (and worth checking)."""
         known = [a for a in self.tracker.armies if a.owner]
         new = []
         for s in found:
+            if math.dist(s.tile, self.city) < 3.5:  # his city itself: never clicked on
+                continue
             # on a march line that starts or ends at his city: his (leaving or coming home) -
             # no need to zoom in for that
             if s.moving and s.ends and any(self.tracker.at_home(e) for e in s.ends):
@@ -1059,10 +1124,7 @@ class Hunter:
                 s.owner = k.owner
                 continue
             new.append(s)
-        if new:
-            t0 = time.time()
-            self.identify(new, limit=4)
-            self.timing["check"] += time.time() - t0
+        return new
 
     def round(self, stop=None) -> list[Alert]:
         now = time.time()
@@ -1085,8 +1147,10 @@ class Hunter:
         self.mode = self.plan(now)
         covered = None
         if self.mode == "sweep":
-            sightings, visited = self.sweep(stop)
-            self._last_full = now
+            sightings, visited, covered, finished = self.sweep(stop)
+            if finished:
+                self._last_full = now
+                covered = None             # the whole area was looked at
         else:
             frame = self.game.frame()
             pts = self.track_points(now, frame.shape) if self.mode == "track" else [tuple(self.city)]

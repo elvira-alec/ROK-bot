@@ -4,6 +4,7 @@ point's box (tap it at the close zoom). Real screenshots in real_screens/gather.
 from pathlib import Path
 
 import math
+import time
 
 import cv2
 import pytest
@@ -371,3 +372,74 @@ def test_how_long_hes_been_gathering_from_the_full_amount():
     assert farms.parse_kind("Level 3 Stone Deposit") == ("stone", 3)
     assert farms.full_amount("Level 3 Stone Deposit") == 354_375
     assert farms.full_amount("Level 2 Gold Deposit") == 105_000
+
+
+def _bare_hunter(tmp_path):
+    h = Hunter(Game(Clicky(), settle=0), {"hunt": {"player_name": NAME, "city": [162, 374], "radius": 25},
+                                          "patrol": {"axes": [[0.012, 0.004], [-0.004, 0.012]]}},
+               [], str(tmp_path / "h.csv"))
+    return h
+
+
+def test_sweep_carries_on_after_a_bad_spot_and_resumes(tmp_path):
+    from rokwatch.game import View
+    import numpy as np
+    h = _bare_hunter(tmp_path)
+    frame = np.zeros((1042, 1852, 3), np.uint8)
+    h.game.frame = lambda: frame
+    visits = []
+
+    def pan(x, y, axes, **k):
+        visits.append((x, y))
+        if len(visits) == 2:
+            raise RuntimeError("something went wrong here")
+        return True
+    h.game.pan_to = pan
+    h.game.close_popups = lambda: True
+    h.zoom_out = lambda: True
+    h.look_spot = lambda: (View(frame, [], (4183, 160, 370), True), [])
+    calls = {"n": 0}
+    stop = lambda: calls.__setitem__("n", calls["n"] + 1) or calls["n"] > 3   # stop after 3 spots
+    seen, visited, covered, finished = h.sweep(stop)
+    total = h._sweep_total
+    assert not finished and visited == 2 and len(h._sweep_left) == total - 3   # bad spot skipped, not restarted
+    assert h.plan(time.time()) == "sweep"                                      # carries on next round
+    seen, visited, covered, finished = h.sweep()
+    assert finished and len(visits) == total and h._sweep_left == []
+
+
+def test_drifted_farm_estimate_is_still_the_same_farm_and_his_city_is_never_checked(tmp_path):
+    from rokwatch.hunter import ArmySeen, Tracker
+    t = Tracker((162, 374), [])
+    t.match([ArmySeen((170.0, 390.0), False, None, 0, kind="farm")], 0)
+    t.armies[0].owner, t.armies[0].info = "him", {"xy": [171, 391]}
+    t.match([ArmySeen((174.5, 392.0), False, None, 60, kind="farm")], 60)    # estimate drifted ~4.5
+    assert len(t.armies) == 1 and t.armies[0].owner == "him"
+    h = _bare_hunter(tmp_path)
+    at_city = ArmySeen((162.5, 374.5), False, None, 0, kind="army")
+    farm = ArmySeen((180.0, 380.0), False, None, 0, kind="farm")
+    assert h._unknown([at_city, farm]) == [farm]
+
+
+def test_after_checking_it_looks_again_and_checks_what_else_is_there(tmp_path):
+    from rokwatch.game import View
+    from rokwatch.hunter import ArmySeen
+    import numpy as np
+    h = _bare_hunter(tmp_path)
+    frame = np.zeros((1042, 1852, 3), np.uint8)
+    checked = []
+
+    def identify(armies, limit=None):
+        for a in armies:
+            a.owner = "him"
+            checked.append(a.tile)
+        return len(armies)
+    h.identify = identify
+    more = [ArmySeen((175.0, 360.0), False, None, 0, kind="farm"), ArmySeen((178.0, 356.0), False, None, 0, kind="farm")]
+    looks = iter([(View(frame, [], (4183, 175, 365), True), more),
+                  (View(frame, [], (4183, 175, 365), True), [])])
+    h.look_spot = lambda: next(looks)
+    first = ArmySeen((176.0, 372.0), False, None, 0, kind="farm")
+    extra = h._check_new_here([first])
+    assert checked == [(176.0, 372.0), (175.0, 360.0), (178.0, 356.0)]     # the two above too
+    assert len(extra) == 2
