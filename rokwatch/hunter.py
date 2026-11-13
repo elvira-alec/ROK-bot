@@ -190,6 +190,7 @@ class Tracker:
             a.kind = getattr(s, "kind", "army")
             if a.owner is None and getattr(s, "owner", None):
                 a.owner = s.owner
+            a.checks = max(a.checks, getattr(s, "checks", 0))
             a.history.append((now, s.tile))
             if s.moving and s.ends:
                 a.direction, a.dest = self._direction(a, prev_tile, prev_moving, s)
