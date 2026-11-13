@@ -132,6 +132,13 @@ boxes, the user's snapshots including the Spanish photos).
   his base). Now it carries on where it stopped and skips a bad spot.
 - After checking something it went straight on and ignored new things on screen. Now it
   looks again and checks those too.
+- The mouse left resting on the map after a tap or drag opened name cards and menus under
+  it, and a short closing drag counted as a long-press on his city. Now the mouse moves to
+  the top bar after every action, and the closing drag is long (12% of the height).
+- Reading the user's troop spots read the whole screen per troop (1-3 s each). Now it reads
+  only the troop's info box.
+- Unconfirmed armies were followed but hidden from the list. Now everything it follows is
+  listed, and after 3 failed checks it stops following them.
 
 ## 5. Open work / to verify in the real game
 

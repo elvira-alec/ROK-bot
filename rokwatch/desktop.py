@@ -226,9 +226,19 @@ class DesktopWindow:
             frame = frame[ay:ay + ah, ax:ax + aw]
         return frame
 
+    def _park(self):
+        """Move the mouse off the map (onto the top bar) so hovering doesn't open a name
+        card / menu under it."""
+        try:
+            wx, wy, w, h = self.rect()
+            self._pg.moveTo(wx + int(w * 0.5), wy + 4)
+        except Exception:
+            pass
+
     def click(self, x, y):
         self._front()
         self._pg.click(*self._abs(x, y))
+        self._park()
 
     def press(self, key):
         self._front()
@@ -265,3 +275,4 @@ class DesktopWindow:
         self._pg.moveTo(*self._abs(x1, y1), duration=0.18)
         time.sleep(0.1)               # hold still before letting go: no fling / drift
         self._pg.mouseUp()
+        self._park()

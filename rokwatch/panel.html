@@ -460,7 +460,7 @@ function drawArmies(ar, radar) {
     + (threats.length ? ` · <span style="color:var(--bad);font-weight:700">${ico('alert')} ${threats.length} coming at you</span>` : '');
   $('his-list').innerHTML = ar.map(a => `<div class="army ${a.his ? 'his' : ''} ${a.threat ? 'threat' : ''}">
       <div class="ic">${ico(ICON[a.state] || 'diamond')}</div>
-      <div><div class="what">${esc(a.state)} ${a.his ? '' : '<small>(not confirmed his)</small>'}</div>
+      <div><div class="what">${esc(a.state)} ${a.his ? '' : a.checks ? `<small>(not confirmed his yet: ${a.checks} check${a.checks > 1 ? 's' : ''} failed)</small>` : '<small>(checking whose it is)</small>'}</div>
         <a class="xy" onclick="jumpTo(${+a.x}, ${+a.y})">X:${esc(a.x)} Y:${esc(a.y)}</a>
         ${a.dest ? ` <small class="hint">${ico('arrow')} ${esc(a.dest[0])}, ${esc(a.dest[1])}</small>` : ''}
         ${a.info && (a.info.what || a.info.reserves) ? `<div class="detail">${esc(a.info.what || '')}${a.info.reserves ? ' · ' + a.info.reserves.toLocaleString() + ' left' : ''}</div>` : ''}

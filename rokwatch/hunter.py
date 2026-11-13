@@ -451,7 +451,7 @@ class Tracker:
 
     def summary(self, include=None):
         # his, plus ones not checked yet; ones checked without finding his name are left out
-        include = include or (lambda a: a.owner == "him" or (a.owner is None and a.checks == 0))
+        include = include or (lambda a: a.owner == "him" or (a.owner is None and a.checks < 3))
 
         def state(a):
             if a.moving:
@@ -474,6 +474,7 @@ class Tracker:
                         "dest": [round(a.dest[0]), round(a.dest[1])] if a.dest else None,
                         "last_seen": datetime.fromtimestamp(a.last_seen).strftime("%H:%M:%S"),
                         "seen_ts": a.last_seen, "his": a.owner == "him", "kind": a.kind,
+                        "checks": a.checks,
                         "threat": th[0] if th else None, "threat_how": th[1] if th else None,
                         "dist_home": round(math.dist(a.tile, self.city)),
                         "trail": [[round(p[0]), round(p[1])] for _, p in a.history[-10:]],
@@ -778,7 +779,7 @@ class Hunter:
                 time.sleep(0.15)
                 continue
             bx, by = min(badges, key=lambda b: math.dist(b, (W / 2, H / 2)))
-            if self._read_farm_box(a, (bx, int(by + 0.045 * H))):   # the camp just under its badge
+            if self._read_farm_box(a, (bx, int(by + 0.02 * H))):   # the camp just under its badge
                 return
         log.info("hunt: couldn't open the resource point at %.0f,%.0f", a.tile[0], a.tile[1])
         self.game.close_popups()
@@ -877,7 +878,7 @@ class Hunter:
         if not cam:
             return
         for bx, by in screen.find_gather_badges(f):
-            tap = (bx, int(by + 0.045 * H))
+            tap = (bx, int(by + 0.02 * H))
             tile = to_tile(cam[1:3], axes_close, tap, f.shape)
             cand = [o for o in farms if o.owner is None and math.dist(o.tile, tile) < 4]
             if not cand:
@@ -1022,8 +1023,8 @@ class Hunter:
             # his armies (scouts move too fast to follow), and always his city
             pts = [tuple(self.city)]
             for a in self.tracker.armies:
-                if a.owner == "other" or a.kind == "scout":
-                    continue
+                if a.owner == "other" or a.kind == "scout" or (a.owner is None and a.checks >= 3):
+                    continue                     # not his / couldn't be confirmed 3 times
                 pts.append(predict(a, now))
                 if a.moving and a.missed:
                     # not where we expected last time: also look further along its line

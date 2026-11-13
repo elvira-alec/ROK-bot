@@ -564,7 +564,9 @@ class Game:
                 x = int(bx - 0.12 * W) if bx > W / 2 else int(bx + bw + 0.12 * W)
                 x = min(max(x, int(0.12 * W)), int(0.85 * W))
                 y = int(min(max(by + bh / 2, 0.25 * H), 0.75 * H))
-                self.b.drag(x, y, x, y + int(0.03 * H))
+                # long enough that the game can't take it for a press on whatever is
+                # under the mouse (a short drag + hold opened his city's menu)
+                self.b.drag(x, y, x, y + int(0.12 * H))
                 time.sleep(0.35)
                 continue
             if screen.camera_coords(f) or screen.search_go_button(f):
@@ -581,10 +583,18 @@ class Game:
     def troop_location(self, slot) -> tuple | None:
         """Select a troop; returns (x, y) of where it's gathering (from the info box)."""
         self.b.click(*slot.portrait)
-        self.wait(0.6)
-        v = self.look()
-        for t in v.texts:
-            if t.box[1] < v.frame.shape[0] * 0.12:
+        box, f = None, None
+        for _ in range(15):                        # its info box (up to ~0.9 s)
+            time.sleep(0.06)
+            f = self.frame()
+            box = screen.find_info_box(f)
+            if box:
+                break
+        # read just that box (reading the whole screen took 1-3 s a troop)
+        texts = screen.read_text(f, box) if box else self.look().texts
+        H = f.shape[0]
+        for t in texts:
+            if t.box[1] < H * 0.12:
                 continue  # skip the camera readout at the top
             c = screen.parse_coords(t.text)
             if c:
