@@ -260,6 +260,16 @@ frames, and find the first step that went wrong. Turn that frame into a regressi
   allowance for moving ones.
 - One bad round stopped the watch. Fix: recover and carry on.
 - Started by wandering around wherever the camera was. Fix: go to his city first.
+- **The search order hopped across his city:** spots were sorted by distance only, so it
+  went east, west, north, south. Fix: a spiral, ring by ring, each spot next to the last:
+  39 screens of travel instead of 124 for the same area.
+- **Things under the troop list / side panel / chat / top bar were never seen:** spots
+  were spaced as if the whole screen showed map. Fix: spacing uses only the visible map
+  area (x 14–88%, y 12–84%), the same area `_on_screen` uses.
+- **"Moving close" depended on where the camera stood:** it used the visible line end,
+  which is where the screen cut the line. Fix: the closest point of the army's path,
+  followed 30 tiles past the cut. The alert names every one of the user's spots that's
+  close, nearest first.
 
 **Speed**
 - A 5 s idle pause between rounds. Removed.
@@ -280,7 +290,7 @@ frames, and find the first step that went wrong. Turn that frame into a regressi
    - OCR time per read on the user's CPU
    - `_settled` / `fresh_frame` caps
    - owner checks (zoom in/out each time)
-2. **The sweep pattern.** Check `sweep_points` covers the radius around his city sensibly at
+2. **The sweep pattern** (now a spiral over the visible area; verify in the real game). Check `sweep_points` covers the radius around his city sensibly at
    the user's searching zoom, and that `pan_to` lands where intended. Compare the trace
    `look.camera` with the planned spots. If `patrol.axes` is off, the drags miss and it looks
    random. Re-learn with the automatic setup.
