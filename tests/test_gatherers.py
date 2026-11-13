@@ -357,8 +357,18 @@ def test_zoom_kept_at_the_searching_scale():
     g.camera_fast = lambda full=True: sim.camera()
     ss = sim.tpp()
     sim.level = sim.shown = 6                                # drifted 2 notches too far out
+    g.keep_scale(ss)
+    assert sim.level == 7                                    # one notch per check, no more
+    g.keep_scale(ss)
+    assert sim.level == 8
     r = g.keep_scale(ss)
-    assert sim.level == 8 and 0.89 <= r <= 1.12, (sim.level, r)
+    assert sim.level == 8 and 0.94 <= r <= 1.06, (sim.level, r)   # right: left alone
+    # a misread coordinate (e.g. 4368 for 368) must not change the zoom
+    real = g.camera_fast
+    reads = iter([(200, 400), (230, 4368), (200, 400)] * 2)
+    g.camera_fast = lambda full=True: next(reads)
+    assert g.keep_scale(ss) is None and sim.level == 8
+    g.camera_fast = real
 
 
 def test_how_long_hes_been_gathering_from_the_full_amount():

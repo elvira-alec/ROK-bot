@@ -662,6 +662,11 @@ class Hunter:
         self._dangers_frame(frame)
         cam = job.result()
         self.timing["look"] += time.time() - t0
+        from .trace import TRACE
+        if TRACE.on:
+            TRACE.event("look", camera=cam, seconds=round(time.time() - t0, 2),
+                        found=[{"px": [int(d[0]), int(d[1])], "kind": k, "line": l is not None and l != "edge",
+                                "edge": l == "edge"} for d, k, l in found])
         from .game import View
         view = View(frame, [], cam, True)
         try:
@@ -716,6 +721,8 @@ class Hunter:
 
     def _check_owner(self, a, others=()):
         a.checks += 1
+        from .trace import TRACE
+        TRACE.event("check_owner", kind=a.kind, tile=[round(a.tile[0], 1), round(a.tile[1], 1)])
         x, y = int(round(a.tile[0])), int(round(a.tile[1]))
         ac = self._axes_close()
         # zoomed in already: a nearby one is a drag away; far ones are typed in
@@ -746,6 +753,8 @@ class Hunter:
                 time.sleep(0.4)
         log.info("hunt: %s at %.0f,%.0f is %s", "farm" if a.kind == "farm" else "army",
                  a.tile[0], a.tile[1], a.owner or "unclear")
+        TRACE.event("owner", kind=a.kind, tile=[round(a.tile[0], 1), round(a.tile[1], 1)], owner=a.owner,
+                    read=self.seen_text.get(getattr(a, "id", 0)))
 
     # ---- zoom: bounce between the searching zoom and the close zoom
     def zoom_out(self, anchor=False):
@@ -1152,6 +1161,10 @@ class Hunter:
                     log.warning("hunt: zoom is off (%.2fx the searching zoom) and couldn't be fixed", r)
         self._rounds += 1
         self.mode = self.plan(now)
+        from .trace import TRACE
+        TRACE.event("round", mode=self.mode, n=self._rounds,
+                    armies=[{"id": a.id, "kind": a.kind, "owner": a.owner, "tile": [round(a.tile[0]), round(a.tile[1])],
+                             "moving": a.moving, "missed": a.missed} for a in self.tracker.armies])
         covered = None
         if self.mode == "sweep":
             sightings, visited, covered, finished = self.sweep(stop)

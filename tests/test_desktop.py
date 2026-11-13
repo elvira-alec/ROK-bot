@@ -22,10 +22,25 @@ def window(zoom=""):
 def test_click_lands_inside_the_window():
     w = window()
     w.click(10, 20)
-    assert w._pg.calls == [("click", (110, 70))]
+    clicks = [c for c in w._pg.calls if c[0] == "click"]
+    assert clicks == [("click", (110, 70))]
     w.set_area([5, 5, 100, 100])
     w.click(10, 20)
-    assert w._pg.calls[-1] == ("click", (115, 75))
+    clicks = [c for c in w._pg.calls if c[0] == "click"]
+    assert clicks[-1] == ("click", (115, 75))
+
+
+def test_mouse_parks_outside_the_game_after_actions():
+    """After a click or drag the mouse leaves the game window (resting on the map opened
+    name cards / menus), never onto a screen corner (that's the stop switch)."""
+    w = window()
+    w._pg.size = lambda: (1920, 1080)
+    w.click(10, 20)
+    w.drag(100, 100, 300, 100)
+    moves = [c[1] for c in w._pg.calls if c[0] == "moveTo" and len(c[1]) == 2]
+    x, y = moves[-1]
+    inside = 100 <= x <= 1700 and 50 <= y <= 950
+    assert not inside and 10 < x < 1910 and 10 < y < 1070, moves[-1]
 
 
 def test_keys():

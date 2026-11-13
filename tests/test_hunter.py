@@ -309,3 +309,24 @@ def test_red_eye_means_scouted_red_swords_mean_attacked():
         assert screen.danger_icons(cv2.imread(str(real / f"{n}.png"))) == {"attacked"}, n
     for n in ("own_city_gathering", "march_simple_view", "his_city_swords_simple", "recall_panel"):
         assert screen.danger_icons(cv2.imread(str(real / f"{n}.png"))) == set(), n
+
+
+def test_a_round_with_debug_recording_on(game, tmp_path, monkeypatch):
+    """The debug recording during a real round: pictures, looks, jumps, owner checks."""
+    import json
+    from rokwatch import trace as tr
+    monkeypatch.setattr(tr, "ROOT", tmp_path / "debug_trace")
+    tr.instrument(game.b)
+    js(game, f"sim.farmer('{NAME}', [155, 368])")
+    h = hunter(game, tmp_path, method="zoomed_out")
+    tr.TRACE.start()
+    try:
+        h.round()
+    finally:
+        tr.TRACE.stop()
+    run = sorted((tmp_path / "debug_trace").glob("*"))[-1]
+    lines = [json.loads(x) for x in (run / "trace.jsonl").read_text().splitlines()]
+    kinds = {x["kind"] for x in lines}
+    assert {"round", "frame", "look", "action", "goto"} <= kinds, kinds
+    assert any(x["kind"] == "owner" and x.get("owner") == "him" for x in lines)
+    assert len(list((run / "frames").glob("*.jpg"))) > 3

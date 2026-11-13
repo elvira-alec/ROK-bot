@@ -60,6 +60,9 @@ class Game:
     # ---------------------------------------------------------------- looking
     def frame(self):
         f = self.b.screenshot(self.area)
+        from .trace import TRACE
+        if TRACE.on:
+            TRACE.frame(f)
         try:
             self.b.last_frame = f         # for the panel's live view
         except AttributeError:
@@ -89,6 +92,9 @@ class Game:
         """Jump the camera to map coordinates using the game's coordinate search.
         Quick path: find the magnifier by its shape, check the bar opened by its blue
         button, type into the remembered boxes (no full text reading)."""
+        from .trace import TRACE
+        t_start = time.time()
+        TRACE.event("goto", x=x, y=y)
         for attempt in range(tries):
             self.check_stop()
             f = self.frame()
@@ -97,6 +103,7 @@ class Game:
                 return True
             if self._quick_jump(f, x, y) or self._slow_jump(x, y):
                 if self._wait_camera(x, y):
+                    TRACE.event("goto_done", x=x, y=y, seconds=round(time.time() - t_start, 2))
                     return True
                 log.warning("goto %s,%s: camera is at %s (try %d)", x, y, self.camera_fast(),
                             attempt + 1)
@@ -152,7 +159,7 @@ class Game:
 
     def _type_into(self, pos, val):
         self.b.click(*pos)
-        time.sleep(0.04)
+        time.sleep(0.12)
         self.b.press("Control+A")
         self.b.press("Backspace")
         self.b.type(val)
@@ -221,6 +228,8 @@ class Game:
 
     def _notch(self, out: bool):
         self.check_stop()
+        from .trace import TRACE
+        TRACE.event("notch", out=out)
         H, W = self._size or self.frame().shape[:2]
         self._size = (H, W)
         self.b.wheel(W // 2, H // 2, 100 if out else -100)
@@ -245,6 +254,8 @@ class Game:
 
     def to_close(self) -> bool:
         """To your close zoom (names show, resource points can be tapped)."""
+        from .trace import TRACE
+        TRACE.event("zoom", to="close", at=self._at, cfg=self.zoom_cfg)
         if self._at == "close" and self.level() == "close":
             return True
         gap, t_out, t_in = self._zoom_numbers()
@@ -264,6 +275,8 @@ class Game:
 
     def to_sweep(self) -> bool:
         """Back to your searching zoom (never further out than the simplified map)."""
+        from .trace import TRACE
+        TRACE.event("zoom", to="sweep", at=self._at, cfg=self.zoom_cfg)
         lv = self.level()
         if self._at == "sweep" and lv == "patrol":
             return True
@@ -365,27 +378,20 @@ class Game:
         self.zoom_cfg = cfg
         return cfg, f"Close zoom = last 3D step; searching zoom = {gap} steps further out (last one with level numbers)."
 
-    def keep_scale(self, search_scale, tries=4):
-        """At the searching zoom: measure the map's scale (one small drag back and forth)
-        and step notches in / out while that brings it closer to the searching zoom's
-        scale - landing on the closest notch. Returns the final ratio."""
-        sc = self.measure_scale()
-        if not sc or not search_scale:
+    def keep_scale(self, search_scale, tries=1):
+        """At the searching zoom: has the zoom drifted? Two scale readings must agree
+        before it changes anything, and then it moves one notch at most (a bad reading
+        used to make it zoom far out). Returns the ratio it saw, or None."""
+        if not search_scale:
             return None
-        ratio = sc / search_scale
-        if abs(math.log(ratio)) < 0.035:             # spot on
-            return ratio
-        out = ratio < 1                              # too close in: zoom out (and vice versa)
-        for _ in range(tries):
-            self._notch(out=out)
-            sc = self.measure_scale()
-            if not sc:
-                return ratio
-            r2 = sc / search_scale
-            if abs(math.log(r2)) >= abs(math.log(ratio)):   # that made it worse: step back
-                self._notch(out=not out)
-                return ratio
-            ratio = r2
+        a1, a2 = self.measure_scale(), self.measure_scale()
+        if not a1 or not a2 or abs(math.log(a1 / a2)) > 0.06:
+            return None                                   # readings disagree: leave it
+        ratio = (a1 + a2) / 2 / search_scale
+        if ratio > 1.06:                                  # too far out: one in
+            self._notch(out=False)
+        elif ratio < 0.94:                                # too far in: one out
+            self._notch(out=True)
         return ratio
 
     def zoom_reference(self):
@@ -414,9 +420,18 @@ class Game:
         c1 = self.camera_fast()
         self.b.drag(W // 2 - dx // 2, H // 2, W // 2 + dx // 2, H // 2)
         time.sleep(0.25)
-        if not c0 or not c1:
+        c2 = self.camera_fast()
+        # only trust it if the readings make sense: real coordinates, a sensible move,
+        # and the drag back landed where it started (a misread digit fails this)
+        if not (c0 and c1 and c2):
             return None
-        return math.dist(c0, c1) / dx
+        if not all(0 <= v <= 1300 for v in (*c0, *c1, *c2)):
+            return None
+        d = math.dist(c0, c1)
+        if d < 1 or d > 300 or math.dist(c0, c2) > max(2.0, 0.08 * d):
+            log.info("zoom: scale measurement didn't add up (%s -> %s -> %s); ignored", c0, c1, c2)
+            return None
+        return d / dx
 
     def calibrate_close(self, search_scale, max_steps=25):
         """You're at your close zoom; search_scale = tiles per pixel at your searching

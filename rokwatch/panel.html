@@ -319,6 +319,13 @@
     </div>
     <div class="row"><a href="/api/snapshots.zip" style="color:var(--accent)"><svg class="i"><use href="#i-download"/></svg> Download the newest 40 as a .zip</a>
       <span class="hint" id="snap-count"></span></div>
+    <div class="row">
+      <button id="trace-btn" onclick="toggleTrace()">Start debug recording</button>
+      <a href="/api/trace.zip" style="color:var(--accent)">Download the last recording (.zip)</a>
+      <span class="hint" id="trace-info" style="margin:0"></span>
+    </div>
+    <p class="hint">Debug recording keeps every picture the bot looks at and every click, drag, scroll and key it
+      sends, with timings and what it decided. Start it, let the problem happen, stop it, and send the .zip.</p>
     <div class="snaps" id="snaps"></div>
   </section>
   <section>
@@ -412,6 +419,13 @@ async function updateNow() {
   const r = await (await fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).json();
   if (r.ok) showUpdating(r.version);
   else toast(r.message || 'Update failed', 'bad');
+}
+let traceOn = false;
+async function toggleTrace() {
+  await fetch('/api/trace', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ on: !traceOn }) });
+  toast(traceOn ? 'Debug recording stopped: download it below' : 'Debug recording started', 'good');
+  refresh();
 }
 async function quitApp() {
   if (!confirm('Quit RoK Watcher? Watching stops until you open RoKWatcher.exe again.')) return;
@@ -667,6 +681,10 @@ async function refresh() {
     `<li class="${a.urgent ? 'urgent' : ''}"><b>${esc(a.title)}</b>${esc(a.message)}<br><small>${esc(a.time)}</small></li>`).join('')
     : '<li class="empty">No alerts yet</li>';
   $('report').textContent = st.report;
+  traceOn = !!(st.trace && st.trace.on);
+  $('trace-btn').textContent = traceOn ? 'Stop debug recording' : 'Start debug recording';
+  $('trace-btn').className = traceOn ? 'danger' : '';
+  $('trace-info').textContent = traceOn ? `recording: ${st.trace.frames} pictures so far` : '';
   const busyNow = st.phase === 'patrolling' || st.phase === 'busy' || st.phase === 'opening';
   $('now').hidden = !busyNow;
   if (busyNow) {

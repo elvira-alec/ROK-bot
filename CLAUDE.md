@@ -1,6 +1,8 @@
 # RoK Watcher: full context for a new session
 
-Claude Code reads this file automatically. It's everything the previous (cloud) session
+Claude Code reads this file automatically. **Also read `docs/HANDOFF.md`**: the long version, with PC
+setup, a real-game test plan, the debug recording, internals, the full problem history and open
+issues. This file is everything the previous (cloud) session
 knew: the goal, how the game looks, how the bot works, what went wrong before and how it
 was fixed, how to test, and how to build and publish. Read it all before changing anything.
 
@@ -186,6 +188,6 @@ boxes, the user's snapshots including the Spanish photos).
   - a real update via `--test-update`
 - **Publishing:** Actions → windows-exe → Run workflow with `publish=true`, and optionally
   `version=1.x` to set the number or replace that release. Releases are `v1.0`, `v1.1`, …
-  (latest is **1.3**), plus a `latest` prerelease. The app's updater installs them by itself.
+  (see the Releases page for the latest), plus a `latest` prerelease. The app's updater installs them by itself.
 - To push from the PC, Git must be signed in to GitHub (Git Credential Manager or `gh auth login`).
 - **Publish every change (next version number) unless the user says not to.**

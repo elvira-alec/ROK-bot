@@ -279,7 +279,7 @@ class Panel:
             "last_site": st.last_site, "alerts": st.alerts, "look": st.look,
             "armies": st.armies, "radar": st.radar, "focus": {str(k): v for k, v in st.focus.items()},
             "snaps": snapshots.listing(limit=24),
-            "progress": st.progress, "doing": st.doing,
+            "progress": st.progress, "doing": st.doing, "trace": __import__("rokwatch.trace", fromlist=["TRACE"]).TRACE.status(),
             "live": self.live_id(),
             "log": list(self.memlog.lines)[-80:],
             "report": activity_report(_get(cfg, "patrol.activity_log") or "activity.csv"),
@@ -420,6 +420,19 @@ def make_handler(panel: Panel, port_holder=None):
                     return self._send(404, {"error": "no such snapshot"})
                 ctype = {".png": "image/png", ".jpg": "image/jpeg"}.get(p.suffix, "application/json")
                 return self._send(200, p.read_bytes(), ctype)
+            if path == "/api/trace.zip":
+                from .trace import TRACE
+                data = TRACE.zip_bytes()
+                if not data:
+                    return self._send(404, {"error": "no recording yet"})
+                self.send_response(200)
+                self.send_header("Content-Type", "application/zip")
+                self.send_header("Content-Disposition",
+                                 f'attachment; filename="rok-debug-{time.strftime("%Y%m%d-%H%M")}.zip"')
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
             if path == "/api/snapshots.zip":
                 data = snapshots.zip_bytes()
                 self.send_response(200)
@@ -484,6 +497,10 @@ def make_handler(panel: Panel, port_holder=None):
                     if k in data:
                         f[k] = bool(data[k])
                 return self._send(200, {"ok": True, "focus": f})
+            if path == "/api/trace":
+                from .trace import TRACE
+                TRACE.start() if data.get("on") else TRACE.stop()
+                return self._send(200, {"ok": True, **TRACE.status()})
             if path == "/api/quit":
                 log.info("Quit from the panel")
                 panel.worker.send("stop")

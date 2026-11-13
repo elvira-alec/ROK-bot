@@ -227,11 +227,15 @@ class DesktopWindow:
         return frame
 
     def _park(self):
-        """Move the mouse off the map (onto the top bar) so hovering doesn't open a name
-        card / menu under it."""
+        """Move the mouse out of the game window (just to its right, or below it) so it
+        can't hover anything in the game. Not on screen there: leave it where it is."""
         try:
             wx, wy, w, h = self.rect()
-            self._pg.moveTo(wx + int(w * 0.5), wy + 4)
+            sw, sh = self._pg.size()
+            for px, py in ((wx + w + 25, wy + h // 2), (wx + w // 2, wy + h + 25)):
+                if 10 < px < sw - 10 and 10 < py < sh - 10:     # never a screen corner
+                    self._pg.moveTo(px, py)
+                    return
         except Exception:
             pass
 
@@ -250,7 +254,8 @@ class DesktopWindow:
 
     def type(self, text):
         self._front()
-        self._pg.typewrite(str(text), interval=0.015)
+        # the game drops keys typed faster than this (it then jumps to the wrong place)
+        self._pg.typewrite(str(text), interval=0.05)
 
     def wheel(self, x, y, dy):
         """Browser-style wheel: positive dy scrolls down (zooms out)."""

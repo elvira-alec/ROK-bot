@@ -201,6 +201,8 @@ class Worker:
         self._set("opening", "Connecting to the game..." if cfg.get("game_window")
                   else "Opening the game page...")
         self.gb = GameBrowser.from_config(cfg).__enter__()
+        from .trace import instrument
+        instrument(self.gb)                         # (the debug recording logs its actions)
         if cfg.get("game_window"):
             self._set("ready", f"Connected to the game window: {self._where()} "
                                "Now press 'What do you see?'. (Mouse into a corner = stop.)")
