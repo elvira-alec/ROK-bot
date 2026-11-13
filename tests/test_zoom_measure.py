@@ -23,6 +23,17 @@ class ZoomSim:
         self.far = cv2.imread(str(REAL / "search_bar_far_zoom.png"))       # too far out (0-3)
         self.level, self.shown, self.t = level, float(level), time.time()
         self.drop = 0                                                      # notches to lose
+        self.cam = [200.0, 400.0]
+        self.lowest = level
+
+    def tpp(self):                                   # map tiles per screen pixel at this zoom
+        return 0.05 / (1.08 ** (self.level - 8))
+
+    def drag(self, x0, y0, x1, y1, steps=15):
+        self.cam[0] -= (x1 - x0) * self.tpp()
+
+    def camera(self):
+        return (round(self.cam[0]), round(self.cam[1]))
 
     def wheel(self, x, y, dy):
         if self.drop:
@@ -30,6 +41,7 @@ class ZoomSim:
             return
         self.shown, self.t = self._current(), time.time()
         self.level = max(0, min(self.MAX, self.level + (-1 if dy > 0 else 1)))
+        self.lowest = min(self.lowest, self.level)
 
     def _current(self):
         k = min(1.0, (time.time() - self.t) / 0.25)
@@ -54,26 +66,40 @@ class ZoomSim:
         return out
 
 
-def setup(search=8, close=15):
-    sim = ZoomSim(search)
+def make(level):
+    sim = ZoomSim(level)
     g = Game(sim, settle=0)
-    ref = g.zoom_reference()                     # "This is my searching zoom"
-    sim.level = sim.shown = close                # you zoom in by hand
-    cfg, score = g.calibrate_close(ref)          # "This is my close zoom"
-    return sim, g, ref, cfg, score
+    g.camera_fast = lambda: sim.camera()             # (the simulated top bar doesn't change)
+    return sim, g
+
+
+def setup(search=8, close=15):
+    sim, g = make(search)
+    search_scale = sim.tpp()                         # "This is my searching zoom" (map directions)
+    sim.level = sim.shown = close                    # you zoom in by hand
+    sim.lowest = close
+    cfg, ratio = g.calibrate_close(search_scale)     # "This is my close zoom"
+    return sim, g, search_scale, cfg, ratio
 
 
 def test_two_presses_measure_exactly():
-    sim, g, ref, cfg, score = setup(8, 15)
-    assert cfg == {"gap": 7, "t_out": 3, "t_in": 5} and score > 0.9, (cfg, score)
-    assert sim.level == 15                       # ends at your close zoom
+    sim, g, _, cfg, ratio = setup(8, 15)
+    assert cfg == {"gap": 7, "t_out": 3, "t_in": 5} and abs(ratio - 1) < 0.05, (cfg, ratio)
+    assert sim.level == 15 and sim.lowest >= 7       # at most one notch past your searching zoom
     for _ in range(2):
-        assert g.to_sweep() and sim.level == 8 and g.match_score(ref) > 0.9
+        assert g.to_sweep() and sim.level == 8
         assert g.to_close() and sim.level == 15
 
 
+def test_setup_never_goes_far_out():
+    """Searching zoom just 2 notches from the close zoom: it stops right there."""
+    sim, g, _, cfg, _ = setup(11, 13)
+    assert cfg["gap"] == 2 and sim.lowest >= 10, (cfg, sim.lowest)
+    assert sim.level == 13
+
+
 def test_lost_notch_is_corrected():
-    sim, g, ref, cfg, _ = setup(8, 15)
+    sim, g, _, cfg, _ = setup(8, 15)
     assert g.to_sweep() and sim.level == 8
     sim.drop = 1                                 # the game swallows one notch
     assert g.to_close() and sim.level == 15
@@ -85,7 +111,7 @@ def test_lost_notch_is_corrected():
 
 
 def test_stop_interrupts_at_once():
-    sim, g, ref, cfg, _ = setup(8, 15)
+    sim, g, _, cfg, _ = setup(8, 15)
     pressed = {"stop": True}
     g.stop_check = lambda: pressed["stop"]
     t0 = time.time()

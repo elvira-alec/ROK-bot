@@ -329,30 +329,32 @@ class Worker:
                 self._set("ready", "Couldn't learn the map directions (is the coordinate readout "
                                    "visible?). Nothing was saved.")
                 return
-            self._zoom_ref = game.zoom_reference()
             game._at = "sweep"
             config.save_fields({"patrol.axes": m}, self.cfg_path)
             self._set("ready", "Searching zoom remembered. Now zoom IN by hand (mouse wheel, without "
                                "dragging the map) until names show over armies and resource points can "
                                "be tapped, then press 'This is my close zoom'.")
             return
-        ref = getattr(self, "_zoom_ref", None)
-        if ref is None:
+        import numpy as np
+        axes = (self._cfg().get("patrol") or {}).get("axes")
+        if not axes:
             self._set("ready", "First set your searching zoom (the first button).")
             return
+        search_scale = float(np.linalg.norm(np.array(axes, float)[:, 0]))   # tiles per pixel, sideways
         if game.level() != "close":
             self._set("ready", "That isn't the close view yet: zoom in further (3D buildings, names over "
                                "armies), then press again.")
             return
-        self._set("busy", "Measuring: stepping out one notch at a time back to your searching zoom...")
-        cfg, score = game.calibrate_close(ref)
-        if not cfg or score < 0.6:
-            self._set("ready", f"Couldn't find your searching zoom again (best match {score:.2f}). Set the "
-                               "searching zoom again, then zoom in WITHOUT dragging the map, and retry. "
-                               "Nothing was saved.")
+        self._set("busy", "Measuring: stepping out one notch at a time (with a small drag to measure "
+                          "the map's scale) until it matches your searching zoom...")
+        cfg, ratio = game.calibrate_close(search_scale)
+        if not cfg or not 0.8 < ratio < 1.25:
+            self._set("ready", "Couldn't find your searching zoom's scale again"
+                      + (f" (closest was {ratio:.2f}x)" if ratio else "")
+                      + ". Close any menus and try both buttons again. Nothing was saved.")
             return
         game.zoom_cfg = cfg
-        ok = game.to_sweep() and game.match_score(ref) > 0.6     # and check the way back
+        ok = game.to_sweep()                                         # and go back there
         config.save_fields({"hunt.zoom": cfg}, self.cfg_path)
         self._set("ready", f"Zoom set up: {cfg['gap']} notches between your two zooms"
                   + ("" if ok else " (the check back didn't match perfectly; it corrects itself "

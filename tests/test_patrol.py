@@ -191,11 +191,11 @@ def test_zoom_bounces_between_two_levels(game):
     goes between those two."""
     js(game, "sim.state.zoom = 1; sim.state.simple = true")
     time.sleep(0.2)
-    ref = game.zoom_reference()
+    scale = game.measure_scale()
     js(game, "sim.state.zoom = 0; sim.state.simple = false")
     time.sleep(0.2)
-    cfg, score = game.calibrate_close(ref)
-    assert cfg and cfg["gap"] == 1 and js(game, "sim.state.zoom") == 0, (cfg, score)
+    cfg, ratio = game.calibrate_close(scale)
+    assert cfg and cfg["gap"] == 1 and js(game, "sim.state.zoom") == 0, (cfg, ratio)
     assert game.to_sweep() and js(game, "sim.state.zoom") == 1
     assert game.to_close() and js(game, "sim.state.zoom") == 0
     js(game, "sim.state.zoom = 2; sim.state.simple = true")   # someone zoomed too far out

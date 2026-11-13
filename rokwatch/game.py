@@ -300,35 +300,58 @@ class Game:
         r = cv2.matchTemplate(cur, crop, cv2.TM_CCOEFF_NORMED)
         return float(r.max())
 
-    def calibrate_close(self, ref, max_steps=30):
-        """You're at your close zoom; ref is the picture of your searching zoom. Steps
-        out one notch at a time until the picture matches ref again, noting where the
-        simplified map appears; then goes back in, noting where the 3D view appears.
-        Returns ({'gap', 't_out', 't_in'}, score) - ends at your close zoom."""
-        if self.level() != "close":
+    def measure_scale(self):
+        """Map tiles per screen pixel right now: drag the map sideways a known amount,
+        read how far the camera moved, drag it back."""
+        H, W = self._size or self.frame().shape[:2]
+        self._size = (H, W)
+        dx = int(0.4 * W)
+        c0 = self.camera_fast()
+        self.b.drag(W // 2 + dx // 2, H // 2, W // 2 - dx // 2, H // 2)
+        time.sleep(0.25)
+        c1 = self.camera_fast()
+        self.b.drag(W // 2 - dx // 2, H // 2, W // 2 + dx // 2, H // 2)
+        time.sleep(0.25)
+        if not c0 or not c1:
+            return None
+        return math.dist(c0, c1) / dx
+
+    def calibrate_close(self, search_scale, max_steps=25):
+        """You're at your close zoom; search_scale = tiles per pixel at your searching
+        zoom (from the map directions learned there). Steps out one notch at a time,
+        measuring the map's scale after each, and stops as soon as it matches - never
+        more than one notch past it, never out to where the icons disappear. Then goes
+        back in to your close zoom, noting where the 3D view comes back.
+        Returns ({'gap', 't_out', 't_in'}, ratio) - ends at your close zoom."""
+        if self.level() != "close" or not search_scale:
             return None, 0.0
-        scores, t_out, k = [], 0, 0
+        res, t_out, k = [], 0, 0
         while k < max_steps:
-            cur = self._notch(out=True)
+            self._notch(out=True)
             k += 1
-            if not t_out and self.level() != "close":
+            lv = self.level()
+            if not t_out and lv != "close":
                 t_out = k
-            scores.append(self.match_score(ref, cur))
-            best = max(range(len(scores)), key=lambda i: scores[i])
-            if scores[best] > 0.75 and k >= best + 1 + 3:      # clearly past the match
+            sc = self.measure_scale()
+            if sc:
+                res.append((k, sc))
+                if sc >= 0.93 * search_scale:            # reached (or just passed) it
+                    break
+            if lv == "far":
                 break
-        best = max(range(len(scores)), key=lambda i: scores[i])
-        gap, score = best + 1, scores[best]
-        self.steps(k - gap)                                   # back in to the matching notch
+        if not res:
+            return None, 0.0
+        gap, sc = min(res, key=lambda r: abs(math.log(r[1] / search_scale)))
+        self.steps(k - gap)                              # back in to the matching notch
         t_in = 0
-        for j in range(1, gap + 1):                           # and on in to your close zoom
+        for j in range(1, gap + 1):                      # and on in to your close zoom
             self._notch(out=False)
             if not t_in and self.level() == "close":
                 t_in = j
         self._at = "close"
         cfg = {"gap": gap, "t_out": t_out or gap, "t_in": t_in or gap}
         self.zoom_cfg = cfg
-        return cfg, score
+        return cfg, sc / search_scale
 
     # old names, used by simple patrol
     def zoom_to_patrol_level(self, max_steps=10) -> bool:
