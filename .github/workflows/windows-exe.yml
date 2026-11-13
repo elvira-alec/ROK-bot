@@ -2,7 +2,14 @@ name: windows-exe
 on:
   push:
     branches: [main]
+  # Pushes only build and test. Publishing a release is done by hand:
+  # Actions -> windows-exe -> Run workflow -> tick "publish".
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish this build as the next numbered release"
+        type: boolean
+        default: false
 permissions:
   contents: write
 # one build at a time, so two builds never take the same version number
@@ -37,6 +44,12 @@ jobs:
         run: python tests/exe_smoke.py dist/RoKWatcher msedge
       - name: Test window mode (the game as its own program, driven with the real mouse)
         run: python tests/window_smoke.py dist/RoKWatcher
+      - name: Test the update check from the built program (reaches GitHub, finds a release)
+        shell: pwsh
+        run: |
+          $out = & dist/RoKWatcher/RoKWatcher.exe --check-update 2>&1 | Out-String
+          Write-Output $out
+          if ($out -notmatch "Newest on GitHub: \d+\.\d+") { throw "the built program couldn't check for updates" }
       - name: Zip
         shell: pwsh
         run: |
@@ -50,7 +63,7 @@ jobs:
       - name: Test the updater (installs this zip over an "old" copy, keeps user files, restarts it)
         run: python tests/updater_smoke.py RoKWatcher-windows.zip
       - name: Publish as a numbered release (the app's updater looks for these)
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.publish
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -60,7 +73,7 @@ jobs:
             --title "RoK Watcher $V" \
             --notes "$(git log -1 --pretty=%s). Download RoKWatcher-windows.zip, unzip it, double-click RoKWatcher.exe. If you already have it, the control panel updates itself."
       - name: Publish as the "latest" download
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.publish
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}

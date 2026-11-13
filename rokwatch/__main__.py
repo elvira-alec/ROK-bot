@@ -235,6 +235,8 @@ def main(argv=None):
     ap.add_argument("--report", action="store_true", help="when is he active? (from the log)")
     ap.add_argument("--panel", action="store_true", help="open the control panel")
     ap.add_argument("--selftest", metavar="PNG", help=argparse.SUPPRESS)  # checks the build
+    ap.add_argument("--check-update", action="store_true",
+                    help="print this version and the newest one on GitHub")
     ap.add_argument("--window-selftest", metavar="TITLE", help=argparse.SUPPRESS)
     ap.add_argument("--window-look", metavar="TITLE", help=argparse.SUPPRESS)
     ap.add_argument("--max-checks", type=int, help=argparse.SUPPRESS)  # for tests
@@ -242,6 +244,17 @@ def main(argv=None):
     setup_logging()
     if args.selftest:
         return selftest(args.selftest)
+    if args.check_update:
+        from . import updater
+        print("This version:", updater.current_version())
+        try:
+            info = updater.latest_release(verbose=True)
+        except Exception as e:
+            print("Couldn't check:", e)
+            return 1
+        print("Newest on GitHub:", info["version"] if info else None)
+        print("Update available:", bool(info and updater.newer(info["version"], updater.current_version())))
+        return 0 if info else 1
     if args.window_selftest:
         return window_selftest(args.window_selftest)
     if args.window_look:

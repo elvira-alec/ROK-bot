@@ -40,13 +40,44 @@ def newer(latest, current) -> bool:
     return bool(parse(latest)) and (not parse(current) or parse(latest) > parse(current))
 
 
-def latest_release(timeout=10):
-    """{'version', 'url', 'notes', 'page'} of the newest numbered release, or None."""
-    req = urllib.request.Request(f"https://api.github.com/repos/{REPO}/releases/latest",
-                                 headers={"Accept": "application/vnd.github+json",
-                                          "User-Agent": "RoKWatcher-updater"})
+API = f"https://api.github.com/repos/{REPO}/releases/latest"
+
+
+def _fetch_urllib(timeout):
+    req = urllib.request.Request(API, headers={"Accept": "application/vnd.github+json",
+                                               "User-Agent": "RoKWatcher-updater"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
-        data = json.load(r)
+        return json.load(r)
+
+
+def _fetch_powershell(timeout):
+    """Same request through Windows' own networking (system proxy and certificates,
+    like the browser) - for when Python's own connection is blocked."""
+    cmd = ("[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; "
+           f"(Invoke-WebRequest -UseBasicParsing -TimeoutSec {int(timeout)} -Uri '{API}' "
+           "-Headers @{'User-Agent'='RoKWatcher-updater'}).Content")
+    r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", cmd],
+                       capture_output=True, text=True, timeout=timeout + 15,
+                       creationflags=0x08000000 if sys.platform == "win32" else 0)
+    if r.returncode != 0 or not r.stdout.strip():
+        raise OSError((r.stderr or "PowerShell request failed").strip().splitlines()[0][:200])
+    return json.loads(r.stdout)
+
+
+def latest_release(timeout=10, verbose=False):
+    """{'version', 'url', 'notes', 'page'} of the newest numbered release, or None."""
+    try:
+        data = _fetch_urllib(timeout)
+    except Exception as e:
+        if sys.platform != "win32":
+            raise
+        if verbose:
+            print("Direct check failed:", e, "- trying through Windows (PowerShell)...")
+        log.info("Update check: direct request failed (%s); trying through PowerShell", e)
+        try:
+            data = _fetch_powershell(timeout)
+        except Exception as e2:
+            raise OSError(f"{e} / through Windows: {e2}") from e2
     tag = data.get("tag_name", "")
     asset = next((a for a in data.get("assets", []) if a.get("name") == ASSET), None)
     if not parse(tag) or not asset:
