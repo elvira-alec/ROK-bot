@@ -415,7 +415,7 @@ class Worker:
             self._maybe_sample()
             self.status.armies = hunter.tracker.summary()
             self.status.last_site = f"{len(self.status.armies)} of his armies tracked"
-            end = time.time() + float(h.get("pause_between_sweeps", 5))
+            end = time.time() + float(h.get("pause_between_sweeps", 0))     # no idle between rounds
             while time.time() < end and not self.stop_patrol.is_set():
                 if self._snap_wanted is not None:
                     self._maybe_sample()

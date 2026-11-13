@@ -262,6 +262,6 @@ class DesktopWindow:
         self._front()
         self._pg.moveTo(*self._abs(x0, y0))
         self._pg.mouseDown()
-        self._pg.moveTo(*self._abs(x1, y1), duration=0.35)
-        time.sleep(0.15)              # hold still before letting go: no fling / drift
+        self._pg.moveTo(*self._abs(x1, y1), duration=0.18)
+        time.sleep(0.1)               # hold still before letting go: no fling / drift
         self._pg.mouseUp()

@@ -387,6 +387,28 @@ class Game:
             pass
         return v
 
+    def fresh_frame(self, max_wait=0.6):
+        """The picture as soon as it has finished drawing after a move: grab every ~50 ms
+        and take the first one that matches the previous (icons loaded, map still)."""
+        f = self.frame()
+        prev = self._small(f)
+        end = time.time() + max_wait
+        while time.time() < end:
+            time.sleep(0.05)
+            g = self.frame()
+            cur = self._small(g)
+            if self._changed(cur, prev) < 0.003:
+                return g
+            f, prev = g, cur
+        return f
+
+    def read_camera(self, frame):
+        """(kingdom, x, y) from this picture's coordinate readout (thread-safe: no clicks)."""
+        c = screen.camera_coords(frame) or screen.camera_coords(frame, screen.read_text(frame))
+        if c:
+            self._cam = (c[1], c[2])
+        return c[:3] if c else None
+
     def camera_fast(self):
         """Camera (x, y) from the coordinate readout only (much quicker than look())."""
         f = self.frame()
@@ -397,37 +419,38 @@ class Game:
         self._fresh = (time.time(), f, c)
         return self._cam
 
-    def pan_to(self, x, y, axes, max_drags=3, close_enough=2.0) -> bool:
-        """Drag the map to (x, y) instead of typing coordinates: fast for nearby spots.
-        Uses the camera position it already knows, so a nearby spot is one drag.
-        axes: tiles-per-pixel matrix learned at this zoom. Far spots: typed in."""
+    def pan_to(self, x, y, axes, max_drags=3, close_enough=4.0) -> bool:
+        """Drag the map to (x, y): one drag for a nearby spot, from the camera position it
+        already knows (the next look reads the real one). Far spots: typed in."""
         self.check_stop()
         if not axes:
             return self.goto(x, y)
         try:
-            Ainv = np.linalg.inv(np.array(axes, float))
+            A = np.array(axes, float)
+            Ainv = np.linalg.inv(A)
         except np.linalg.LinAlgError:
             return self.goto(x, y)
         H, W = self._size or self.frame().shape[:2]
         self._size = (H, W)
         cam = self._cam or self.camera_fast()
-        for _ in range(max_drags):
-            if cam is None:
-                break
-            d = np.array([x - cam[0], y - cam[1]], float)
-            if np.hypot(*d) <= close_enough:
-                return True
-            p = -(Ainv @ d)                       # drag the map this many pixels
-            far = max(abs(p[0]) / (0.38 * W), abs(p[1]) / (0.38 * H))
-            if far > max_drags:                   # too far to drag: type it in
-                break
-            if far > 1:
-                p = p / far
-            cx, cy = W // 2 - int(p[0]) // 2, H // 2 - int(p[1]) // 2
-            self.b.drag(cx, cy, cx + int(p[0]), cy + int(p[1]))
-            time.sleep(0.15)
-            cam = self.camera_fast()
-        return self.goto(x, y)
+        if cam is None:
+            return self.goto(x, y)
+        d = np.array([x - cam[0], y - cam[1]], float)
+        if np.hypot(*d) <= close_enough:
+            return True
+        p = -(Ainv @ d)                           # drag the map this many pixels
+        far = max(abs(p[0]) / (0.4 * W), abs(p[1]) / (0.4 * H))
+        if far > max_drags:                       # too far to drag: type it in
+            return self.goto(x, y)
+        n = max(1, int(np.ceil(far)))
+        step = p / n
+        for _ in range(n):
+            self.check_stop()
+            cx, cy = W // 2 - int(step[0]) // 2, H // 2 - int(step[1]) // 2
+            self.b.drag(cx, cy, cx + int(step[0]), cy + int(step[1]))
+        moved = -(A @ (step * n))
+        self._cam = (cam[0] + moved[0], cam[1] + moved[1])   # where it should be now
+        return True
 
     # ------------------------------------------------------------- stopping
     @property
@@ -534,7 +557,7 @@ class Game:
     def troop_location(self, slot) -> tuple | None:
         """Select a troop; returns (x, y) of where it's gathering (from the info box)."""
         self.b.click(*slot.portrait)
-        self.wait()
+        self.wait(0.6)
         v = self.look()
         for t in v.texts:
             if t.box[1] < v.frame.shape[0] * 0.12:

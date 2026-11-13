@@ -244,15 +244,13 @@ def test_zoomed_out_ignores_other_players_marching(game, tmp_path):
 
 
 def test_zoomed_out_his_scout_coming(game, tmp_path):
+    """Scouting is only alerted when the game itself shows it (red eye / red border),
+    not from a scout's march line; the scout is still seen and listed."""
     js(game, f"sim.march('enemy', 'camp', 'white', 0.15, 0.002, '{NAME}', 'scout')")
     h = hunter(game, tmp_path, method="zoomed_out")
     alerts = h.round()
-    debug = [(a.kind, a.owner, a.tile, a.moving, a.ends) for a in h.tracker.armies]
-    # his (line from his city seen) or not confirmed: either way you're told a scout is coming
-    assert [a.title for a in alerts] in (["HE'S SCOUTING YOU"], ["A SCOUT IS HEADING FOR YOU"]), \
-        ([a.title for a in alerts], debug)
-    assert [a["kind"] for a in h.tracker.summary()] == ["scout"]
-
+    assert not [a.title for a in alerts if "SCOUT" in a.title], [a.title for a in alerts]
+    assert [a.kind for a in h.tracker.armies] == ["scout"]
 
 
 def test_tracks_your_gathering_troops_and_warns_when_he_moves_close(game, tmp_path):

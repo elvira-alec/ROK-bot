@@ -471,6 +471,10 @@ class Hunter:
         # when one of them goes missing away from home, or as a safety check now and then
         self.full_sweep_every = float(h.get("full_sweep_minutes", 30)) * 60
         self._need_sweep = False
+        from concurrent.futures import ThreadPoolExecutor
+        self._pool = ThreadPoolExecutor(max_workers=1)
+        self.timing = {"move": 0.0, "look": 0.0, "check": 0.0}
+        self.last_round = None
         self.focus: dict = {}          # army id -> {"follow", "alert_moves", "alert_home"} (panel)
         self._last_full = 0.0
         self._rounds = 0
@@ -520,27 +524,56 @@ class Hunter:
             out.append(ArmySeen(tile, moving, ends, time.time(), owner="him"))
         return out
 
-    def read_view_out(self, view) -> list[ArmySeen]:
-        """Armies on the zoomed-out map (grey diamonds), in map coordinates."""
-        frame = view.frame
-        if not view.camera:
-            return []
-        cam = view.camera[1:3]
+    @staticmethod
+    def detect(frame):
+        """Everything on the zoomed-out map, in screen pixels (no coordinates needed):
+        [(point, kind, march line or None)]."""
         H = frame.shape[0]
         lines = [ln for ln in screen.find_march_lines(frame) if ln.color != "green"]
         out = []
         for d, kind in screen.find_map_icons(frame):
-            tile = to_tile(cam, self.axes_out, d, frame.shape)
             line = min(lines, key=lambda ln: ln.distance_to(d), default=None)
             moving = bool(line and line.distance_to(d) < 0.05 * H)  # the icon hides the first dots
-            ends = (tuple(to_tile(cam, self.axes_out, p, frame.shape) for p in (line.p1, line.p2))
-                    if moving else None)
-            out.append(ArmySeen(tile, moving, ends, time.time(), kind=kind))
+            out.append((d, kind, line if moving else None))
         # someone not in your alliance gathering: red pickaxe badge over a resource point
         for bx, by in screen.find_gather_badges(frame):
-            tile = to_tile(cam, self.axes_out, (bx, by + 0.035 * H), frame.shape)
-            out.append(ArmySeen(tile, False, None, time.time(), kind="farm"))
+            out.append(((bx, by + 0.035 * H), "farm", None))
         return out
+
+    def to_map(self, found, cam, shape) -> list[ArmySeen]:
+        now = time.time()
+        out = []
+        for d, kind, line in found:
+            tile = to_tile(cam, self.axes_out, d, shape)
+            ends = tuple(to_tile(cam, self.axes_out, p, shape) for p in (line.p1, line.p2)) if line else None
+            out.append(ArmySeen(tile, line is not None, ends, now, kind=kind))
+        return out
+
+    def read_view_out(self, view) -> list[ArmySeen]:
+        """Armies on the zoomed-out map (grey diamonds), in map coordinates."""
+        if not view.camera:
+            return []
+        return self.to_map(self.detect(view.frame), view.camera[1:3], view.frame.shape)
+
+    def look_spot(self):
+        """One look: a fresh picture; reading its coordinates and finding the armies on it
+        run at the same time (neither waits for the other). Returns (view, sightings)."""
+        t0 = time.time()
+        frame = self.game.fresh_frame()            # as soon as the icons have loaded
+        job = self._pool.submit(self.game.read_camera, frame)
+        found = self.detect(frame)
+        self._dangers_frame(frame)
+        cam = job.result()
+        self.timing["look"] += time.time() - t0
+        from .game import View
+        view = View(frame, [], cam, True)
+        try:
+            self.game.b.last_view = view
+        except AttributeError:
+            pass
+        if not cam:
+            return view, []
+        return view, self.to_map(found, cam[1:3], frame.shape)
 
     def identify(self, armies, limit=None) -> int:
         """Zoom in on armies we don't know the owner of and find out: a marching army
@@ -733,19 +766,22 @@ class Hunter:
                 break
             self._progress(i, len(pts), f"Sweeping around his city: spot {i + 1} of {len(pts)} ({pt[0]},{pt[1]})")
             # nearby spots: drag the map (quick); far ones: type the coordinates
+            t0 = time.time()
             moved = (self.game.pan_to(*pt, self.axes) if self.method == "zoomed_out"
                      else self.game.goto(*pt))
+            self.timing["move"] += time.time() - t0
             if not moved:
                 log.warning("hunt: couldn't jump to %s", pt)
                 continue
             visited += 1
-            view = self.game.fast_view() if self.method == "zoomed_out" else self.game.look()
-            self._dangers(view)
-            for kind, text in screen.read_toasts(view.frame, view.texts):
-                self.toasts.append((kind, text))
-            reader = self.read_view_out if self.method == "zoomed_out" else self.read_view
+            if self.method == "zoomed_out":
+                view, sightings = self.look_spot()
+            else:
+                view = self.game.look()
+                self._dangers(view)
+                sightings = self.read_view(view)
             here = []
-            for s in reader(view):
+            for s in sightings:
                 # the same army seen from two overlapping stops: keep one
                 if all(math.dist(s.tile, o.tile) > 4 for o in seen):
                     seen.append(s)
@@ -755,9 +791,12 @@ class Hunter:
         return seen, visited
 
     def _dangers(self, view):
-        if self.warning.check(view.frame):
+        self._dangers_frame(view.frame)
+
+    def _dangers_frame(self, frame):
+        if self.warning.check(frame):
             self.warned = True
-        self.dangers |= screen.danger_icons(view.frame)
+        self.dangers |= screen.danger_icons(frame)
 
     def plan(self, now):
         """sweep: search the whole area around his city (first time and every few minutes);
@@ -805,16 +844,18 @@ class Hunter:
                 break
             self._progress(i, len(points), f"Following his armies: spot {i + 1} of {len(points)} ({pt[0]},{pt[1]})"
                            if self.mode == "track" else f"Watching his city ({pt[0]},{pt[1]})")
-            if not self.game.pan_to(*pt, self.axes):
+            t0 = time.time()
+            ok = self.game.pan_to(*pt, self.axes)
+            self.timing["move"] += time.time() - t0
+            if not ok:
                 continue
-            view = self.game.fast_view()
+            view, sightings = self.look_spot()
             if not view.camera:
                 continue
             shape = view.frame.shape
-            self._dangers(view)
             covered.append(self._on_screen(view.camera[1:3], shape))
             here = []
-            for s in self.read_view_out(view):
+            for s in sightings:
                 if all(math.dist(s.tile, o.tile) > 4 for o in seen):
                     seen.append(s)
                     here.append(s)
@@ -854,13 +895,16 @@ class Hunter:
                 continue
             new.append(s)
         if new:
+            t0 = time.time()
             self.identify(new, limit=4)
+            self.timing["check"] += time.time() - t0
 
     def round(self, stop=None) -> list[Alert]:
         now = time.time()
         self.warned = False
         self.toasts = []
         self.dangers = set()
+        self.timing = {"move": 0.0, "look": 0.0, "check": 0.0}
         if self.method == "zoomed_out" and self.game._at != "sweep":
             self._progress(0, 1, "Getting to the searching zoom")
             self.zoom_out()
@@ -880,14 +924,6 @@ class Hunter:
             self._spots_at = now
             self._progress(0, 1, "Checking where your troops are gathering")
             self.update_my_spots()
-        # pop-up messages (bottom right): read once per round, just that corner
-        try:
-            f = self.game.frame()
-            H, W = f.shape[:2]
-            texts = screen.read_text(f, (int(0.55 * W), int(0.72 * H), int(0.45 * W), int(0.28 * H)))
-            self.toasts += screen.read_toasts(f, texts)
-        except Exception:
-            log.debug("toast check failed", exc_info=True)
         if self.method == "zoomed_out":
             self.tracker.match(sightings, now, covered)
             lost = [a for a in getattr(self.tracker, "gone", [])
@@ -902,7 +938,8 @@ class Hunter:
                 self.identify(self.tracker.armies)
             # his armies; plus any scout not known to be someone else's (heading for you
             # is worth knowing, and scouts are too quick to zoom in on)
-            events = self.tracker.events(lambda a: self.is_his(a) or (a.kind == "scout" and a.owner is None))
+            events = [e for e in self.tracker.events(self.is_his)
+                      if e[0] not in ("scout_at", "scout_any")]   # scouting: only the game's red alert
         else:
             events = self.tracker.update(sightings, now)
         self._log()
@@ -965,8 +1002,12 @@ class Hunter:
                 alerts.append(Alert(f"recall-{now}", "Auto-recall", "; ".join(report),
                                     urgent=True, cooldown=False))
         his = [a for a in self.tracker.armies if self.is_his(a) or (self.method == "close")]
-        log.info("Round (%s): %d spots looked at, %d armies seen, %d of them his",
-                 self.mode, visited, len(sightings), len(his))
+        t = self.timing
+        log.info("Round (%s): %d spots, %d armies seen (%d his) in %.1f s - moving %.1f s, "
+                 "looking %.1f s, checking owners %.1f s", self.mode, visited, len(sightings), len(his),
+                 time.time() - now, t["move"], t["look"], t["check"])
+        self.last_round = {"mode": self.mode, "spots": visited, "seconds": round(time.time() - now, 1),
+                           **{k: round(v, 1) for k, v in t.items()}}
         return alerts
 
     def _log(self):
