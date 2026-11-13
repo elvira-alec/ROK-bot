@@ -463,3 +463,38 @@ def test_search_button_other_window_sizes():
         f = cv2.resize(load("scouted_simple_4"), None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
         m = screen.find_magnifier(f)
         assert m and abs(m[0] - 541 * scale) <= 5 and abs(m[1] - 36 * scale) <= 5, (scale, m)
+
+
+# ---- armies at the close (3D) view: a red troop cluster with a small name above it
+ARMY = DIR / "army_close"
+
+
+def test_troop_cluster_found_and_never_mistaken_for_him():
+    """The user's army recording: someone else's army ([IP83]...KMVC) filmed close up.
+    It is found every time, never taken for his, and mostly read as someone else's."""
+    close = ["0015", "0019", "0023", "0026", "0031", "0058", "0062", "0066", "0070", "0074", "0081"]
+    other = 0
+    for n in close:
+        f = cv2.imread(str(ARMY / f"rec_{n}.jpg"))
+        boxes = screen.find_troop_clusters(f)
+        assert boxes, n
+        who, read = screen.army_owner_at_close(f, "[P83L]JONH WICK")
+        assert who != "him", (n, read)
+        other += who == "other"
+    assert other >= 0.7 * len(close), other
+
+
+def test_no_troop_clusters_at_the_searching_zoom():
+    for n in ("0007", "0040"):
+        f = cv2.imread(str(ARMY / f"rec_{n}.jpg"))
+        assert screen.find_troop_clusters(f) == [], n
+
+
+@pytest.mark.parametrize("name", ["his_army_marching_close.png", "attack_his_army_close.png",
+                                  "battle_close_red_lines.png"])
+def test_his_army_close_up_is_his(name):
+    f = cv2.imread(str(DIR / name))
+    # the army isn't in the middle on these screenshots: look at every cluster
+    hits = [t.text for b in screen.find_troop_clusters(f) for t in screen.read_army_label(f, b)
+            if screen.name_score(t.text, "[P83L]JONH WICK") >= 0.75]
+    assert hits, name

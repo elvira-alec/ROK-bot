@@ -51,6 +51,16 @@ was fixed, how to test, and how to build and publish. Read it all before changin
 
 **March lines** (dotted): white = others, green = the user or their alliance, red = hostile.
 
+**Armies at the close (3D) view** (from the user's army recording, `tests/real_screens/army_close/`):
+- A marching army is a cluster of small **red-armoured troops** (other players' armies are
+  red), with the owner's name in **tiny white letters just above** it (~10 px at 1042 px tall).
+  A normal text read misses it.
+- `screen.find_troop_clusters` finds the red cluster. `read_army_label` reads the strip above
+  it enlarged 3x. `army_owner_at_close` returns 'him' on a clear read of his name. It returns
+  'other' only when the name part has nothing of his (`_name_part_similarity` ≤ 0.3: other
+  alliances' tags like `[IP83]` look like his `[P83L]`). The hunter needs two looks agreeing
+  before it says 'other'.
+
 **Farms (gathering)**
 - Show as a resource point with a round **red pickaxe badge** (not the user's alliance).
   Green = the user or their alliance.
@@ -158,6 +168,11 @@ boxes, the user's snapshots including the Spanish photos).
   is always closed, boxes are closed before zooming, and zooming out stops where the level
   numbers vanish (`_out_keeping_tags`).
 - Update check SSL failure on Windows: certifi added. Phone section order was reversed.
+- At the close view the bot couldn't read a marching army's owner: the name over the troops
+  is tiny. Now it finds the red troop cluster and reads the strip above it enlarged.
+- A farm's zoomed-out estimate wobbles a tile or two between rounds. It drew a trail and two
+  farms "moving" toward his city raised "pulling troops back". Farms that stay put now have
+  no trail and never count as heading home.
 - The debug recording logs each control's duration (`action.ms`) and each capture's
   (`frame.capture_ms`). Check those first when the user says the gaps are slow.
 

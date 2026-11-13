@@ -535,3 +535,18 @@ def test_farm_details_kept_when_matched():
     t.match([s], 0)
     t.match([ArmySeen((170.0, 390.0), False, None, 30, kind="farm")], 30)
     assert t.armies[0].info.get("what") == "Level 6 Cropland"
+
+
+def test_farm_estimate_wobble_is_not_a_move():
+    """The user saw a little trail on a farm that hadn't moved, then 'pulling troops
+    back'. A farm's zoomed-out estimate wobbles a tile or two: no trail, no pullback."""
+    from rokwatch.hunter import ArmySeen, Tracker
+    t = Tracker((162, 374), [("camp", (205, 424))])
+    t.match([ArmySeen((172.0, 362.0), False, None, 0, kind="farm", owner="him"),
+             ArmySeen((151.0, 384.0), False, None, 0, kind="farm", owner="him")], 0)
+    t.events()
+    # next round both estimates come out ~1.5 tiles nearer his city
+    t.match([ArmySeen((171.0, 363.2), False, None, 30, kind="farm"),
+             ArmySeen((152.4, 383.0), False, None, 30, kind="farm")], 30)
+    assert [e for e in t.events() if e[0] == "pulling_back"] == []
+    assert all(r["trail"] == [] for r in t.summary())

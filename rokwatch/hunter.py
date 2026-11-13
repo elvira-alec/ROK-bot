@@ -330,6 +330,8 @@ class Tracker:
         self.gone = []
         mine = [a for a in his if a.kind != "scout"]    # scouts don't count as troops
         def heading_home(a):
+            if a.kind == "farm" and not a.moving:
+                return False            # a farm stays put: its estimate just wobbles a tile or two
             if a.direction == "home":
                 return True
             # its line may be missed on one look; the move itself also tells: it was
@@ -514,7 +516,9 @@ class Tracker:
                         "checks": a.checks,
                         "threat": th[0] if th else None, "threat_how": th[1] if th else None,
                         "dist_home": round(math.dist(a.tile, self.city)),
-                        "trail": [[round(p[0]), round(p[1])] for _, p in a.history[-10:]],
+                        # where it has been (not for farms: they stay put, the estimate wobbles)
+                        "trail": [] if a.kind == "farm" and not a.moving else
+                                 [[round(p[0]), round(p[1])] for _, p in a.history[-10:]],
                         "info": {k: v for k, v in (a.info or {}).items() if k != "readings"},
                         **self._farm_timing(a), **self._motion(a)})
         # the dangerous ones first, then his confirmed ones, nearest to you first
@@ -772,22 +776,41 @@ class Hunter:
             if ac:
                 self._farms_in_frame([o for o in others if o.kind == "farm"], ac)
         else:
-            for attempt in range(2):          # a name can be missed on one look
-                v = self.game.look_middle()
-                H, W = v.frame.shape[:2]
-                centre = (W / 2, H / 2)
-                near = [lb for lb in screen.find_player(v.frame, v.texts, self.name)
-                        if lb.kind == "army" and math.dist(lb.pos, centre) < 0.4 * H]
-                self.seen_text[getattr(a, "id", 0)] = [
-                    (t.text, screen.label_kind(v.frame, t), round(math.dist(t.center, centre) / H, 2))
-                    for t in v.texts if math.dist(t.center, centre) < 0.4 * H]
-                if near:
+            # close view: the army is a cluster of red troops with a small name above it
+            # (read enlarged). Two looks a moment apart: 'his' on one clear read, 'not his'
+            # only if both clearly read someone else.
+            votes, read = [], []
+            for attempt in range(2):
+                f = self.game.frame()
+                who, txt = screen.army_owner_at_close(f, self.name)
+                read += txt
+                if who == "him":
                     a.owner = "him"
-                elif self._other_army_label_near(v, centre, H):
-                    a.owner = "other"
-                if a.owner:
                     break
-                time.sleep(0.2)
+                votes.append(who)
+                if attempt == 0:
+                    time.sleep(0.25)
+            if a.owner is None and votes == ["other", "other"]:
+                a.owner = "other"
+            self.seen_text[getattr(a, "id", 0)] = read
+        for attempt in range(0 if a.kind == "farm" or a.owner else 2):
+            # not settled by the troops' name: the old way, any army label near the middle
+            v = self.game.look_middle()
+            H, W = v.frame.shape[:2]
+            centre = (W / 2, H / 2)
+            near = [lb for lb in screen.find_player(v.frame, v.texts, self.name)
+                    if lb.kind == "army" and math.dist(lb.pos, centre) < 0.4 * H]
+            self.seen_text.setdefault(getattr(a, "id", 0), [])
+            self.seen_text[getattr(a, "id", 0)] = list(self.seen_text[getattr(a, "id", 0)]) + [
+                (t.text, screen.label_kind(v.frame, t), round(math.dist(t.center, centre) / H, 2))
+                for t in v.texts if math.dist(t.center, centre) < 0.4 * H]
+            if near:
+                a.owner = "him"
+            elif self._other_army_label_near(v, centre, H):
+                a.owner = "other"
+            if a.owner:
+                break
+            time.sleep(0.2)
         log.info("hunt: %s at %.0f,%.0f is %s", "farm" if a.kind == "farm" else "army",
                  a.tile[0], a.tile[1], a.owner or "unclear")
         TRACE.event("owner", kind=a.kind, tile=[round(a.tile[0], 1), round(a.tile[1], 1)], owner=a.owner,

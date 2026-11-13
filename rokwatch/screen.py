@@ -802,6 +802,90 @@ def name_score(text: str, name: str) -> float:
     return best
 
 
+def find_troop_clusters(frame: np.ndarray):
+    """Marching armies at the close (3D) view: a cluster of small red-armoured troops
+    (other players' armies are red), with the owner's name in small white letters just
+    above it. Returns boxes (x, y, w, h), nearest the middle of the screen first.
+    Tuned on the user's army recording (tests/real_screens/army_close/)."""
+    H, W = frame.shape[:2]
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    red = cv2.inRange(hsv, np.array((0, 140, 110), np.uint8), np.array((7, 255, 255), np.uint8)) | \
+        cv2.inRange(hsv, np.array((172, 140, 110), np.uint8), np.array((180, 255, 255), np.uint8))
+    # not the HUD: top bar, quest panel on the left, chat, buttons on the right
+    red[:int(0.1 * H)] = 0
+    red[int(0.86 * H):] = 0
+    red[:, :int(0.13 * W)] = 0
+    red[:, int(0.93 * W):] = 0
+    k = int(0.025 * H) | 1
+    m = cv2.morphologyEx(red, cv2.MORPH_CLOSE, np.ones((k, k), np.uint8))
+    n, _, st, _ = cv2.connectedComponentsWithStats(m)
+    out = []
+    for i in range(1, n):
+        x, y, w, h, _a = st[i]
+        if not (0.05 * H < w < 0.4 * H and 0.03 * H < h < 0.3 * H):
+            continue
+        part = red[y:y + h, x:x + w]
+        fill = part.mean() / 255
+        bits = cv2.connectedComponents(part)[0] - 1        # many little soldiers, not one roof
+        if bits >= 10 and 0.06 <= fill <= 0.45:
+            out.append((int(x), int(y), int(w), int(h)))
+    mid = (W / 2, H / 2)
+    return sorted(out, key=lambda b: math.dist((b[0] + b[2] / 2, b[1] + b[3] / 2), mid))
+
+
+def read_army_label(frame: np.ndarray, box) -> list[Text]:
+    """The owner's name over a troop cluster: small white letters just above it, read
+    enlarged 3x (too small for a normal read)."""
+    H, W = frame.shape[:2]
+    x, y, w, h = box
+    cx = x + w // 2
+    x0, x1 = max(0, int(cx - 0.16 * H)), min(W, int(cx + 0.16 * H))
+    y0, y1 = max(0, int(y - 0.055 * H)), min(H, int(y + 0.35 * h))
+    if x1 - x0 < 10 or y1 - y0 < 5:
+        return []
+    up = 3
+    crop = cv2.resize(frame[y0:y1, x0:x1], None, fx=up, fy=up, interpolation=cv2.INTER_CUBIC)
+    pad = 20
+    crop = cv2.copyMakeBorder(crop, pad, pad, pad, pad, cv2.BORDER_REPLICATE)
+    out = []
+    for t in read_text(crop, strip=True):
+        bx, by, bw, bh = t.box
+        out.append(Text(t.text, (int(x0 + (bx - pad) / up), int(y0 + (by - pad) / up),
+                                 int(bw / up), int(bh / up)), t.conf))
+    return out
+
+
+def _name_part_similarity(text: str, name: str) -> float:
+    """How much of his name (without the alliance tag) is in this text, at best (0-1).
+    The tag is left out: other alliances' tags look alike ('IP83' vs 'P83L')."""
+    from difflib import SequenceMatcher
+    bare = _norm(re.sub(r"^\[[^\]]*\]", "", name))
+    t = _norm(text)
+    if not bare or not t:
+        return 0.0
+    L = len(bare)
+    return max(SequenceMatcher(None, t[i:i + L], bare).ratio() for i in range(max(1, len(t) - L + 1)))
+
+
+def army_owner_at_close(frame: np.ndarray, name: str, reach=0.4):
+    """Whose is the army near the middle (close view)? ('him' | 'other' | None, texts
+    read). The two troop clusters nearest the middle are read. 'him' on a clear read of
+    his name; 'other' only on a clear read of a name that has nothing of his in it."""
+    H, W = frame.shape[:2]
+    read, other = [], False
+    for box in find_troop_clusters(frame)[:2]:
+        if math.dist((box[0] + box[2] / 2, box[1] + box[3] / 2), (W / 2, H / 2)) > reach * H:
+            break
+        texts = read_army_label(frame, box)
+        read += [t.text for t in texts]
+        for t in texts:
+            if name_score(t.text, name) >= 0.75:
+                return "him", read
+            if len(_norm(t.text)) >= 7 and _name_part_similarity(t.text, name) <= 0.3:
+                other = True
+    return ("other" if other else None), read
+
+
 @dataclass
 class NameLabel:
     text: str
