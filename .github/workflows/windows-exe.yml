@@ -10,6 +10,10 @@ on:
         description: "Publish this build as the next numbered release"
         type: boolean
         default: false
+      start_over:
+        description: "Delete all earlier releases and publish this one as 1.0"
+        type: boolean
+        default: false
 permissions:
   contents: write
 # one build at a time, so two builds never take the same version number
@@ -34,7 +38,7 @@ jobs:
         run: |
           last=$(gh release list --limit 200 --json tagName -q '.[].tagName' \
                  | grep -E '^v[0-9]+\.[0-9]+$' | sed 's/^v//' | sort -t. -k1,1n -k2,2n | tail -1 || true)
-          if [ -z "$last" ]; then v=1.0; else v="${last%%.*}.$(( ${last#*.} + 1 ))"; fi
+          if [ -z "$last" ] || [ "${{ inputs.start_over }}" = "true" ]; then v=1.0; else v="${last%%.*}.$(( ${last#*.} + 1 ))"; fi
           echo "$v" > rokwatch/version.txt
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "Building version $v"
@@ -69,6 +73,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           V: ${{ steps.ver.outputs.version }}
         run: |
+          if [ "${{ inputs.start_over }}" = "true" ]; then
+            # only now (all tests passed): remove every earlier release and its tag
+            for t in $(gh release list --limit 200 --json tagName -q '.[].tagName'); do
+              echo "deleting release $t"; gh release delete "$t" -y --cleanup-tag
+            done
+          fi
           gh release create "v$V" RoKWatcher-windows.zip --target "$GITHUB_SHA" --latest \
             --title "RoK Watcher $V" \
             --notes "$(git log -1 --pretty=%s). Download RoKWatcher-windows.zip, unzip it, double-click RoKWatcher.exe. If you already have it, the control panel updates itself."
