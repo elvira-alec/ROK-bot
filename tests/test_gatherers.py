@@ -37,7 +37,7 @@ class Clicky:
     """Shows his camp; after a tap near it, the resource point's box."""
     def __init__(self):
         self.frames = [img("close_his_camp"), img("camp_popup_gatherer")]
-        self.i, self.clicks, self.keys = 0, [], []
+        self.i, self.clicks, self.keys, self.drags = 0, [], [], []
 
     def screenshot(self, area=None):
         return self.frames[self.i].copy()
@@ -48,8 +48,12 @@ class Clicky:
             self.i = 1
 
     def press(self, k):
-        self.keys.append(k)
-        self.i = 0
+        self.keys.append(k)          # Esc: on the PC game this does NOT close the box
+
+    def drag(self, x0, y0, x1, y1, steps=15):
+        self.drags.append((x0, y0, x1, y1))
+        if self.i == 1 and x0 < 1443:   # dragging the map beside the box closes it
+            self.i = 0
 
 
 def test_identify_farm_by_tapping_the_camp(tmp_path):
@@ -60,7 +64,7 @@ def test_identify_farm_by_tapping_the_camp(tmp_path):
     a = Army(1, (160.0, 383.0), 0, 0, kind="farm")
     h._identify_farm(a)
     assert a.owner == "him" and a.tile == (164.0, 380.0)
-    assert b.keys == ["Escape"]                                   # box closed again
+    assert b.i == 0 and b.drags and b.keys == []                  # closed by dragging, no Esc
 
 
 def test_sweep_view_sees_his_farm(tmp_path):
@@ -88,3 +92,18 @@ def test_alert_when_his_farmer_leaves():
     t.armies[0].owner = "him"
     t.match([], 160, covered=[(200, 420, 10, 8)])
     assert t.armies and t.events() == []
+
+
+def test_spanish_box_and_closing_rules():
+    """The info box is found whatever the language (photos of the Spanish game)."""
+    for n in ("photo_es_popup_farm.jpg", "photo_es_popup_profile.jpg", "camp_popup_gatherer.png"):
+        assert screen.find_info_box(cv2.imread(str(G / n))), n
+    for n in ("close_his_camp.png", "sweep_red_pickaxe.png"):
+        assert screen.find_info_box(cv2.imread(str(G / n))) is None, n
+    # Spanish power number ("2 032 680") means the close view, like "2,015,180"
+    from rokwatch.screen import Text, is_simple_view
+    import numpy as np
+    f = np.zeros((1320, 2868, 3), np.uint8)
+    assert not is_simple_view([Text("2 032 680", (300, 20, 200, 40), 1)], f)
+    assert not is_simple_view([Text("2032680", (300, 20, 200, 40), 1)], f)
+    assert is_simple_view([Text("#4183 X:165 Y:380", (300, 20, 200, 40), 1)], f)

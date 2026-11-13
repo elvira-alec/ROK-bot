@@ -19,6 +19,15 @@ from . import screen
 log = logging.getLogger("rokwatch")
 
 
+# button words in the game's languages (English, Spanish, ...)
+RECALL_RX = r"^(RECALL|RETIRAR|RETIRADA|REGRESAR|VOLVER|LLAMAR|RAPPEL(ER)?|ZUR(U|Ü)CK(RUFEN)?|RICHIAMA)$"
+CONFIRM_RX = r"^(CONFIRM|CONFIRMAR|ACEPTAR|OK|YES|S(I|Í)|CONFIRMER|BEST(Ä|A)TIGEN)$"
+
+
+class Stopped(Exception):
+    """Stop was pressed: unwind out of whatever the bot is doing."""
+
+
 @dataclass
 class View:
     frame: np.ndarray
@@ -39,8 +48,11 @@ class Game:
         self._good_tap = None
         self._bar_cache = None          # where the X / Y boxes and button are (fractions)
         self.notch_wait = 0.25
-        self._zoom_now = None          # notches in from fully out, when known
         self._size = None
+        self.zoom_gap = None           # notches between the searching and the close zoom
+        self._cam = None               # last camera position read
+        self._fresh = None             # (time, picture, camera) of the last read
+        self.stop_check = None         # returns True when Stop was pressed
         if area and hasattr(browser, "set_area"):
             browser.set_area(area)
 
@@ -77,6 +89,7 @@ class Game:
         Quick path: find the magnifier by its shape, check the bar opened by its blue
         button, type into the remembered boxes (no full text reading)."""
         for attempt in range(tries):
+            self.check_stop()
             f = self.frame()
             c = screen.camera_coords(f) or screen.camera_coords(f, screen.read_text(f))
             if c and abs(c[1] - x) <= 1 and abs(c[2] - y) <= 1:
@@ -93,6 +106,7 @@ class Game:
         end = time.time() + timeout
         time.sleep(0.4)
         while time.time() < end:
+            self.check_stop()
             cam = self.camera_fast()
             if cam and abs(cam[0] - x) <= 2 and abs(cam[1] - y) <= 2:
                 time.sleep(0.25)                   # let the map finish drawing
@@ -176,7 +190,7 @@ class Game:
             self.close_popups()
         return False
 
-    # ------------------------------------------------- fixed zoom (wheel notches)
+    # ------------------------------------------------- zoom: two remembered levels
     def _small(self, frame=None):
         import cv2
         f = self.frame() if frame is None else frame
@@ -189,80 +203,110 @@ class Game:
         """Share of the picture that's different (marching icons are only a few pixels)."""
         return float(np.mean(np.abs(a - b) > 12))
 
-    def _settled(self, timeout=1.5):
+    def _settled(self, timeout=1.2):
         """Wait for the zoom animation to finish; returns the still picture (small)."""
         prev = self._small()
         end = time.time() + timeout
         while time.time() < end:
-            time.sleep(0.12)
+            time.sleep(0.08)
             cur = self._small()
             if self._changed(cur, prev) < 0.004:
                 return cur
             prev = cur
         return prev
 
-    def _notch(self, out: bool, settle=True):
+    def _notch(self, out: bool):
+        self.check_stop()
         H, W = self._size or self.frame().shape[:2]
         self.b.wheel(W // 2, H // 2, 100 if out else -100)
-        return self._settled() if settle else None
+        return self._settled()
 
-    def zoom_all_out(self, max_notches=80) -> int:
-        """Scroll out until the picture stops changing (fully zoomed out). Scrolls in
-        quick bursts: going past the end does no harm."""
+    def steps(self, n: int):
+        """n notches in (n > 0) or out (n < 0), each one finished before the next."""
+        for _ in range(abs(int(n))):
+            self._notch(out=n < 0)
+
+    def level(self) -> str:
+        return screen.view_level(self.frame())
+
+    def to_close(self) -> bool:
+        """From the searching zoom to the close zoom (resource points can be tapped,
+        names show over armies): the remembered number of notches in, then checked."""
+        if self._at == "close":
+            if self.level() == "close":
+                return True
+            self._at = None
+        if self.zoom_gap and self._at == "sweep":
+            self.steps(self.zoom_gap)
+        for _ in range(8):                         # not there yet: one more at a time
+            if self.level() == "close":
+                self._at = "close"
+                return True
+            self._notch(out=False)
+        return False
+
+    def to_sweep(self) -> bool:
+        """Back to the searching zoom: the same number of notches out, then checked
+        (never further out than where the map icons still show)."""
+        if self._at == "sweep":
+            if self.level() == "patrol":
+                return True
+            self._at = None
+        if self._at == "close" and self.zoom_gap:
+            self.steps(-self.zoom_gap)
+        for _ in range(10):
+            lv = self.level()
+            if lv == "patrol":
+                self._at = "sweep"
+                return True
+            self._notch(out=(lv == "close"))       # too close: out; too far: in
+        return False
+
+    def calibrate_zoom(self):
+        """Call at the zoom you want for searching (simplified map, icons showing).
+        Counts the notches in to the close zoom, comes back the same way and checks
+        it landed where it started. Returns (gap, ok)."""
+        if self.level() != "patrol":
+            return None, False
+        ref = self._settled()
         H, W = self.frame().shape[:2]
         self._size = (H, W)
-        prev = self._small()
         n = 0
-        while n < max_notches:
-            for _ in range(6):
-                self.b.wheel(W // 2, H // 2, 100)
-                time.sleep(0.04)
-            n += 6
-            cur = self._settled()
-            if self._changed(cur, prev) < 0.004:
-                break
-            prev = cur
-        self._zoom_now = 0
-        return n
+        while n < 30 and self.level() != "close":
+            self._notch(out=False)
+            n += 1
+        if n >= 30:
+            return None, False
+        before = self._settled()
+        after = self._notch(out=False)             # one more: resource points load in
+        gap = n + 1 if self._changed(after, before) > 0.004 else n   # (unless that's the end)
+        self.steps(-gap)
+        ok = self._changed(self._settled(), ref) < 0.08 and self.level() == "patrol"
+        self.zoom_gap, self._at = gap, "sweep"
+        return gap, ok
 
-    def set_zoom(self, notches_in: int, anchor=False):
-        """The same zoom every time: all the way out, then N notches in (waiting for
-        each zoom step to finish, so none gets lost). When the zoom is already known
-        it just steps the difference."""
-        if anchor or self._zoom_now is None:
-            self.zoom_all_out()
-        diff = int(notches_in) - self._zoom_now
-        for _ in range(abs(diff)):
-            self._notch(out=diff < 0)
-        self._zoom_now = int(notches_in)
+    # old names, used by simple patrol
+    def zoom_to_patrol_level(self, max_steps=10) -> bool:
+        return self.to_sweep()
 
-    def measure_zoom(self, max_in=45):
-        """Work out the zoom you've set by hand, as 'N notches in from fully zoomed out'.
-        Remembers how the screen looks, zooms all the way out, then steps back in until
-        it looks the same again; then checks that set_zoom(N) gets there too.
-        Returns (N, ok)."""
-        ref = self._settled()
-        self.zoom_all_out()
-        best_k, best_d, k = 0, self._changed(self._small(), ref), 0
-        while k < max_in:
-            k += 1
-            d = self._changed(self._notch(out=False), ref)
-            if d < best_d:
-                best_k, best_d = k, d
-            if best_d < 0.05 and k >= best_k + 3:   # clearly past the match
-                break
-        self.set_zoom(best_k, anchor=True)           # the way it'll be done from now on
-        check = self._changed(self._settled(), ref)
-        log.info("zoom: %d notches in (match %.3f, check %.3f)", best_k, best_d, check)
-        return best_k, best_d < 0.08 and check < 0.08
+    zoom_out_to_simple = zoom_to_patrol_level
+
+    def zoom_to_close(self, max_steps=10) -> bool:
+        return self.to_close()
 
     # ------------------------------------------------------------- panning
     def fast_view(self) -> View:
         """Picture + camera only (reads just the coordinates, not the whole screen):
         enough for icons and march lines, several times quicker than look()."""
-        f = self.frame()
-        c = screen.camera_coords(f) or screen.camera_coords(f, screen.read_text(f))
+        if self._fresh and time.time() - self._fresh[0] < 0.3:
+            f, c = self._fresh[1], self._fresh[2]           # just read (after a drag)
+        else:
+            f = self.frame()
+            c = screen.camera_coords(f) or screen.camera_coords(f, screen.read_text(f))
+        self._fresh = None
         v = View(f, [], c[:3] if c else None, True)
+        if c:
+            self._cam = (c[1], c[2])
         try:
             self.b.last_view = v
         except AttributeError:
@@ -275,20 +319,24 @@ class Game:
         c = screen.camera_coords(f)
         if not c:                                  # quick read failed: read the whole screen
             c = screen.camera_coords(f, screen.read_text(f))
-        return (c[1], c[2]) if c else None
+        self._cam = (c[1], c[2]) if c else None
+        self._fresh = (time.time(), f, c)
+        return self._cam
 
-    def pan_to(self, x, y, axes, max_drags=4, close_enough=2.0) -> bool:
+    def pan_to(self, x, y, axes, max_drags=3, close_enough=2.0) -> bool:
         """Drag the map to (x, y) instead of typing coordinates: fast for nearby spots.
-        axes: tiles-per-pixel matrix learned at the current zoom. Falls back to goto."""
+        Uses the camera position it already knows, so a nearby spot is one drag.
+        axes: tiles-per-pixel matrix learned at this zoom. Far spots: typed in."""
+        self.check_stop()
         if not axes:
             return self.goto(x, y)
-        A = np.array(axes, float)
         try:
-            Ainv = np.linalg.inv(A)
+            Ainv = np.linalg.inv(np.array(axes, float))
         except np.linalg.LinAlgError:
             return self.goto(x, y)
-        H, W = self.frame().shape[:2]
-        cam = self.camera_fast()
+        H, W = self._size or self.frame().shape[:2]
+        self._size = (H, W)
+        cam = self._cam or self.camera_fast()
         for _ in range(max_drags):
             if cam is None:
                 break
@@ -303,9 +351,27 @@ class Game:
                 p = p / far
             cx, cy = W // 2 - int(p[0]) // 2, H // 2 - int(p[1]) // 2
             self.b.drag(cx, cy, cx + int(p[0]), cy + int(p[1]))
-            time.sleep(0.25)
+            time.sleep(0.15)
             cam = self.camera_fast()
         return self.goto(x, y)
+
+    # ------------------------------------------------------------- stopping
+    @property
+    def _at(self):
+        """'sweep' / 'close': which of the two zooms the game is at, when known (kept on
+        the window object, so it survives between commands)."""
+        return getattr(self.b, "_zoom_at", None)
+
+    @_at.setter
+    def _at(self, v):
+        try:
+            self.b._zoom_at = v
+        except AttributeError:
+            pass
+
+    def check_stop(self):
+        if self.stop_check and self.stop_check():
+            raise Stopped()
 
     def _fill_coord_dialog(self, x, y, v=None) -> bool:
         """Type X and Y into the coordinate search box and confirm.
@@ -362,37 +428,29 @@ class Game:
                     (ly.box[0] + ly.box[2] + gap, ly.center[1]))
         return None
 
-    def close_popups(self):
-        self.b.press("Escape")
-        self.wait(0.6)
-
-    def zoom_to_patrol_level(self, max_steps=10) -> bool:
-        """Get to the simplified map that still shows resource points and armies:
-        scroll out from the 3D view, back in if it went too far (globe button shows)."""
-        for _ in range(max_steps):
-            v = self.look()
-            level = screen.zoom_level(v.frame, v.texts)
-            if level == "patrol":
-                return True
-            H, W = v.frame.shape[:2]
-            self.b.wheel(W // 2, H // 2, 300 if level == "close" else -200)
-            self.wait(0.8)
-        v = self.look()
-        return screen.zoom_level(v.frame, v.texts) == "patrol"
-
-    zoom_out_to_simple = zoom_to_patrol_level  # old name
-
-    def zoom_to_close(self, max_steps=10) -> bool:
-        """Scroll in to the 3D view, where names show over troops."""
-        for _ in range(max_steps):
-            v = self.look()
-            if screen.zoom_level(v.frame, v.texts) == "close":
-                return True
-            H, W = v.frame.shape[:2]
-            self.b.wheel(W // 2, H // 2, -300)
-            self.wait(0.8)
-        v = self.look()
-        return screen.zoom_level(v.frame, v.texts) == "close"
+    def close_popups(self, tries=3) -> bool:
+        """Close whatever is open on top of the map. An info box (tapped resource point,
+        army...) is closed with a short drag of the map on its far side - Esc doesn't
+        close those on the PC game, and pressing Esc on the plain map opens your
+        profile. Esc is only used when something covers the coordinate readout."""
+        for _ in range(tries):
+            f = self.frame()
+            H, W = f.shape[:2]
+            box = screen.find_info_box(f)
+            if box:
+                bx, by, bw, bh = box
+                # drag on the side away from the box, a little, on the map
+                x = int(bx - 0.12 * W) if bx > W / 2 else int(bx + bw + 0.12 * W)
+                x = min(max(x, int(0.12 * W)), int(0.85 * W))
+                y = int(min(max(by + bh / 2, 0.25 * H), 0.75 * H))
+                self.b.drag(x, y, x, y + int(0.03 * H))
+                time.sleep(0.35)
+                continue
+            if screen.camera_coords(f) or screen.search_go_button(f):
+                return True                        # the plain map (or the search bar): fine
+            self.b.press("Escape")                 # some window covers the map
+            time.sleep(0.5)
+        return screen.find_info_box(self.frame()) is None
 
     # ---------------------------------------------------------------- troops
     def troops(self, view: View | None = None):
@@ -417,7 +475,7 @@ class Game:
         self.b.click(*slot.portrait)
         self.wait()
         v = self.look()
-        btn = v.find(r"^RECALL$")
+        btn = v.find(RECALL_RX)
         if not btn:
             log.warning("recall: no RECALL button after selecting troop %d", slot.index + 1)
             self.close_popups()
@@ -425,14 +483,14 @@ class Game:
         self.b.click(*btn[0].center)
         self.wait()
         v = self.look()
-        if v.find(r"^RECALL$"):
+        if v.find(RECALL_RX):
             # maybe a confirm dialog
-            ok = v.find(r"^(CONFIRM|OK|YES)$")
+            ok = v.find(CONFIRM_RX)
             if ok:
                 self.b.click(*ok[0].center)
                 self.wait()
                 v = self.look()
-        done = not v.find(r"^RECALL$")
+        done = not v.find(RECALL_RX)
         if not done:
             self.close_popups()
         return done

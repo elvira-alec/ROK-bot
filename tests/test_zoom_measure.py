@@ -1,59 +1,82 @@
-"""Zoom measuring against a simulated game made from a real screenshot: every notch
-really rescales the map, zoom changes animate over ~0.3 s, and zooming out stops
-at a limit (extra notches do nothing)."""
+"""Zoom against a simulated game made from real screenshots: every notch really
+rescales the map, zoom changes animate, and the view type changes like the game
+(close 3D view / simplified map / too far)."""
 
 import time
 from pathlib import Path
 
 import cv2
-import numpy as np
 
 from rokwatch.game import Game
 
-REAL = Path(__file__).resolve().parent / "real_screens" / "own_city_gathering.png"
+REAL = Path(__file__).resolve().parent / "real_screens"
 
 
 class ZoomSim:
-    MAX_OUT = 14                                 # notches from fully in to fully out
+    MAX = 20                                     # 0 = fully out ... 20 = fully in
 
     def __init__(self, level):
-        big = cv2.imread(str(REAL))
-        self.world = cv2.resize(big, None, fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
-        self.level = level                       # 0 = fully out ... MAX_OUT = fully in
-        self.shown, self.t = float(level), time.time()
-
-    def _scale(self, lv):
-        return 0.35 * (1.09 ** lv)
+        self.close = cv2.imread(str(REAL / "own_city_gathering.png"))      # 3D view
+        self.simple = cv2.imread(str(REAL / "march_simple_view.png"))      # simplified map
+        self.far = cv2.imread(str(REAL / "search_bar_far_zoom.png"))       # too far out
+        self.level, self.shown, self.t = level, float(level), time.time()
+        self.wheels = 0
 
     def wheel(self, x, y, dy):
-        self.shown = self._current()
-        self.t = time.time()
-        self.level = max(0, min(self.MAX_OUT, self.level + (-1 if dy > 0 else 1)))
+        self.shown, self.t = self._current(), time.time()
+        self.level = max(0, min(self.MAX, self.level + (-1 if dy > 0 else 1)))
+        self.wheels += 1
 
-    def _current(self):                          # animation toward the target level
-        k = min(1.0, (time.time() - self.t) / 0.3)
+    def _current(self):
+        k = min(1.0, (time.time() - self.t) / 0.25)
         return self.shown + (self.level - self.shown) * k
 
     def screenshot(self, area=None):
-        s = self._scale(self._current())
-        h, w = 660, 1434
-        Hb, Wb = self.world.shape[:2]
-        cw, ch = int(w / s / 2), int(h / s / 2)
-        cx, cy = Wb // 2, Hb // 2
-        crop = self.world[max(0, cy - ch // 2):cy + ch // 2, max(0, cx - cw // 2):cx + cw // 2]
-        return cv2.resize(crop, (w, h), interpolation=cv2.INTER_AREA)
+        lv = self._current()
+        base = self.close if lv >= 13 else self.simple if lv >= 4 else self.far
+        s = 1.0 + 0.06 * (lv - round(lv) + (lv % 3))        # map rescales with every notch
+        h, w = base.shape[:2]
+        big = cv2.resize(base, None, fx=s, fy=s)
+        y0, x0 = (big.shape[0] - h) // 2, (big.shape[1] - w) // 2
+        out = big[y0:y0 + h, x0:x0 + w].copy()
+        out[:int(0.1 * h), :int(0.45 * w)] = base[:int(0.1 * h), :int(0.45 * w)]   # the top bar stays
+        out[int(0.75 * h):, int(0.8 * w):] = base[int(0.75 * h):, int(0.8 * w):]    # so do the buttons
+        return out
 
 
-def test_measure_and_return_to_a_hand_set_zoom():
-    for start in (3, 9):
-        sim = ZoomSim(start)
-        g = Game(sim, settle=0)
-        n, ok = g.measure_zoom()
-        assert ok and n == start, (start, n)
-        assert sim.level == start
-        sim.level = sim.shown = 12                 # you zoomed somewhere else by hand
-        g.set_zoom(start, anchor=True)
-        assert sim.level == start
-        g.set_zoom(start + 2)                      # relative steps (to read names) and back
-        g.set_zoom(start)
-        assert sim.level == start
+def test_two_zooms_without_ever_zooming_far_out():
+    sim = ZoomSim(8)                             # the searching zoom you picked
+    g = Game(sim, settle=0)
+    gap, ok = g.calibrate_zoom()
+    assert ok and sim.level == 8 and gap == 13 - 8 + 1
+    for _ in range(3):
+        assert g.to_close() and sim.level >= 13
+        assert g.to_sweep() and sim.level == 8
+
+
+def test_lost_notch_is_corrected():
+    sim = ZoomSim(8)
+    g = Game(sim, settle=0)
+    g.calibrate_zoom()
+    g.to_close()
+    sim.level = 2                                # e.g. you scrolled out by hand: too far
+    sim.shown = 2.0
+    g._at = None
+    assert g.to_sweep() and 4 <= sim.level < 13  # back on the simplified map, never further out
+
+
+def test_stop_interrupts_at_once():
+    import pytest
+    from rokwatch.game import Stopped
+    sim = ZoomSim(8)
+    g = Game(sim, settle=0)
+    pressed = {"stop": False}
+    g.stop_check = lambda: pressed["stop"]
+    g.calibrate_zoom()
+    pressed["stop"] = True
+    t0 = time.time()
+    with pytest.raises(Stopped):
+        g.to_close()
+    with pytest.raises(Stopped):
+        g.goto(100, 100)
+    assert time.time() - t0 < 1.0

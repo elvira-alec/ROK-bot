@@ -74,6 +74,8 @@ class ArmySeen:
     seen: float                 # time
     owner: str | None = None    # "him" when his name was read right there
     kind: str = "army"          # "army", "scout" (plain diamond) or "farm" (gathering)
+    id: int = 0
+    checks: int = 0
 
 
 def predict(a, now):
@@ -186,6 +188,8 @@ class Tracker:
             a.prev_tile = prev_tile
             a.tile, a.last_seen, a.moving, a.ends = s.tile, now, s.moving, s.ends
             a.kind = getattr(s, "kind", "army")
+            if a.owner is None and getattr(s, "owner", None):
+                a.owner = s.owner
             a.history.append((now, s.tile))
             if s.moving and s.ends:
                 a.direction, a.dest = self._direction(a, prev_tile, prev_moving, s)
@@ -374,9 +378,9 @@ class Hunter:
         self.method = h.get("method", "zoomed_out")
         self.axes_close = h.get("axes_close")
         self.axes_out = cfg.get("patrol", {}).get("axes")
-        zn, cn = h.get("zoom_notches"), h.get("close_notches")
-        self.zoom_notches = int(zn) if zn not in (None, "") else None
-        self.close_notches = int(cn) if cn not in (None, "") else None
+        gap = h.get("zoom_gap")
+        if gap not in (None, ""):
+            game.zoom_gap = int(gap)
         self.progress = (0, 0, "")
         self.on_progress = None
         self.axes = self.axes_out if self.method == "zoomed_out" else self.axes_close
@@ -408,11 +412,9 @@ class Hunter:
     def ready(self):
         problems = []
         if not self.name:
-            problems.append("set hunt.player_name (his name as it shows in game)")
+            problems.append("enter his name first (step 2 in the panel)")
         if not self.axes:
-            problems.append("learn the map directions first (" +
-                            ("at the zoomed-out patrol view" if self.method == "zoomed_out"
-                             else "at the close zoom") + ")")
+            problems.append("set up the zoom first (step 3 in the panel)")
         return problems
 
     def read_view(self, view) -> list[ArmySeen]:
@@ -466,9 +468,10 @@ class Hunter:
             out.append(ArmySeen(tile, False, None, time.time(), kind="farm"))
         return out
 
-    def identify(self, armies) -> int:
-        """Zoom in on armies we haven't identified yet and read the name over them.
-        Most likely his first (on a route to/from his city, or near it)."""
+    def identify(self, armies, limit=None) -> int:
+        """Zoom in on armies we don't know the owner of and find out: a marching army
+        shows its owner's name over it; a gathering one only in the resource point's
+        box (tap it). His first (near his city or on a route to / from it)."""
         todo = [a for a in armies if a.owner is None and a.checks < 3]
         if not todo:
             return 0
@@ -477,55 +480,54 @@ class Hunter:
             touches = a.ends and any(self.tracker.at_home(e) for e in a.ends)
             return (0 if touches else 1, math.dist(a.tile, self.city))
         todo.sort(key=likely)
-        todo = todo[:self.checks_per_sweep]
+        todo = todo[:limit or self.checks_per_sweep]
         if not self.zoom_close():
             log.warning("hunt: couldn't zoom in to read names")
             return 0
         done = 0
-        for i, a in enumerate(todo):
-            a.checks += 1
-            self._progress(i, len(todo), f"Zooming in on army #{a.id} to read the name")
-            if not self.game.goto(int(round(a.tile[0])), int(round(a.tile[1]))):
-                continue
-            self.game.wait()
-            if a.kind == "farm":
-                self._identify_farm(a)
+        try:
+            for i, a in enumerate(todo):
+                self._progress(i, len(todo), f"Checking whose {'farm' if a.kind == 'farm' else 'army'} "
+                                             f"is at {a.tile[0]:.0f},{a.tile[1]:.0f}")
+                self._check_owner(a)
                 done += 1
-                continue
+        finally:
+            self.zoom_out()
+        return done
+
+    def _check_owner(self, a):
+        a.checks += 1
+        x, y = int(round(a.tile[0])), int(round(a.tile[1]))
+        if not self.game.goto(x, y):
+            return
+        if a.kind == "farm":
+            self._identify_farm(a)
+        else:
             for attempt in range(2):          # a name can be missed on one look
                 v = self.game.look()
                 H, W = v.frame.shape[:2]
                 centre = (W / 2, H / 2)
                 near = [lb for lb in screen.find_player(v.frame, v.texts, self.name)
-                        if lb.kind == "army" and math.dist(lb.pos, centre) < 0.3 * H]
-                self.seen_text[a.id] = [(t.text, screen.label_kind(v.frame, t),
-                                         round(math.dist(t.center, centre) / H, 2))
-                                        for t in v.texts if math.dist(t.center, centre) < 0.4 * H]
+                        if lb.kind == "army" and math.dist(lb.pos, centre) < 0.4 * H]
+                self.seen_text[getattr(a, "id", 0)] = [
+                    (t.text, screen.label_kind(v.frame, t), round(math.dist(t.center, centre) / H, 2))
+                    for t in v.texts if math.dist(t.center, centre) < 0.4 * H]
                 if near:
                     a.owner = "him"
                 elif self._other_army_label_near(v, centre, H):
                     a.owner = "other"
                 if a.owner:
                     break
-                self.game.wait(0.6)
-            done += 1
-            log.info("hunt: army #%d at %.0f,%.0f is %s", a.id, a.tile[0], a.tile[1],
-                     a.owner or "unclear")
-        self.zoom_out()
-        return done
+                time.sleep(0.4)
+        log.info("hunt: %s at %.0f,%.0f is %s", "farm" if a.kind == "farm" else "army",
+                 a.tile[0], a.tile[1], a.owner or "unclear")
 
-    # ---- zoom: a fixed number of wheel notches in from fully zoomed out, when set
+    # ---- zoom: bounce between the searching zoom and the close zoom
     def zoom_out(self, anchor=False):
-        if self.zoom_notches is not None:
-            self.game.set_zoom(self.zoom_notches, anchor=anchor)
-            return True
-        return self.game.zoom_to_patrol_level()
+        return self.game.to_sweep()
 
     def zoom_close(self):
-        if self.close_notches is not None:
-            self.game.set_zoom(self.close_notches)
-            return True
-        return self.game.zoom_to_close()
+        return self.game.to_close()
 
     def _progress(self, done, total, doing):
         self.progress = (done, total, doing)
@@ -535,10 +537,14 @@ class Hunter:
             except Exception:
                 pass
 
+    GATHER_RX = re.compile(r"gather|recolect|sammel|raccogl|r[ée]colt|coletor|toplay", re.I)
+
     def _identify_farm(self, a):
-        """A gathering army shows no name over it: tap the resource point (at the close
-        zoom; it can't be tapped from further out) and read 'Gatherer' in its box."""
+        """A gathering army shows no name over it: tap the resource point (only works
+        at the close zoom) and read its box. His name anywhere in the box = his
+        (works in any game language); the box's X:Y gives the exact spot."""
         for attempt in range(2):
+            self.game.check_stop()
             f = self.game.frame()
             H, W = f.shape[:2]
             badges = screen.find_gather_badges(f)
@@ -548,21 +554,31 @@ class Hunter:
             else:
                 tap = (W // 2, H // 2)
             self.game.b.click(int(tap[0]), int(tap[1]))
-            self.game.wait(0.8)
-            v = self.game.look()
-            name, coords = screen.read_gatherer(v.texts, H)
-            self.seen_text[a.id] = [("gatherer", name, coords)]
-            if name or coords:
-                self.game.close_popups()
-            if name:
-                a.owner = "him" if screen.name_score(name, self.name) >= 0.75 else "other"
-                if coords:
-                    a.tile = (float(coords[0]), float(coords[1]))
-                return
-            if coords:                                   # a box, but nobody gathering
-                a.owner = "other"
-                return
+            box = None
+            for _ in range(10):                          # wait for the box (up to ~1.2 s)
+                time.sleep(0.12)
+                f = self.game.frame()
+                box = screen.find_info_box(f)
+                if box:
+                    break
+            if not box:
+                continue
+            time.sleep(0.2)                              # let the text finish drawing
+            f = self.game.frame()
+            texts = screen.read_text(f, box)
+            self.seen_text[getattr(a, "id", 0)] = [t.text for t in texts]
+            mine = [t for t in texts if screen.name_score(t.text, self.name) >= 0.75]
+            coords = next((screen.parse_coords(t.text) for t in texts if screen.parse_coords(t.text)), None)
+            if mine:
+                a.owner = "him"
+            elif any(self.GATHER_RX.search(t.text) for t in texts):
+                a.owner = "other"                        # someone else is gathering there
+            if coords and a.owner == "him":
+                a.tile = (float(coords[1]), float(coords[2]))
+            self.game.close_popups()
+            return
         log.info("hunt: couldn't open the resource point at %.0f,%.0f", a.tile[0], a.tile[1])
+        self.game.close_popups()
 
     def update_my_spots(self):
         """Where are my gathering troops right now? Tap each gathering troop's portrait
@@ -631,10 +647,14 @@ class Hunter:
             for kind, text in screen.read_toasts(view.frame, view.texts):
                 self.toasts.append((kind, text))
             reader = self.read_view_out if self.method == "zoomed_out" else self.read_view
+            here = []
             for s in reader(view):
                 # the same army seen from two overlapping stops: keep one
                 if all(math.dist(s.tile, o.tile) > 4 for o in seen):
                     seen.append(s)
+                    here.append(s)
+            if self.method == "zoomed_out":
+                self._check_new_here(here)
         return seen, visited
 
     def _dangers(self, view):
@@ -690,19 +710,39 @@ class Hunter:
             self._dangers(view)
             vw, vh = view_size_tiles(self.axes, shape)
             covered.append((view.camera[1], view.camera[2], 0.45 * vw, 0.45 * vh))
+            here = []
             for s in self.read_view_out(view):
                 if all(math.dist(s.tile, o.tile) > 4 for o in seen):
                     seen.append(s)
+                    here.append(s)
+            self._check_new_here(here)
         return seen, covered
+
+    def _check_new_here(self, found):
+        """Armies / farms just seen that aren't known yet: find out whose they are right
+        away (zoom in, check, zoom back out), before moving on."""
+        known = [a for a in self.tracker.armies if a.owner]
+        new = []
+        for s in found:
+            if s.kind == "scout":
+                continue
+            k = min((a for a in known if a.kind == s.kind),
+                    key=lambda a: math.dist(predict(a, time.time()), s.tile), default=None)
+            if k and math.dist(predict(k, time.time()), s.tile) < 8:
+                s.owner = k.owner
+                continue
+            new.append(s)
+        if new:
+            self.identify(new, limit=4)
 
     def round(self, stop=None) -> list[Alert]:
         now = time.time()
         self.warned = False
         self.toasts = []
         self.dangers = set()
-        if self.method == "zoomed_out":
-            self._progress(0, 1, "Setting the zoom")
-            self.zoom_out(anchor=self._rounds % 15 == 0)
+        if self.method == "zoomed_out" and self.game._at != "sweep":
+            self._progress(0, 1, "Getting to the searching zoom")
+            self.zoom_out()
         self._rounds += 1
         self.mode = self.plan(now)
         covered = None

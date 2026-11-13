@@ -76,6 +76,9 @@
              animation: spin 1s linear infinite; margin: 0 auto 18px; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .ver { color: var(--muted); font-size: 12px; }
+  .more-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; margin-top: 10px; }
+  @media (max-width: 900px) { .more-grid { grid-template-columns: minmax(0, 1fr); } }
+  details summary { list-style-position: inside; }
   .notes { margin: 10px 0 0; padding-left: 18px; color: var(--warn); font-size: 13px; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
   .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
@@ -128,62 +131,24 @@
   </section>
 
   <section>
-    <h2><span class="step">1</span> Alerts and game page</h2>
-    <label for="game_url">Page where you play Rise of Kingdoms in the browser</label>
-    <input id="game_url" placeholder="https://...">
-    <label for="game_window">Or, if the game runs as its own program (PC game / BlueStacks): part of its window title</label>
+    <h2><span class="step">1</span> Connect to the game</h2>
+    <p class="hint" style="margin-top:0">Start Rise of Kingdoms on this laptop (window mode), log in and go to the map.</p>
+    <label for="game_window">Game window title (the PC game is "Rise of Kingdoms")</label>
     <input id="game_window" placeholder="Rise of Kingdoms   (leave empty to use a browser)">
     <label class="toggle"><input type="checkbox" id="game_window_zoom_key"> Hold Ctrl while scrolling to zoom (BlueStacks)</label>
     <p class="hint">With a game window the bot uses your real mouse while it works. To stop it at
       once, push the mouse into a corner of the screen.</p>
-    <label for="ntfy_topic">ntfy topic (subscribe to the same name in the ntfy phone app)</label>
-    <input id="ntfy_topic" placeholder="rok-alerts-something-random">
-    <label for="discord_webhook">Discord webhook (optional)</label>
-    <input id="discord_webhook" placeholder="https://discord.com/api/webhooks/...">
+    <details><summary class="hint">Playing in a browser instead?</summary>
+    <label for="game_url">Page where you play Rise of Kingdoms in the browser</label>
+    <input id="game_url" placeholder="https://...">
+    </details>
     <div class="row">
-      <button class="primary" onclick="save()">Save</button>
-      <button onclick="post('test_alert')">Send test alert</button>
+      <button class="primary" id="b-open" onclick="save().then(() => post('open'))">Connect</button>
     </div>
   </section>
 
   <section>
-    <h2><span class="step">2</span> Places to watch</h2>
-    <table>
-      <thead><tr><th>Name</th><th>X</th><th>Y</th><th>Type</th><th></th></tr></thead>
-      <tbody id="sites"></tbody>
-    </table>
-    <div class="row">
-      <button onclick="addSite()">+ Add place</button>
-      <button class="primary" onclick="save()">Save</button>
-    </div>
-    <p class="hint"><b>Enemy</b> = his city (marches there get logged). <b>Mine</b> = your city and gathering spots (any march heading there alerts you).</p>
-    <label class="toggle"><input type="checkbox" id="auto_recall"> Recall my troops automatically when a march heads for them <span class="hint">(clicks in the game: higher ban risk)</span></label>
-    <label for="recall_scope">Which troops to recall</label>
-    <select id="recall_scope">
-      <option value="threatened">Only the ones at the threatened spot</option>
-      <option value="all">All gathering troops</option>
-    </select>
-  </section>
-
-  <section>
-    <h2><span class="step">3</span> Run it</h2>
-    <div class="row">
-      <button class="primary" id="b-open" onclick="post('open')">Open / connect game</button>
-      <button class="go" id="b-hunt2" onclick="post('hunt')">▶ Watch &amp; track him</button>
-      <button id="b-start" onclick="post('start')">Simple patrol</button>
-      <button class="danger" id="b-stop" onclick="post('stop')">Stop</button>
-    </div>
-    <p class="hint"><b>Watch &amp; track him</b> (recommended): searches the area around his city for his armies
-      (farming or marching), then keeps following every one it found, dragging the map from one to the next.
-      When none are out it watches his city for new ones, and re-searches the whole area every few minutes.
-      It alerts you when one heads for your city or your gathering troops, when you're scouted (red eye) or
-      attacked (red sword), and can recall your troops. Set it up in box 4 first.<br>
-      <b>Simple patrol</b>: only checks the places listed in box 2, one after another.</p>
-    <div class="facts" id="progress"></div>
-  </section>
-
-  <section>
-    <h2><span class="step">4</span> Hunt his armies</h2>
+    <h2><span class="step">2</span> Who to watch</h2>
     <label for="target_pick">Target</label>
     <div class="row" style="margin-top:0">
       <select id="target_pick" style="flex:1" onchange="pickTarget()"></select>
@@ -198,26 +163,57 @@
     </div>
     <label for="hunt_radius">How far around his city to search (map tiles)</label>
     <input id="hunt_radius" inputmode="numeric" placeholder="25">
-    <div class="row">
-      <button class="primary" onclick="save()">Save</button>
-      <button class="go" id="b-hunt" onclick="post('hunt')">Start hunting</button>
-      <button class="danger" onclick="post('stop')">Stop</button>
-    </div>
-    <p class="hint"><b>Set the zoom once (recommended):</b> zoom the game by hand to where you can still see the army
-      icons but as much map as possible, then press the first button. Then zoom in until names show over armies
-      and press the second. The bot then uses exactly those zooms every time (it zooms all the way out and
-      scrolls back in the same number of notches) and learns the map directions at each.</p>
-    <div class="row">
-      <button onclick="post('remember_zoom', { kind: 'sweep' })">Remember this zoom for sweeping</button>
-      <button onclick="post('remember_zoom', { kind: 'close' })">Remember this zoom for reading names</button>
-    </div>
-    <p class="hint" id="zoom-set"></p>
-    <p class="hint">Hunting sweeps the zoomed-out map around his city (wide view, armies show as grey
-      diamonds), then zooms in on each new army just long enough to read the name over it, and
-      follows the ones that are his. Before the first hunt, press <b>Learn map directions</b> once
-      while zoomed out to the patrol level. <span id="close-axes"></span></p>
+    <div class="row"><button class="primary" onclick="save()">Save</button></div>
   </section>
 
+  <section>
+    <h2><span class="step">3</span> Set up the zoom <span class="hint" style="margin:0">(once)</span></h2>
+    <p class="hint" style="margin-top:0">In the game, zoom out until you see as much map as possible while the army
+      icons and resource points still show (simplified map, no 3D buildings). Close any menus. Then press the
+      button: the bot measures how far it is to the close zoom (where names show and resource points can be
+      tapped) and learns the map directions. From then on it only moves between those two zooms.</p>
+    <div class="row"><button class="primary" onclick="post('remember_zoom')">Set up the zoom</button></div>
+    <p class="hint" id="zoom-set"></p><span id="close-axes" hidden></span>
+  </section>
+
+  <section>
+    <h2><span class="step">4</span> Watch</h2>
+    <div class="row" style="margin-top:0">
+      <button class="go" id="b-hunt" onclick="post('hunt')" style="font-size:16px;padding:12px 20px">▶ Watch &amp; track him</button>
+      <button class="danger" id="b-stop" onclick="post('stop')" style="font-size:16px;padding:12px 20px">■ Stop</button>
+    </div>
+    <p class="hint">Searches around his city for his armies (farming or marching), checks each new one is his,
+      then keeps following them. When none are out it watches his city. Alerts you when one heads for your city
+      or your troops, and when you're scouted (red eye) or attacked (red swords).</p>
+    <label class="toggle"><input type="checkbox" id="auto_recall"> Recall my troops automatically when a march heads for them <span class="hint">(clicks in the game: higher ban risk)</span></label>
+    <label for="recall_scope">Which troops to recall</label>
+    <select id="recall_scope">
+      <option value="threatened">Only the ones at the threatened spot</option>
+      <option value="all">All gathering troops</option>
+    </select>
+    <div class="facts" id="progress"></div>
+  </section>
+
+  <section>
+    <h2>🔔 Alerts to your phone</h2>
+    <label for="ntfy_topic">ntfy topic (subscribe to the same name in the ntfy phone app)</label>
+    <input id="ntfy_topic" placeholder="rok-alerts-something-random">
+    <label for="discord_webhook">Discord webhook (optional)</label>
+    <input id="discord_webhook" placeholder="https://discord.com/api/webhooks/...">
+    <div class="row">
+      <button class="primary" onclick="save()">Save</button>
+      <button onclick="post('test_alert')">Send test alert</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Recent alerts</h2>
+    <ul class="alerts" id="alerts"><li class="empty">No alerts yet</li></ul>
+  </section>
+
+  <details id="more" style="grid-column:1/-1">
+    <summary style="cursor:pointer;font-weight:600;padding:6px 0">More: phone panel, updates, snapshots, places, tools, log</summary>
+    <div class="more-grid">
   <section id="phone-box">
     <h2>📱 Use this panel on your phone</h2>
     <label class="toggle"><input type="checkbox" id="panel_on_phone" onchange="save()"> Let my phone open this panel</label>
@@ -231,7 +227,6 @@
       <p class="hint">Scan with your phone's camera. The link has a secret key in it, so only you can get in. Don't share it.</p>
     </div>
   </section>
-
   <section id="upd-box">
     <h2>⬆ Updates</h2>
     <p id="upd-info" style="margin:0">-</p>
@@ -245,7 +240,6 @@
       being watched it installs by itself after a minute (press "Not now" to stop that); while watching, it waits
       for you to press "Update now".</p>
   </section>
-
   <section id="snap-box">
     <h2>📸 Snapshots (pictures to send Claude)</h2>
     <p class="hint">Saves exactly what the bot sees, plus what it read from it. Save one whenever the bot gets
@@ -263,12 +257,21 @@
       <span class="hint" id="snap-count"></span></div>
     <div class="snaps" id="snaps"></div>
   </section>
-
   <section>
-    <h2>Recent alerts</h2>
-    <ul class="alerts" id="alerts"><li class="empty">No alerts yet</li></ul>
+    <h2>Your places &amp; simple patrol</h2>
+    <table>
+      <thead><tr><th>Name</th><th>X</th><th>Y</th><th>Type</th><th></th></tr></thead>
+      <tbody id="sites"></tbody>
+    </table>
+    <div class="row">
+      <button onclick="addSite()">+ Add place</button>
+      <button class="primary" onclick="save()">Save</button>
+    </div>
+    <p class="hint"><b>Enemy</b> = his city (marches there get logged). <b>Mine</b> = your city and gathering spots (any march heading there alerts you).</p>
+    <p class="hint">Simple patrol only checks these places one after another. "Watch &amp; track him" finds your
+      gathering troops by itself; places marked "mine" here are protected too.</p>
+    <div class="row"><button id="b-start" onclick="post('start')">Start simple patrol</button></div>
   </section>
-
   <section class="view">
     <h2>Check it works on your screen</h2>
     <div class="row">
@@ -281,16 +284,16 @@
     <div class="facts" id="look"><span class="empty">Press "What do you see?" with the game open</span></div>
     <img id="view" alt="" hidden>
   </section>
-
   <section>
     <h2>When is he active?</h2>
     <pre id="report">-</pre>
   </section>
-
   <section class="wide">
     <h2>Log</h2>
     <pre id="log"></pre>
   </section>
+    </div>
+  </details>
 </main>
 <script>
 const $ = id => document.getElementById(id);
@@ -394,8 +397,7 @@ async function loadSettings() {
   $('target_forget').disabled = !targets.some(t => t.name === s.player_name);
   $('game_window_zoom_key').checked = s.game_window_zoom_key === 'ctrl';
   $('hunt_radius').value = s.hunt_radius || 25;
-  $('zoom-set').textContent = (s.zoom_notches != null ? `Sweeping zoom: ${s.zoom_notches} notches in. ` : 'Sweeping zoom not set yet. ')
-    + (s.close_notches != null ? `Name-reading zoom: ${s.close_notches} notches in.` : 'Name-reading zoom not set yet.');
+  $('zoom-set').textContent = s.zoom_gap ? `Done: it searches at your zoom and goes ${s.zoom_gap} notches in to check names.` : 'Not set up yet.';
   $('close-axes').textContent = s.axes_learned ? '(Done: map directions are learned.)' : '(Not done yet.)';
   $('auto_recall').checked = !!s.auto_recall;
   $('panel_on_phone').checked = !!s.panel_on_phone;
@@ -450,7 +452,7 @@ async function refresh() {
   lastMsg = st.message;
   const running = st.phase === 'patrolling';
   $('b-start').disabled = running || st.phase === 'stopped' || st.phase === 'opening';
-  $('b-hunt').disabled = $('b-start').disabled; $('b-hunt2').disabled = $('b-start').disabled;
+  $('b-hunt').disabled = $('b-start').disabled;
   $('b-stop').disabled = !running;
   facts($('progress'), [['Rounds done', st.round], ['Last place checked', st.last_site || '-']]);
   $('alerts').innerHTML = st.alerts.length ? st.alerts.map(a =>
@@ -506,8 +508,8 @@ async function loadPhone() {
     $('phone-box').hidden = true;                       // the everyday controls go first
     const main = document.querySelector('main');
     const find = t => [...main.children].find(sec => sec.querySelector('h2')?.textContent.includes(t));
-    ['Log', 'Places to watch', 'Alerts and game page', 'When is he active?', 'Hunt his armies',
-     'Check it works', 'Updates', 'Snapshots', 'Recent alerts', 'Run it', 'Live view'].forEach(t => { const sec = find(t); if (sec) main.prepend(sec); });
+    ['Alerts to your phone', 'Who to watch', 'Connect to the game', 'Set up the zoom', 'Recent alerts',
+     'Watch', 'Live view'].forEach(t => { const sec = find(t); if (sec) main.prepend(sec); });
     return;
   }
   phoneInfo = ph; drawRoute();

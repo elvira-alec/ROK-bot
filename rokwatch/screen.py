@@ -76,6 +76,27 @@ def camera_coords(frame: np.ndarray, texts: list[Text] | None = None):
     Returns (kingdom, x, y, text) or None."""
     h, w = frame.shape[:2]
     if texts is None:
+        texts = top_texts(frame)
+    for t in texts:
+        if t.box[1] > h * 0.1:
+            continue
+        c = parse_coords(t.text)
+        if c:
+            return (*c, t)
+    return None
+
+
+_top_cache = {"key": None, "texts": []}
+
+
+def top_texts(frame: np.ndarray) -> list:
+    """Text in the top-left strip only (coordinates, power): quick to read. The last
+    result is reused for the same picture."""
+    key = (id(frame), frame.shape, int(frame[::97, ::89].sum()))
+    if _top_cache["key"] == key:
+        return _top_cache["texts"]
+    h, w = frame.shape[:2]
+    if True:
         # just the top-left strip; padded, because the text reader misreads a thin crop
         pad = 30
         up = 2.0 if h < 1000 else 1.0             # small windows: enlarge the digits
@@ -86,20 +107,45 @@ def camera_coords(frame: np.ndarray, texts: list[Text] | None = None):
         texts = [Text(t.text, (int((t.box[0] - pad) / up), int((t.box[1] - pad) / up),
                                int(t.box[2] / up), int(t.box[3] / up)), t.conf)
                  for t in read_text(crop)]
-    for t in texts:
-        if t.box[1] > h * 0.1:
-            continue
-        c = parse_coords(t.text)
-        if c:
-            return (*c, t)
-    return None
+    _top_cache.update(key=key, texts=texts)
+    return texts
+
+
+def view_level(frame: np.ndarray) -> str:
+    """'close' / 'patrol' / 'far' from the top strip only (quick)."""
+    if not is_simple_view(top_texts(frame), frame):
+        return "close"
+    return "far" if has_world_button(frame) > 0.8 else "patrol"
+
+
+def find_info_box(frame: np.ndarray):
+    """The light info box the game opens when you tap something on the map (e.g. a
+    resource point: name, reserves, gatherer, Scout / Attack). Opens to the left or
+    the right. Returns (x, y, w, h) or None. Doesn't depend on the game's language."""
+    H, W = frame.shape[:2]
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    light = cv2.inRange(hsv, np.array((0, 0, 200), np.uint8), np.array((180, 60, 255), np.uint8))
+    k = max(3, int(min(H, W) * 0.011)) | 1
+    light = cv2.morphologyEx(light, cv2.MORPH_CLOSE, np.ones((k, k), np.uint8))
+    n, _, st, _ = cv2.connectedComponentsWithStats(light)
+    best = None
+    for i in range(1, n):
+        x, y, w, h, a = st[i]
+        if (a > 0.025 * W * H and 0.12 * W < w < 0.65 * W and 0.18 * H < h < 0.65 * H
+                and (best is None or a > best[4])):
+            best = (int(x), int(y), int(w), int(h), a)
+    return best[:4] if best else None
 
 
 def is_simple_view(texts: list[Text], frame) -> bool:
     """Zoomed-out map: the power / VIP block at the top left is hidden."""
     h = frame.shape[0]
     top = [t for t in texts if t.box[1] < h * 0.15]
-    return not find_text(top, r"^VIP\d*$") and not find_text(top, r"^\d{1,3}(,\d{3})+$")
+    # power: "2,015,180" (English), "2 032 680" / "2.032.680" (Spanish...), or read without separators
+    return (not find_text(top, r"^VIP\d*$")
+            and not find_text(top, r"^\d{1,3}([ ,.\u00a0\u202f]\d{3})+$")
+            and not [t for t in top if re.fullmatch(r"\d{6,9}", t.text.replace(" ", ""))
+                     and "X" not in t.text.upper()])
 
 
 # ---------------------------------------------------------------- march lines

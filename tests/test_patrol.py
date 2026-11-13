@@ -186,18 +186,17 @@ def test_tells_leaving_from_returning(game, tmp_path):
     assert p.visit(SITES[0]) == []
 
 
-def test_fixed_zoom_presets(game):
-    """Zoom is set by wheel notches from fully zoomed out, so it's the same every time."""
-    assert js(game, "sim.state.zoom") == 0                 # close 3D view
-    assert game.measure_zoom() == (2, True)                # 2 notches in from fully out
-    assert js(game, "sim.state.zoom") == 0                 # and put back
-    game.set_zoom(1, anchor=True)
-    assert js(game, "sim.state.zoom") == 1 and game.zoom() == "patrol"
-    game.set_zoom(2)                                       # relative: 1 notch in
-    assert js(game, "sim.state.zoom") == 0
-    js(game, "sim.state.zoom = 2; sim.state.simple = true")   # someone scrolled by hand
-    game.set_zoom(1, anchor=True)
-    assert js(game, "sim.state.zoom") == 1
+def test_zoom_bounces_between_two_levels(game):
+    """Set up at the searching zoom; then only ever goes between it and the close zoom."""
+    js(game, "sim.state.zoom = 1; sim.state.simple = true")
+    time.sleep(0.2)
+    gap, ok = game.calibrate_zoom()
+    assert ok and gap == 2 and js(game, "sim.state.zoom") == 1
+    assert game.to_close() and js(game, "sim.state.zoom") == 0
+    assert game.to_sweep() and js(game, "sim.state.zoom") == 1
+    js(game, "sim.state.zoom = 2; sim.state.simple = true")   # someone zoomed too far out
+    game._at = None
+    assert game.to_sweep() and js(game, "sim.state.zoom") == 1   # back in, not further out
 
 
 def test_pan_to_drags_instead_of_typing(game):

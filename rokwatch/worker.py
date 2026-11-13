@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 import cv2
 
 from . import config
+from .game import Stopped
 from .notify import Notifier
 
 log = logging.getLogger("rokwatch")
@@ -154,6 +155,9 @@ class Worker:
                     self._close()
                     return
                 getattr(self, f"_do_{cmd}")(**kw)
+            except Stopped:
+                self.stop_patrol.clear()
+                self._set("ready", "Stopped")
             except Exception as e:  # never let one failed action kill the worker
                 log.debug("%s failed", cmd, exc_info=True)
                 first = (str(e).strip().splitlines() or [type(e).__name__])[0].strip(" :")
@@ -171,8 +175,14 @@ class Worker:
     def _game(self):
         from .commands import make_game
         if not self.gb:
-            raise RuntimeError("Open the game first")
-        return make_game(self.gb, self._cfg())
+            raise RuntimeError("Connect to the game first")
+        cfg = self._cfg()
+        g = make_game(self.gb, cfg)
+        g.stop_check = self.stop_patrol.is_set           # Stop works even mid-jump / mid-zoom
+        gap = (cfg.get("hunt") or {}).get("zoom_gap")
+        if gap:
+            g.zoom_gap = int(gap)
+        return g
 
     def _do_open(self):
         from .browser import GameBrowser
@@ -301,28 +311,32 @@ class Worker:
         self._set("ready", f"Learned the map directions for {what}.")
 
     def _do_remember_zoom(self, kind="sweep"):
-        """Use the zoom you've set by hand from now on: count wheel notches from fully
-        zoomed out, and learn the map directions at this zoom."""
+        """One-time zoom setup. You zoom the game to where you can see as much map as
+        possible with the army icons still showing; the bot counts the scroll notches
+        in to the close zoom (where resource points can be tapped and names show) and
+        back, and learns the map directions at your zoom. From then on it only ever
+        moves between those two zooms."""
         from .patrol import learn_axes
         game = self._game()
-        what = "hunting sweeps" if kind == "sweep" else "reading names"
-        self._set("busy", f"Measuring this zoom for {what} (zooming out and back)...")
-        n, ok = game.measure_zoom()
-        if not ok:
-            self._set("ready", "Couldn't measure this zoom reliably (the picture didn't come back the "
-                               "same). Close any menus, make sure nothing is moving in the middle of "
-                               "the screen, and try again. Nothing was saved.")
+        if game.level() != "patrol":
+            self._set("ready", "First zoom the game out to the simplified map (army icons still "
+                               "showing, no 3D buildings), close any menus, then press this again.")
             return
-        self.status.doing = "Learning map directions at this zoom (small drags)"
+        self._set("busy", "Setting up the zoom: counting notches to the close zoom and back...")
+        gap, ok = game.calibrate_zoom()
+        if not gap or not ok:
+            self._set("ready", "Couldn't measure the zoom (it didn't come back to the same picture). "
+                               "Close any menus and try again. Nothing was saved.")
+            return
+        self.status.doing = "Learning the map directions at this zoom (two small drags)"
         m = learn_axes(game)
-        upd = {("hunt.zoom_notches" if kind == "sweep" else "hunt.close_notches"): n}
-        if m is not None:
-            upd["patrol.axes" if kind == "sweep" else "hunt.axes_close"] = m
-        config.save_fields(upd, self.cfg_path)
-        self.status.doing = ""
-        self._set("ready", f"Remembered: {n} scroll notches in from fully zoomed out, for {what}."
-                  + ("" if m is not None else " (Couldn't learn the map directions: is the "
-                                              "coordinate readout visible?)"))
+        if m is None:
+            self._set("ready", "Couldn't learn the map directions (is the coordinate readout "
+                               "visible?). Nothing was saved.")
+            return
+        config.save_fields({"hunt.zoom_gap": gap, "patrol.axes": m}, self.cfg_path)
+        self._set("ready", f"Zoom set up: it searches at this zoom and goes {gap} notches in to "
+                           "check names. Ready to watch him.")
 
     def _do_recall(self):
         game = self._game()
