@@ -21,7 +21,7 @@ was fixed, how to test, and how to build and publish. Read it all before changin
   - Test against **real screenshots**; never confuse scouts with armies.
   - No emojis in the UI; line icons only.
   - Short, clear answers.
-  - **Publish only when they say "publish".** Pushes only build and test.
+  - **Always publish a new version after changes, unless they say not to.**
 - **Game language:** English (Spanish is supported too; they ran it in Spanish before).
 - **Game settings:** a game setting that shows the troop symbol on army diamonds is now on.
 
@@ -162,4 +162,4 @@ boxes, the user's snapshots including the Spanish photos).
   `version=1.x` to set the number or replace that release. Releases are `v1.0`, `v1.1`, …
   (latest is **1.3**), plus a `latest` prerelease. The app's updater installs them by itself.
 - To push from the PC, Git must be signed in to GitHub (Git Credential Manager or `gh auth login`).
-- **Only publish when the user says so.**
+- **Publish every change (next version number) unless the user says not to.**
