@@ -1077,3 +1077,59 @@ def search_go_button(frame: np.ndarray):
                 and x > 0.3 * W and (best is None or x < best[0])):
             best = (int(c[i][0]), int(c[i][1]) + y0)
     return best
+
+
+# ---------------------------------------------------------------- enemy gatherers
+
+def find_gather_badges(frame: np.ndarray, colour="red") -> list:
+    """Round badges with a white pickaxe sitting on a resource point that someone is
+    gathering from: red = not your alliance, green = you / your alliance.
+    Same size at the sweeping and the close zoom. Returns [(x, y)] centres.
+    (Notification badges on the menus are outside the map area checked here.)"""
+    H, W = frame.shape[:2]
+    x0, x1, y0, y1 = int(0.1 * W), int(0.9 * W), int(0.1 * H), int(0.86 * H)
+    hsv = cv2.cvtColor(frame[y0:y1, x0:x1], cv2.COLOR_BGR2HSV)
+    if colour == "red":
+        mask = (cv2.inRange(hsv, np.array((0, 150, 120), np.uint8), np.array((8, 255, 255), np.uint8))
+                | cv2.inRange(hsv, np.array((170, 150, 120), np.uint8), np.array((180, 255, 255), np.uint8)))
+    else:
+        mask = cv2.inRange(hsv, np.array((45, 120, 100), np.uint8), np.array((80, 255, 255), np.uint8))
+    white = cv2.inRange(hsv, np.array((0, 0, 200), np.uint8), np.array((180, 70, 255), np.uint8))
+    n, _, st, c = cv2.connectedComponentsWithStats(mask)
+    out = []
+    for i in range(1, n):
+        x, y, w, h, a = st[i]
+        if not (0.026 * H <= w <= 0.05 * H and 0.75 < w / h < 1.33 and a >= 0.5 * w * h):
+            continue
+        k = max(2, w // 6)                       # round: the bounding box corners are empty
+        corners = [mask[y:y + k, x:x + k], mask[y:y + k, x + w - k:x + w],
+                   mask[y + h - k:y + h, x:x + k], mask[y + h - k:y + h, x + w - k:x + w]]
+        if max(float(np.mean(cc > 0)) for cc in corners) > 0.35:
+            continue                             # e.g. a red banner (square top corners)
+        inner = white[y + h // 5:y + h - h // 5, x + w // 5:x + w - w // 5]
+        if inner.size and np.mean(inner > 0) > 0.08:             # the white pickaxe
+            out.append((int(c[i][0]) + x0, int(c[i][1]) + y0))
+    return out
+
+
+def read_gatherer(texts: list[Text], frame_h: int):
+    """From a resource point's info box: (gatherer name, (x, y)) or (None, coords).
+    (The camera readout in the top bar is skipped.)"""
+    name, coords = None, None
+    for t in texts:
+        c = parse_coords(t.text)
+        if c and coords is None and t.box[1] > 0.1 * frame_h:
+            coords = (c[1], c[2])
+    lab = [t for t in texts if re.search(r"gather", t.text, re.I)]
+    for g in lab:
+        gy = g.center[1]
+        same_row = [t for t in texts if t is not g and abs(t.center[1] - gy) < max(12, g.box[3])
+                    and t.box[0] > g.box[0] + g.box[2] - 5]
+        if same_row:
+            name = min(same_row, key=lambda t: t.box[0]).text.strip()
+            break
+        m = re.search(r"gatherer\s*[:：]?\s*(.+)$", g.text, re.I)   # read as one piece
+        if m:
+            name = m.group(1).strip()
+            break
+    return name, coords

@@ -73,7 +73,7 @@ class ArmySeen:
     ends: tuple | None          # map coordinates of both ends of its march line
     seen: float                 # time
     owner: str | None = None    # "him" when his name was read right there
-    kind: str = "army"          # "army" or "scout" (plain diamond)
+    kind: str = "army"          # "army", "scout" (plain diamond) or "farm" (gathering)
 
 
 def predict(a, now):
@@ -100,7 +100,7 @@ class Army:
     history: list = field(default_factory=list)
     alerted: set = field(default_factory=set)
     owner: str | None = None       # "him", "other", or None (not checked yet)
-    kind: str = "army"             # "army" or "scout"
+    kind: str = "army"             # "army", "scout" or "farm" (gathering at a resource point)
     prev_tile: tuple | None = None # where it was last sweep
     checks: int = 0                # how many times we zoomed in to read its name
 
@@ -197,6 +197,9 @@ class Tracker:
                 p = predict(a, now)
                 return any(abs(p[0] - x) < hw and abs(p[1] - y) < hh for x, y, hw, hh in covered)
             current += [a for a in unmatched if not looked_at(a) and now - a.last_seen < 900]
+            self.gone = [a for a in unmatched if looked_at(a)]
+        else:
+            self.gone = list(unmatched)
         self.armies = current
 
     def events(self, include=None) -> list[tuple[str, str, dict]]:
@@ -210,6 +213,12 @@ class Tracker:
                 a.alerted.add(("hostile",))
                 events.append(("hostile", "A red (hostile) army is marching against you or "
                                           "your alliance.", {"target": "you", "id": a.id}))
+        for a in getattr(self, "gone", []):
+            if a.kind == "farm" and include(a) and a.owner == "him":
+                events.append(("farm_left", f"He stopped gathering at {a.tile[0]:.0f},{a.tile[1]:.0f} "
+                                            "(pulled that army back or sent it somewhere).",
+                               {"id": a.id}))
+        self.gone = []
         mine = [a for a in his if a.kind != "scout"]    # scouts don't count as troops
         def heading_home(a):
             if a.direction == "home":
@@ -341,6 +350,8 @@ class Tracker:
                 return {"home": "going home", "out": "marching out"}.get(a.direction, "marching")
             if a.kind == "scout":
                 return "scout"
+            if a.kind == "farm":
+                return "gathering"
             return "at his city" if self.at_home(a.tile) else "parked / gathering"
         return [{"id": a.id, "x": round(a.tile[0]), "y": round(a.tile[1]), "state": state(a),
                  "dest": [round(a.dest[0]), round(a.dest[1])] if a.dest else None,
@@ -449,6 +460,10 @@ class Hunter:
             ends = (tuple(to_tile(cam, self.axes_out, p, frame.shape) for p in (line.p1, line.p2))
                     if moving else None)
             out.append(ArmySeen(tile, moving, ends, time.time(), kind=kind))
+        # someone not in your alliance gathering: red pickaxe badge over a resource point
+        for bx, by in screen.find_gather_badges(frame):
+            tile = to_tile(cam, self.axes_out, (bx, by + 0.035 * H), frame.shape)
+            out.append(ArmySeen(tile, False, None, time.time(), kind="farm"))
         return out
 
     def identify(self, armies) -> int:
@@ -473,6 +488,10 @@ class Hunter:
             if not self.game.goto(int(round(a.tile[0])), int(round(a.tile[1]))):
                 continue
             self.game.wait()
+            if a.kind == "farm":
+                self._identify_farm(a)
+                done += 1
+                continue
             for attempt in range(2):          # a name can be missed on one look
                 v = self.game.look()
                 H, W = v.frame.shape[:2]
@@ -515,6 +534,35 @@ class Hunter:
                 self.on_progress(done, total, doing)
             except Exception:
                 pass
+
+    def _identify_farm(self, a):
+        """A gathering army shows no name over it: tap the resource point (at the close
+        zoom; it can't be tapped from further out) and read 'Gatherer' in its box."""
+        for attempt in range(2):
+            f = self.game.frame()
+            H, W = f.shape[:2]
+            badges = screen.find_gather_badges(f)
+            if badges:
+                bx, by = min(badges, key=lambda b: math.dist(b, (W / 2, H / 2)))
+                tap = (bx, int(by + 0.045 * H))          # the camp just under its badge
+            else:
+                tap = (W // 2, H // 2)
+            self.game.b.click(int(tap[0]), int(tap[1]))
+            self.game.wait(0.8)
+            v = self.game.look()
+            name, coords = screen.read_gatherer(v.texts, H)
+            self.seen_text[a.id] = [("gatherer", name, coords)]
+            if name or coords:
+                self.game.close_popups()
+            if name:
+                a.owner = "him" if screen.name_score(name, self.name) >= 0.75 else "other"
+                if coords:
+                    a.tile = (float(coords[0]), float(coords[1]))
+                return
+            if coords:                                   # a box, but nobody gathering
+                a.owner = "other"
+                return
+        log.info("hunt: couldn't open the resource point at %.0f,%.0f", a.tile[0], a.tile[1])
 
     def update_my_spots(self):
         """Where are my gathering troops right now? Tap each gathering troop's portrait
@@ -715,7 +763,8 @@ class Hunter:
                      "hostile": "HIS ARMY IS MARCHING AGAINST YOU",
                      "scout_at": "HE'S SCOUTING YOU",
                      "pulling_back": "He's pulling his troops back",
-                     "all_home": "All his troops are home"}[kind]
+                     "all_home": "All his troops are home",
+                     "farm_left": "He pulled a farmer back"}[kind]
             alerts.append(Alert(f"hunt-{kind}-{now}-{info.get('id', '')}", title, msg,
                                 urgent=urgent, cooldown=False))
             if urgent and kind in ("army_out", "hostile", "army_close") and self.auto_recall \

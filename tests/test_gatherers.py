@@ -1,0 +1,90 @@
+"""His farmers: red pickaxe badge at the sweeping zoom; name only in the resource
+point's box (tap it at the close zoom). Real screenshots in real_screens/gather."""
+
+from pathlib import Path
+
+import cv2
+
+from rokwatch import screen
+from rokwatch.game import Game
+from rokwatch.hunter import Army, Hunter
+
+G = Path(__file__).resolve().parent / "real_screens" / "gather"
+REAL = G.parent
+NAME = "[P83L]JONH WICK"
+
+
+def img(n):
+    return cv2.imread(str(G / f"{n}.png"))
+
+
+def test_red_pickaxe_badges():
+    assert len(screen.find_gather_badges(img("sweep_red_pickaxe"))) == 1
+    assert len(screen.find_gather_badges(img("close_his_camp"))) == 1
+    # a red banner with a white symbol isn't one
+    assert screen.find_gather_badges(cv2.imread(str(REAL / "his_army_marching_close.png"))) == []
+    for n in ("own_city_gathering", "recall_panel", "scouted_my_city"):   # your own: green
+        assert screen.find_gather_badges(cv2.imread(str(REAL / f"{n}.png"))) == [], n
+
+
+def test_reads_gatherer_from_the_box():
+    f = img("camp_popup_gatherer")
+    name, xy = screen.read_gatherer(screen.read_text(f), f.shape[0])
+    assert screen.name_score(name, NAME) >= 0.75 and xy == (164, 380)
+
+
+class Clicky:
+    """Shows his camp; after a tap near it, the resource point's box."""
+    def __init__(self):
+        self.frames = [img("close_his_camp"), img("camp_popup_gatherer")]
+        self.i, self.clicks, self.keys = 0, [], []
+
+    def screenshot(self, area=None):
+        return self.frames[self.i].copy()
+
+    def click(self, x, y):
+        self.clicks.append((x, y))
+        if abs(x - 1349) < 60 and 552 < y < 640:          # on the camp, under its badge
+            self.i = 1
+
+    def press(self, k):
+        self.keys.append(k)
+        self.i = 0
+
+
+def test_identify_farm_by_tapping_the_camp(tmp_path):
+    b = Clicky()
+    g = Game(b, settle=0)
+    h = Hunter(g, {"hunt": {"player_name": NAME, "city": [162, 374], "axes_close": [[0.02, 0], [0, 0.02]]},
+                   "patrol": {"axes": [[0.05, 0], [0, 0.05]]}}, [], str(tmp_path / "h.csv"))
+    a = Army(1, (160.0, 383.0), 0, 0, kind="farm")
+    h._identify_farm(a)
+    assert a.owner == "him" and a.tile == (164.0, 380.0)
+    assert b.keys == ["Escape"]                                   # box closed again
+
+
+def test_sweep_view_sees_his_farm(tmp_path):
+    h = Hunter(Game(Clicky(), settle=0), {"hunt": {"player_name": NAME, "city": [162, 374]},
+                                          "patrol": {"axes": [[0.012, 0.004], [-0.004, 0.012]]}},
+               [], str(tmp_path / "h.csv"))
+    f = img("sweep_red_pickaxe")
+    v = Game(Clicky(), settle=0).look(f)
+    farms = [s for s in h.read_view_out(v) if s.kind == "farm"]
+    assert len(farms) == 1 and not farms[0].moving
+
+
+def test_alert_when_his_farmer_leaves():
+    from rokwatch.hunter import ArmySeen, Tracker
+    t = Tracker((162, 374), [("camp", (205, 424))])
+    t.match([ArmySeen((170.0, 390.0), False, None, 0, kind="farm")], 0)
+    t.armies[0].owner = "him"
+    assert t.events() == []
+    # looked there again (that area was on screen) and the farm is gone
+    t.match([], 60, covered=[(170, 390, 10, 8)])
+    ev = t.events()
+    assert [e[0] for e in ev] == ["farm_left"] and "170,390" in ev[0][1]
+    # somewhere we didn't look: kept, no alert
+    t.match([ArmySeen((150.0, 360.0), False, None, 100, kind="farm")], 100)
+    t.armies[0].owner = "him"
+    t.match([], 160, covered=[(200, 420, 10, 8)])
+    assert t.armies and t.events() == []
