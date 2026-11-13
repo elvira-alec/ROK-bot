@@ -312,6 +312,34 @@ class Worker:
         what = "hunting (close zoom)" if zoom == "close" else "patrol (zoomed-out map)"
         self._set("ready", f"Learned the map directions for {what}.")
 
+    def _do_auto_zoom(self):
+        """Set up both zooms by itself (see Game.auto_calibrate), learn the map directions
+        at the searching zoom and the scale at the close zoom."""
+        import numpy as np
+        from .patrol import learn_axes
+        game = self._game()
+        self._set("busy", "Setting up the zoom by itself...")
+        cfg, msg = game.auto_calibrate(progress=lambda m: setattr(self.status, "doing", m))
+        if not cfg:
+            self._set("ready", "Zoom not set up: " + msg)
+            return
+        self.status.doing = "Learning the map directions at the searching zoom (two small drags)"
+        m = learn_axes(game)
+        if m is None:
+            self._set("ready", "Couldn't learn the map directions (is the coordinate readout visible?). "
+                               "Nothing was saved.")
+            return
+        search_scale = float(np.linalg.norm(np.array(m, float)[:, 0]))
+        self.status.doing = "Measuring the close zoom"
+        game.zoom_cfg = cfg
+        if game.to_close():
+            sc = game.measure_scale()
+            if sc:
+                cfg["close_ratio"] = round(sc / search_scale, 4)
+        game.to_sweep()
+        config.save_fields({"hunt.zoom": cfg, "patrol.axes": m}, self.cfg_path)
+        self._set("ready", "Zoom set up. " + msg)
+
     def _do_remember_zoom(self, kind="sweep"):
         """Zoom setup, two presses. 'sweep': you've zoomed by hand to your searching zoom
         (simplified map, icons showing): learn the map directions there and remember

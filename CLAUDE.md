@@ -74,6 +74,15 @@ was fixed, how to test, and how to build and publish. Read it all before changin
   he's been there, when the point runs out, and (with his learned load) when his army heads home.
 - Gathering, and armies walking home by themselves, do **not** count as him being online.
 
+**The two zooms (the user's definition, self-calibrated: "Set up the zoom automatically")**
+- **Close zoom** = the last 3D step, just before the view switches to the simplified map.
+- **Searching zoom** = the furthest-out step where resource points / barbarians still show
+  their **level number tags**. One step further out the numbers vanish and only bare icons
+  stay (`tests/real_screens/zoom/`: 10 tags vs 1 tag).
+- `Game.auto_calibrate()`: all the way in, step out, note the 3D end and the tags' end
+  (`screen.count_level_tags`, ≥3 = shown, ≤1 = gone). It drags to find resource points if
+  none are in view, checks by stepping back in, and only then saves `{gap, t_out: 1, t_in: gap}`.
+
 **Danger**
 - **Red eye** (bottom right): being scouted. **Red crossed swords** (also bottom right):
   being attacked.

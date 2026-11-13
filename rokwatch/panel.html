@@ -215,17 +215,20 @@
 
   <section>
     <h2><span class="step">3</span> Set up the zoom <span class="hint" style="margin:0">(once)</span></h2>
-    <ol class="hint" style="margin:0;padding-left:18px;line-height:1.6">
-      <li>In the game, zoom out to where you see as much map as possible while the army icons and resource
-        points still show (simplified map). Close any menus. Press <b>This is my searching zoom</b>.</li>
-      <li>Then zoom <b>in</b> with the mouse wheel (don't drag the map) until names show over armies and resource
-        points can be tapped. Press <b>This is my close zoom</b>. The bot steps back out one notch at a time to
-        count the notches between your two zooms.</li>
+    <p class="hint" style="margin-top:0">Close any menus and press the button. The bot zooms all the way in, then out
+      one step at a time. The <b>close zoom</b> is the last 3D step, and the <b>searching zoom</b> is the furthest
+      step where resource points still show their level numbers. If no resource points are in view, it moves to
+      find some. It only saves the result once it has checked it.</p>
+    <div class="row"><button class="primary" onclick="post('auto_zoom')">Set up the zoom automatically</button></div>
+    <details><summary class="hint">Or set it by hand</summary>
+    <ol class="hint" style="margin:6px 0 0;padding-left:18px;line-height:1.6">
+      <li>Zoom to your searching zoom and press <b>This is my searching zoom</b>.</li>
+      <li>Zoom in with the mouse wheel (don't drag the map) to where names show, and press <b>This is my close zoom</b>.</li>
     </ol>
     <div class="row">
-      <button class="primary" onclick="post('remember_zoom', { kind: 'sweep' })">1. This is my searching zoom</button>
-      <button class="primary" onclick="post('remember_zoom', { kind: 'close' })">2. This is my close zoom</button>
-    </div>
+      <button onclick="post('remember_zoom', { kind: 'sweep' })">1. This is my searching zoom</button>
+      <button onclick="post('remember_zoom', { kind: 'close' })">2. This is my close zoom</button>
+    </div></details>
     <p class="hint" id="zoom-set"></p><span id="close-axes" hidden></span>
   </section>
 
@@ -370,7 +373,7 @@ function busy(btn, on) {
 }
 const LABELS = { open: 'Connecting to the game', look: 'Looking at the screen', goto: 'Jumping',
   axes: 'Learning map directions', recall: 'Recalling troops', start: 'Starting patrol',
-  hunt: 'Starting to watch & track him', stop: 'Stopping', test_alert: 'Sending a test alert', snap: 'Saving a snapshot', remember_zoom: 'Measuring the zoom' };
+  hunt: 'Starting to watch & track him', stop: 'Stopping', test_alert: 'Sending a test alert', snap: 'Saving a snapshot', remember_zoom: 'Measuring the zoom', auto_zoom: 'Setting up the zoom' };
 async function post(cmd, body = {}) {
   const btn = document.activeElement;
   busy(btn, true);

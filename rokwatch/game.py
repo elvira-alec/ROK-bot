@@ -288,6 +288,83 @@ class Game:
         self._at = "sweep" if ok else None
         return ok
 
+    def auto_calibrate(self, max_moves=6, progress=None):
+        """Work out both zooms by itself:
+          - zoom all the way in, then step out one notch at a time;
+          - close zoom = the last notch of the 3D view (just before the simplified map);
+          - searching zoom = the furthest-out notch where resource points still show their
+            level numbers (one more notch and they disappear).
+        Needs resource points on screen to see the numbers go: if there are none, it drags
+        to other places to find some. Only returns a result it's sure of (it steps back in
+        to check the numbers come back). Returns (cfg, message)."""
+        say = progress or (lambda m: None)
+        H, W = self.frame().shape[:2]
+        self._size = (H, W)
+        say("Zooming all the way in")
+        prev = self._small()
+        for _ in range(12):                              # in, in bursts, until it stops changing
+            for _ in range(6):
+                self.check_stop()
+                self.b.wheel(W // 2, H // 2, -100)
+                time.sleep(0.04)
+            cur = self._settled()
+            if self._changed(cur, prev) < 0.01:
+                break
+            prev = cur
+        say("Stepping out to where the 3D view ends")
+        k, close_k = 0, None
+        while k < 40:
+            self._notch(out=True)
+            k += 1
+            if self.level() != "close":
+                close_k = k - 1
+                break
+        if close_k is None:
+            return None, "Couldn't find where the 3D view switches to the map."
+
+        def tags():
+            return screen.count_level_tags(self.fresh_frame())
+        t = tags()
+        moves = 0
+        dirs = [(1, 0), (0, 1), (-1, 0), (0, -1), (1, 1), (-1, -1)]
+        while t < 3 and moves < max_moves:              # no resource points here: look elsewhere
+            say("No resource points here to judge by; moving to find some")
+            dx, dy = dirs[moves % len(dirs)]
+            self.b.drag(W // 2 + int(0.25 * W * dx), H // 2 + int(0.25 * H * dy),
+                        W // 2 - int(0.25 * W * dx), H // 2 - int(0.25 * H * dy))
+            moves += 1
+            t = tags()
+        if t < 3:
+            return None, "Couldn't find resource points to calibrate with. Move the map near some and try again."
+        say("Stepping out until the level numbers disappear")
+        counts = [(k, t)]
+        while k < close_k + 25:
+            self._notch(out=True)
+            k += 1
+            if self.level() == "far":
+                break
+            t = tags()
+            counts.append((k, t))
+            if t <= 1:
+                break
+        if counts[-1][1] > 1:
+            return None, "The level numbers never clearly disappeared; nothing was saved."
+        with_tags = [kk for kk, tt in counts if tt >= 3]
+        if not with_tags:
+            return None, "Couldn't see the level numbers clearly; nothing was saved."
+        search_k = with_tags[-1]
+        # check: back in to the searching zoom, the numbers must be there again
+        self.steps(k - search_k)
+        if tags() < 3:
+            return None, "The check didn't match (numbers didn't come back); nothing was saved."
+        gap = search_k - close_k
+        if gap < 1:
+            return None, "The two zooms came out the same; nothing was saved."
+        self._at = "sweep"
+        cfg = {"gap": gap, "t_out": 1, "t_in": gap}
+        self.zoom_cfg = cfg
+        return cfg, f"Close zoom = last 3D step; searching zoom = {gap} steps further out (last one with level numbers)."
+
     def keep_scale(self, search_scale, tries=4):
         """At the searching zoom: measure the map's scale (one small drag back and forth)
         and step notches in / out while that brings it closer to the searching zoom's

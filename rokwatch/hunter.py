@@ -1137,6 +1137,12 @@ class Hunter:
             if self.game._at != "sweep":
                 self._progress(0, 1, "Getting to the searching zoom")
                 self.zoom_out()
+            if self._rounds == 0:
+                # starting: go straight to his city (not looking around wherever the camera
+                # happened to be); the zoom check can wait for the next few minutes
+                self._progress(0, 1, "Going to his city")
+                self.game.goto(int(self.city[0]), int(self.city[1]))
+                self._scale_checked = now
             # every few minutes: is the zoom still right? (measured, corrected by a notch)
             if self.axes and now - self._scale_checked > 300:
                 self._scale_checked = now

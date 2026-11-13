@@ -501,6 +501,9 @@ def make_handler(panel: Panel, port_holder=None):
                 msg = panel.install_update()
                 return self._send(200, {"ok": msg == "Updating", "message": msg,
                                         "version": panel.updating})
+            if path == "/api/auto_zoom":
+                panel.worker.send("auto_zoom")
+                return self._send(200, {"ok": True})
             if path == "/api/remember_zoom":
                 panel.worker.send("remember_zoom", kind="close" if data.get("kind") == "close" else "sweep")
                 return self._send(200, {"ok": True})

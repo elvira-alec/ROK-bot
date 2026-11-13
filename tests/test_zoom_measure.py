@@ -122,3 +122,63 @@ def test_stop_interrupts_at_once():
     with pytest.raises(Stopped):
         g.goto(100, 100)
     assert time.time() - t0 < 2.0
+
+
+ZOOM = REAL / "zoom"
+
+
+class TagSim(ZoomSim):
+    """3D at 13+, simplified WITH level numbers at 8-12, WITHOUT at 4-7, too far below
+    (the user's three screenshots)."""
+    def __init__(self, level, points_here=True):
+        super().__init__(level)
+        self.close = cv2.imread(str(ZOOM / "close_3d.png"))
+        self.tags = cv2.imread(str(ZOOM / "search_with_tags.png"))
+        self.notags = cv2.imread(str(ZOOM / "too_far_no_tags.png"))
+        self.points_here = points_here                 # resource points in view?
+
+    def drag(self, x0, y0, x1, y1, steps=15):
+        super().drag(x0, y0, x1, y1, steps)
+        self.points_here = True                         # moved somewhere with resource points
+
+    def screenshot(self, area=None):
+        lv = self._current()
+        if lv >= 12.5:
+            base = self.close
+        elif lv >= 7.5:
+            base = self.tags if self.points_here else self.notags
+        elif lv >= 3.5:
+            base = self.notags
+        else:
+            base = self.far
+        s = 1.04 ** (lv - 8)
+        h, w = base.shape[:2]
+        big = cv2.resize(base, None, fx=s, fy=s)
+        out = np.zeros_like(base)
+        bh, bw = big.shape[:2]
+        if s >= 1:
+            y0, x0 = (bh - h) // 2, (bw - w) // 2
+            out = big[y0:y0 + h, x0:x0 + w].copy()
+        else:
+            y0, x0 = (h - bh) // 2, (w - bw) // 2
+            out[y0:y0 + bh, x0:x0 + bw] = big
+        out[:int(0.1 * h), :int(0.45 * w)] = base[:int(0.1 * h), :int(0.45 * w)]
+        out[int(0.75 * h):, int(0.8 * w):] = base[int(0.75 * h):, int(0.8 * w):]
+        return out
+
+
+def test_self_calibration_finds_both_zooms():
+    sim = TagSim(10)
+    g = Game(sim, settle=0)
+    cfg, msg = g.auto_calibrate()
+    assert cfg == {"gap": 5, "t_out": 1, "t_in": 5}, (cfg, msg)
+    assert sim.level == 8                               # left at the searching zoom
+    assert g.to_close() and sim.level == 13             # the last 3D step
+    assert g.to_sweep() and sim.level == 8
+
+
+def test_self_calibration_moves_to_find_resource_points():
+    sim = TagSim(10, points_here=False)
+    g = Game(sim, settle=0)
+    cfg, msg = g.auto_calibrate()
+    assert cfg and cfg["gap"] == 5, (cfg, msg)
