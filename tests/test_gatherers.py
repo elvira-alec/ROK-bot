@@ -107,3 +107,22 @@ def test_spanish_box_and_closing_rules():
     assert not is_simple_view([Text("2 032 680", (300, 20, 200, 40), 1)], f)
     assert not is_simple_view([Text("2032680", (300, 20, 200, 40), 1)], f)
     assert is_simple_view([Text("#4183 X:165 Y:380", (300, 20, 200, 40), 1)], f)
+
+
+def test_stuck_state_from_a_real_snapshot():
+    """Snapshot from the game: resource box open AND the profile panel (opened by Esc).
+    The box is found and read; the drag to close it lands on the open map to its
+    right (away from the profile panel); the coordinate readout is hidden, so the
+    profile counts as 'something covering the map' to close next."""
+    f = cv2.imread(str(G / "snap_stuck_box_and_profile.jpg"))
+    H, W = f.shape[:2]
+    box = screen.find_info_box(f)
+    assert box
+    bx, by, bw, bh = box
+    drag_x = int(bx - 0.12 * W) if bx > W / 2 else int(bx + bw + 0.12 * W)
+    assert drag_x > bx + bw and drag_x < 0.9 * W                  # on the map, right of the box
+    texts = screen.read_text(f, box)
+    assert any(screen.name_score(t.text, NAME) >= 0.75 for t in texts)
+    assert any(screen.parse_coords(t.text) == (None, 169, 389) or
+               (screen.parse_coords(t.text) or (0, 0, 0))[1:] == (169, 389) for t in texts)
+    assert screen.camera_coords(f) is None                        # profile covers the readout
