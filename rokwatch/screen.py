@@ -912,6 +912,25 @@ def find_map_icons(frame: np.ndarray):
     for c in find_hostile_icons(frame):
         if all(np.hypot(c[0] - f[0][0], c[1] - f[0][1]) > 0.03 * H for f in found):
             found.append((c, "hostile"))
+    # a plain diamond (no symbol) is a scout only if it's scout-sized: real scouts are
+    # 33-39 px wide on a 1320 px tall screen, armies 52-58 (an army can show without
+    # its symbol, e.g. on its way home)
+    if any(k == "scout" for _, k in found):
+        H = frame.shape[0]
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        both = (cv2.inRange(hsv, np.array((95, 8, 120), np.uint8), np.array((165, 60, 215), np.uint8))
+                | cv2.inRange(hsv, np.array((0, 0, 215), np.uint8), np.array((180, 40, 255), np.uint8)))
+        both = cv2.morphologyEx(both, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+        _, lab, st, _ = cv2.connectedComponentsWithStats(both)
+        out = []
+        for c, k in found:
+            if k == "scout":
+                x, y = int(c[0]), int(c[1])
+                i = lab[min(max(y, 0), H - 1), min(max(x, 0), frame.shape[1] - 1)]
+                if i and st[i][2] >= 46 * H / 1320.0 and st[i][2] <= 110 * H / 1320.0:
+                    k = "army"
+            out.append((c, k))
+        found = out
     return found
 
 

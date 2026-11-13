@@ -204,7 +204,7 @@ class Game:
         """Share of the picture that's different (marching icons are only a few pixels)."""
         return float(np.mean(np.abs(a - b) > 12))
 
-    def _settled(self, timeout=2.0, min_wait=0.3):
+    def _settled(self, timeout=2.0, min_wait=0.22):
         """Wait until the zoom animation has completely finished (the picture is still
         on two looks in a row), so the next notch can't get lost."""
         time.sleep(min_wait)
@@ -253,6 +253,9 @@ class Game:
             return True
         gap, t_out, t_in = self._zoom_numbers()
         j = 0
+        if gap and t_in and self._at == "sweep":
+            self.steps(max(0, t_in - 1))            # up to just before the 3D view (no checks)
+            j = max(0, t_in - 1)
         while self.level() != "close":              # in, one at a time, until the 3D view
             if j >= max(gap, 4) + 6:
                 return False
@@ -271,6 +274,9 @@ class Game:
         gap, t_out, t_in = self._zoom_numbers()
         if lv == "close":
             j = 0
+            if gap and t_out and self._at == "close":
+                self.steps(-max(0, t_out - 1))       # up to just before the map shows (no checks)
+                j = max(0, t_out - 1)
             while self.level() == "close":           # out, one at a time, until the map shows
                 if j >= max(gap, 4) + 6:
                     return False

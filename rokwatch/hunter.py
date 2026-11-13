@@ -105,7 +105,8 @@ class Army:
     kind: str = "army"             # "army", "scout" or "farm" (gathering at a resource point)
     prev_tile: tuple | None = None # where it was last sweep
     checks: int = 0                # how many times we zoomed in to read its name
-    info: dict = field(default_factory=dict)   # farm details read from its box (what, reserves)
+    info: dict = field(default_factory=dict)   # farm details read from its box (what, reserves, xy)
+    missed: int = 0                # looked right at its spot and didn't see it (times in a row)
 
 
 class Tracker:
@@ -189,6 +190,7 @@ class Tracker:
                 if getattr(s, "owner", None):
                     a.owner = s.owner
             a.prev_tile = prev_tile
+            a.missed = 0
             a.tile, a.last_seen, a.moving, a.ends = s.tile, now, s.moving, s.ends
             a.kind = getattr(s, "kind", "army")
             if a.owner is None and getattr(s, "owner", None):
@@ -203,11 +205,23 @@ class Tracker:
         if covered is not None:
             def looked_at(a):
                 p = predict(a, now)
-                return any(abs(p[0] - x) < hw and abs(p[1] - y) < hh for x, y, hw, hh in covered)
-            current += [a for a in unmatched if not looked_at(a) and now - a.last_seen < 900]
-            self.gone = [a for a in unmatched if looked_at(a)]
+                return any(c(p) if callable(c) else (abs(p[0] - c[0]) < c[2] and abs(p[1] - c[1]) < c[3])
+                           for c in covered)
+            gone = []
+            for a in unmatched:
+                if looked_at(a):
+                    a.missed += 1
+                    # gone only after its spot was in view twice without it (one look can miss)
+                    (gone if a.missed >= 2 else current).append(a)
+                elif now - a.last_seen < 900:
+                    current.append(a)
+            self.gone = gone
         else:
-            self.gone = list(unmatched)
+            gone = []
+            for a in unmatched:
+                a.missed += 1
+                (gone if a.missed >= 2 else current).append(a)
+            self.gone = gone
         self.armies = current
 
     def events(self, include=None) -> list[tuple[str, str, dict]]:
@@ -380,7 +394,9 @@ class Tracker:
             if not include(a):
                 continue
             th = self.threat(a)
-            out.append({"id": a.id, "x": round(a.tile[0]), "y": round(a.tile[1]), "state": state(a),
+            xy = a.info.get("xy") if a.info else None          # exact, read from its box
+            out.append({"id": a.id, "x": xy[0] if xy else round(a.tile[0]),
+                        "y": xy[1] if xy else round(a.tile[1]), "state": state(a),
                         "dest": [round(a.dest[0]), round(a.dest[1])] if a.dest else None,
                         "last_seen": datetime.fromtimestamp(a.last_seen).strftime("%H:%M:%S"),
                         "seen_ts": a.last_seen, "his": a.owner == "him", "kind": a.kind,
@@ -624,7 +640,7 @@ class Hunter:
             elif any(self.GATHER_RX.search(t.text) for t in texts):
                 a.owner = "other"                        # someone else is gathering there
             if coords and a.owner == "him":
-                a.tile = (float(coords[1]), float(coords[2]))
+                a.info = {**a.info, "xy": [int(coords[1]), int(coords[2])]}
             self.game.close_popups()
             return
         log.info("hunt: couldn't open the resource point at %.0f,%.0f", a.tile[0], a.tile[1])
@@ -784,8 +800,7 @@ class Hunter:
                 continue
             shape = view.frame.shape
             self._dangers(view)
-            vw, vh = view_size_tiles(self.axes, shape)
-            covered.append((view.camera[1], view.camera[2], 0.45 * vw, 0.45 * vh))
+            covered.append(self._on_screen(view.camera[1:3], shape))
             here = []
             for s in self.read_view_out(view):
                 if all(math.dist(s.tile, o.tile) > 4 for o in seen):
@@ -794,12 +809,29 @@ class Hunter:
             self._check_new_here(here)
         return seen, covered
 
+    def _on_screen(self, cam, shape):
+        """Is a map tile visible in this view (and not under the side panels / chat)?"""
+        Ainv = np.linalg.inv(np.array(self.axes, float))
+        H, W = shape[:2]
+        cx, cy = float(cam[0]), float(cam[1])
+
+        def visible(tile):
+            px, py = Ainv @ np.array([tile[0] - cx, tile[1] - cy])
+            px, py = px + W / 2, py + H / 2
+            return 0.14 * W < px < 0.88 * W and 0.12 * H < py < 0.84 * H
+        return visible
+
     def _check_new_here(self, found):
         """Armies / farms just seen that aren't known yet: find out whose they are right
         away (zoom in, check, zoom back out), before moving on."""
         known = [a for a in self.tracker.armies if a.owner]
         new = []
         for s in found:
+            # on a march line that starts or ends at his city: his (leaving or coming home) -
+            # no need to zoom in for that
+            if s.moving and s.ends and any(self.tracker.at_home(e) for e in s.ends):
+                s.owner = "him"
+                continue
             if s.kind == "scout":
                 continue
             k = min((a for a in known if a.kind == s.kind),

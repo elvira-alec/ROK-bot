@@ -63,7 +63,7 @@ def test_identify_farm_by_tapping_the_camp(tmp_path):
                    "patrol": {"axes": [[0.05, 0], [0, 0.05]]}}, [], str(tmp_path / "h.csv"))
     a = Army(1, (160.0, 383.0), 0, 0, kind="farm")
     h._identify_farm(a)
-    assert a.owner == "him" and a.tile == (164.0, 380.0)
+    assert a.owner == "him" and a.info["xy"] == [164, 380] and a.tile == (160.0, 383.0)
     assert b.i == 0 and b.drags and b.keys == []                  # closed by dragging, no Esc
 
 
@@ -83,8 +83,11 @@ def test_alert_when_his_farmer_leaves():
     t.match([ArmySeen((170.0, 390.0), False, None, 0, kind="farm")], 0)
     t.armies[0].owner = "him"
     assert t.events() == []
-    # looked there again (that area was on screen) and the farm is gone
+    # looked there again (that area was on screen) and the farm is gone: once could be a
+    # missed look, so only the second time counts
     t.match([], 60, covered=[(170, 390, 10, 8)])
+    assert t.events() == [] and t.armies
+    t.match([], 90, covered=[(170, 390, 10, 8)])
     ev = t.events()
     assert [e[0] for e in ev] == ["farm_left"] and "170,390" in ev[0][1]
     # somewhere we didn't look: kept, no alert
@@ -193,3 +196,48 @@ def test_activity_log_and_report(tmp_path):
     kinds = [a[1] for a in d["actions"]]
     assert kinds == ["changed", "army_seen", "army_gone", "army_gone"], kinds
     assert sum(w[1] for w in d["watch"]) == 3 and d["watch"][0][2] >= 1     # 3 minutes, farms out
+
+
+def test_army_on_a_line_to_his_city_is_his_without_zooming(tmp_path):
+    from rokwatch.hunter import ArmySeen
+    h = Hunter(Game(Clicky(), settle=0), {"hunt": {"player_name": NAME, "city": [162, 374]},
+                                          "patrol": {"axes": [[0.05, 0], [0, 0.05]]}}, [], str(tmp_path / "h.csv"))
+    called = []
+    h.identify = lambda armies, limit=None: called.append(len(armies))
+    home = ArmySeen((170.0, 385.0), True, ((163.0, 375.0), (180.0, 398.0)), 0)     # line from his city
+    away = ArmySeen((200.0, 400.0), True, ((190.0, 390.0), (215.0, 420.0)), 0)     # nowhere near it
+    h._check_new_here([home, away])
+    assert home.owner == "him" and away.owner is None and called == [1]
+
+
+def test_big_plain_diamond_is_an_army_small_one_a_scout():
+    import numpy as np
+    f = cv2.imread(str(REAL / "scouted_simple_4.png"))
+    kinds = [k for _, k in screen.find_map_icons(f)]
+    assert kinds.count("scout") == 2                       # real scouts stay scouts
+    # the same scout drawn 1.6x bigger (army-sized, no symbol): an army
+    (x, y), _ = screen.find_map_icons(f)[0]
+    crop = f[y - 30:y + 30, x - 30:x + 30]
+    big = cv2.resize(crop, None, fx=1.6, fy=1.6, interpolation=cv2.INTER_CUBIC)
+    g = f.copy()
+    g[700:700 + big.shape[0], 400:400 + big.shape[1]] = big
+    found = {(int(c[0]) // 10, int(c[1]) // 10): k for c, k in screen.find_map_icons(g)}
+    near = [k for (cx, cy), k in found.items() if abs(cx * 10 - 448) < 30 and abs(cy * 10 - 748) < 30]
+    assert near == ["army"], found
+
+
+def test_farm_out_of_view_is_not_gone(tmp_path):
+    """Your snapshot: camera at 192,363, his farms at 170,389 / 172,375 - not on screen,
+    so not 'pulled back'."""
+    from rokwatch.hunter import ArmySeen
+    h = Hunter(Game(Clicky(), settle=0), {"hunt": {"player_name": NAME, "city": [162, 374]},
+                                          "patrol": {"axes": [[0.012, 0.004], [-0.004, 0.012]]}},
+               [], str(tmp_path / "h.csv"))
+    vis = h._on_screen((192, 363), (1042, 1852))
+    assert vis((192, 363)) and not vis((170, 389)) and not vis((172, 375))
+    t = h.tracker
+    t.match([ArmySeen((170.0, 389.0), False, None, 0, kind="farm")], 0)
+    t.armies[0].owner = "him"
+    for k in range(3):
+        t.match([], 60 * (k + 1), covered=[vis])
+    assert t.armies and t.events() == []
