@@ -46,6 +46,7 @@ EDITABLE = {
     "snap_every": "snapshots.every_minutes",
     "hunt_city": "hunt.city",
     "update_every": "updates.check_minutes",
+    "close_with_page": "close_with_page",
 }
 
 
@@ -82,6 +83,7 @@ class Panel:
         self.update_at = None       # when it installs by itself (None = waiting for you)
         self.updating = None        # version being installed
         self.last_request = 0.0
+        self.bye_at = 0.0           # when a panel page said it was closing
         self.update_status = {"time": None, "result": "not checked yet"}
         self.next_check = 0.0
 
@@ -202,6 +204,7 @@ class Panel:
         out["panel_on_phone"] = bool(_get(cfg, "panel_on_phone"))
         out["targets"] = _get(cfg, "targets") or []
         out["update_every"] = out["update_every"] or 30
+        out["close_with_page"] = out["close_with_page"] is not False      # on unless switched off
         if not out["hunt_city"]:                      # older setups: his city from the places list
             enemy = next((x for x in (_get(cfg, "patrol.sites") or []) if x.get("kind") == "enemy"), None)
             out["hunt_city"] = [enemy["x"], enemy["y"]] if enemy else None
@@ -216,7 +219,7 @@ class Panel:
                 v = data[k]
                 if k == "sites":
                     v = _clean_sites(v)
-                elif k in ("auto_recall", "panel_on_phone"):
+                elif k in ("auto_recall", "panel_on_phone", "close_with_page"):
                     v = bool(v)
                 elif k == "recall_scope":
                     v = "all" if v == "all" else "threatened"
@@ -397,6 +400,7 @@ def make_handler(panel: Panel, port_holder=None):
         def do_GET(self):
             if not self._allowed():
                 return self._locked()
+            panel.last_request = time.time()
             path = urlsplit(self.path).path
             if path in ("/", "/index.html"):
                 key = self._key_given() if not self._local() else None
@@ -444,6 +448,10 @@ def make_handler(panel: Panel, port_holder=None):
         def do_POST(self):
             if not self._allowed():
                 return self._locked()
+            if urlsplit(self.path).path == "/api/bye":         # a panel page is closing
+                panel.bye_at = time.time()
+                return self._send(200, {"ok": True})
+            panel.last_request = time.time()
             n = int(self.headers.get("Content-Length") or 0)
             # only accept requests from the panel page itself (not other websites)
             origin = self.headers.get("Origin")
@@ -500,6 +508,33 @@ def make_handler(panel: Panel, port_holder=None):
     return H
 
 
+def should_quit(panel, now=None, idle=180, grace=6) -> bool:
+    """Close with the panel page: the page said goodbye and no page asked anything
+    since (a reload asks again within a second or two); or no page at all for a
+    few minutes. Never during an update, or if switched off."""
+    now = now or time.time()
+    if panel.updating or not panel.last_request:
+        return False
+    if _get(config.load(panel.cfg_path), "close_with_page") is False:
+        return False
+    if panel.bye_at and panel.last_request < panel.bye_at and now - panel.bye_at > grace:
+        return True
+    return now - panel.last_request > idle
+
+
+def _auto_quit_loop(panel):
+    while True:
+        time.sleep(2)
+        try:
+            if should_quit(panel):
+                log.info("The panel page was closed: quitting")
+                panel.worker.send("stop")
+                time.sleep(1)
+                os._exit(0)
+        except Exception:
+            log.debug("auto-quit check failed", exc_info=True)
+
+
 def _update_loop(panel):
     time.sleep(5)
     while True:
@@ -538,6 +573,7 @@ def serve(cfg_path=config.DEFAULT_PATH, port=8765, open_browser=True):
             print(f"On your phone (Tailscale): http://{tailscale_address()}:{srv.server_port}/"
                   f"?key={panel.phone_key()}")
     threading.Thread(target=_update_loop, args=(panel,), daemon=True).start()
+    threading.Thread(target=_auto_quit_loop, args=(panel,), daemon=True).start()
     if open_browser == "if_no_client":
         def maybe_open():
             if time.time() - panel.last_request > 10:

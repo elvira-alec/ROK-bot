@@ -117,3 +117,27 @@ def test_hunt_from_panel(panel):
     assert abs(st["armies"][0]["x"] - 155) <= 2 and abs(st["armies"][0]["y"] - 368) <= 2
     call("/api/stop", {})
     wait_for(call, lambda s: s["phase"] == "ready")
+
+
+def test_closes_with_the_page(tmp_path):
+    import time
+    import yaml
+    from rokwatch.panel import Panel, should_quit
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text(yaml.safe_dump({"notify": {}}))
+    p = Panel(str(cfg))
+    now = time.time()
+    assert not should_quit(p, now)                       # no page yet: keep running
+    p.last_request = now - 1
+    assert not should_quit(p, now)
+    p.bye_at = now                                       # tab closed...
+    assert not should_quit(p, now + 3)                   # (a reload would check in now)
+    assert should_quit(p, now + 7)                       # ...and nobody came back
+    p.last_request = now + 2                             # it was a reload
+    assert not should_quit(p, now + 7)
+    assert should_quit(p, now + 200)                     # no page at all for minutes
+    p.updating = "1.3"
+    assert not should_quit(p, now + 200)                 # never mid-update
+    p.updating = None
+    p.save({"close_with_page": False})
+    assert not should_quit(p, now + 200) and p.settings()["close_with_page"] is False

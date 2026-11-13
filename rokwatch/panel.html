@@ -249,6 +249,8 @@
     <h2><svg class="i"><use href="#i-stop"/></svg> Program</h2>
     <p class="hint" style="margin-top:0">RoK Watcher runs in the background (no window of its own); this page is how you
       control it. Opening RoKWatcher.exe again brings this page back.</p>
+    <label class="toggle"><input type="checkbox" id="close_with_page" onchange="save()"> Close RoK Watcher when this
+      page is closed</label>
     <div class="row"><button class="danger" onclick="quitApp()">Quit RoK Watcher</button></div>
   </section>
   <section id="phone-box">
@@ -496,6 +498,7 @@ async function loadSettings() {
   $('auto_recall').checked = !!s.auto_recall;
   $('panel_on_phone').checked = !!s.panel_on_phone;
   $('snap_every').value = s.snap_every ?? 10;
+  $('close_with_page').checked = s.close_with_page !== false;
   $('update_every').value = s.update_every || 30; $('update_every_v').textContent = $('update_every').value;
   $('recall_scope').value = s.recall_scope === 'all' ? 'all' : 'threatened';
   sites = (s.sites || []).map(x => ({ ...x }));
@@ -511,7 +514,7 @@ async function save() {
       player_name: $('player_name').value, hunt_radius: $('hunt_radius').value,
       ...($('hunt_x').value && $('hunt_y').value ? { hunt_city: [$('hunt_x').value, $('hunt_y').value] } : {}),
       panel_on_phone: $('panel_on_phone').checked, snap_every: $('snap_every').value,
-      update_every: $('update_every').value,
+      update_every: $('update_every').value, close_with_page: $('close_with_page').checked,
       recall_scope: $('recall_scope').value }) });
   await loadSettings(); refresh(); loadPhone();
   toast('Saved', 'good');
@@ -633,6 +636,8 @@ function drawRoute() {
     : (o.help || '');
 }
 loadSettings(); refresh(); loadPhone(); setInterval(refresh, 1500);
+// closing this page closes RoK Watcher (a reload doesn't: the new page checks in at once)
+addEventListener('pagehide', () => { if (!updatingTo) navigator.sendBeacon('/api/bye', '{}'); });
 setInterval(() => { if (!document.hidden && !$('phone-box').hidden && $('panel_on_phone').checked) loadPhone(); }, 15000);
 </script>
 </body>
