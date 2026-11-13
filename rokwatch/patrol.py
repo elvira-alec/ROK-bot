@@ -47,7 +47,7 @@ class Sighting:
     far_end: tuple          # screen point of the end away from the site
     heading: float          # degrees on screen, from the site toward the far end
     toward: str | None = None   # name of one of your sites it points at (if known)
-    army_at: float | None = None  # where the army icon is: 0 = at the site, 1 = far end
+    army_at: float | None = None  # how far the army icon is from the site (screen heights)
 
 
 @dataclass
@@ -229,17 +229,20 @@ class Patrol:
 
     @staticmethod
     def _army_along(ln, near, far, armies, h):
-        """Position (0..1 from the site end) of an army icon sitting on the line."""
+        """How far the army icon on this line is from the site, in screen heights. The
+        line is cut where the icon sits (it covers it), so an icon just past the line's
+        end counts too. Distance from the site, not a share of the line: the drawn line
+        changes length as the army moves."""
         a, b = np.array(near, float), np.array(far, float)
-        ab = b - a
-        L2 = float(ab @ ab)
-        best = None
+        best = None                                    # (how far off the line, distance)
         for c in armies:
-            if ln.distance_to(c) > 0.03 * h or not L2:
+            c = np.array(c, float)
+            off = min(ln.distance_to(tuple(c)), float(np.linalg.norm(c - b)))
+            if off > 0.03 * h and float(np.linalg.norm(c - b)) > 0.07 * h:
                 continue
-            t = float(np.clip((np.array(c, float) - a) @ ab / L2, 0, 1))
-            best = t if best is None else best
-        return best
+            if best is None or off < best[0]:
+                best = (off, float(np.linalg.norm(c - a)) / h)
+        return best[1] if best else None
 
     def visit(self, site: Site, now=None) -> list[Alert]:
         now = time.time() if now is None else now
