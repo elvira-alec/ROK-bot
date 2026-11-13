@@ -92,6 +92,11 @@
   .army .threat-t { color: var(--bad); font-weight: 700; font-size: 12px; }
   .army a.xy { color: var(--accent); cursor: pointer; text-decoration: none; font-variant-numeric: tabular-nums; }
   .army .ago { color: var(--muted); font-size: 12px; text-align: right; white-space: nowrap; }
+  svg.i { width: 16px; height: 16px; vertical-align: -3px; flex: none; }
+  section h2 svg.i { color: var(--muted); }
+  .army .ic svg.i { width: 20px; height: 20px; color: var(--muted); }
+  .army.his .ic svg.i { color: var(--accent); }
+  .army.threat .ic svg.i, .threat-t svg.i { color: var(--bad); }
   .notes { margin: 10px 0 0; padding-left: 18px; color: var(--warn); font-size: 13px; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
   .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
@@ -118,6 +123,7 @@
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol><symbol id="i-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol><symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol><symbol id="i-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></symbol><symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></symbol><symbol id="i-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></symbol><symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></symbol><symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4l13 8-13 8z" fill="currentColor"/></symbol><symbol id="i-stop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></symbol><symbol id="i-pickaxe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 12.5 6.6 20.4a1 1 0 1 1-3-3l7.9-7.9"/><path d="M15.7 4.3A12.5 12.5 0 0 0 5.5 3a1 1 0 0 0 .1 1.7 22 22 0 0 1 6.3 3.4"/><path d="M17.7 3.7a1 1 0 0 0-1.4 0l-4.6 4.6a1 1 0 0 0 0 1.4l2.6 2.6a1 1 0 0 0 1.4 0l4.6-4.6a1 1 0 0 0 0-1.4z"/><path d="M19.7 8.3A12.5 12.5 0 0 1 21 18.5a1 1 0 0 1-1.7-.1 22 22 0 0 0-3.4-6.3"/></symbol><symbol id="i-tent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 21 14 3"/><path d="M20.5 21 10 3"/><path d="M15.5 21 12 15l-3.5 6"/><path d="M2 21h20"/></symbol><symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></symbol><symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol><symbol id="i-castle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 20v-9H2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2Z"/><path d="M18 11V4H6v7"/><path d="M15 22v-4a3 3 0 0 0-6 0v4"/><path d="M6 4V2M10 4V2M14 4V2M18 4V2M2 11V9M22 11V9"/></symbol><symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol><symbol id="i-diamond" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 22 12 12 22 2 12z"/></symbol><symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></symbol><symbol id="i-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></symbol></svg>
 <div id="toasts" aria-live="polite"></div>
 <header>
   <h1>RoK Watcher <span class="ver" id="ver"></span></h1>
@@ -133,13 +139,13 @@
 <div id="now" hidden><div class="t" id="now-t"></div><div class="bar" id="now-bar"><i id="now-fill"></i></div></div>
 <main>
   <section id="live-box">
-    <h2>👁 Live view</h2>
+    <h2><svg class="i"><use href="#i-eye"/></svg> Live view</h2>
     <label class="toggle"><input type="checkbox" id="live-on" checked> Show what the bot sees (small picture, about every 2 seconds)</label>
     <img id="live-img" alt="" hidden>
   </section>
 
   <section id="his-box">
-    <h2>🎯 His armies</h2>
+    <h2><svg class="i"><use href="#i-target"/></svg> His armies</h2>
     <p id="his-sum" class="hint" style="margin:0">Nothing found yet. Press "Watch &amp; track him".</p>
     <div class="his-wrap">
       <svg id="radar" viewBox="0 0 300 300" role="img" aria-label="Map of his armies around his city and your spots"></svg>
@@ -198,8 +204,8 @@
   <section>
     <h2><span class="step">4</span> Watch</h2>
     <div class="row" style="margin-top:0">
-      <button class="go" id="b-hunt" onclick="post('hunt')" style="font-size:16px;padding:12px 20px">▶ Watch &amp; track him</button>
-      <button class="danger" id="b-stop" onclick="post('stop')" style="font-size:16px;padding:12px 20px">■ Stop</button>
+      <button class="go" id="b-hunt" onclick="post('hunt')" style="font-size:16px;padding:12px 20px"><svg class="i"><use href="#i-play"/></svg> Watch &amp; track him</button>
+      <button class="danger" id="b-stop" onclick="post('stop')" style="font-size:16px;padding:12px 20px"><svg class="i"><use href="#i-stop"/></svg> Stop</button>
     </div>
     <p class="hint">Searches around his city for his armies (farming or marching), checks each new one is his,
       then keeps following them. When none are out it watches his city. Alerts you when one heads for your city
@@ -214,7 +220,7 @@
   </section>
 
   <section>
-    <h2>🔔 Alerts to your phone</h2>
+    <h2><svg class="i"><use href="#i-bell"/></svg> Alerts to your phone</h2>
     <label for="ntfy_topic">ntfy topic (subscribe to the same name in the ntfy phone app)</label>
     <input id="ntfy_topic" placeholder="rok-alerts-something-random">
     <label for="discord_webhook">Discord webhook (optional)</label>
@@ -234,7 +240,7 @@
     <summary style="cursor:pointer;font-weight:600;padding:6px 0">More: phone panel, updates, snapshots, places, tools, log</summary>
     <div class="more-grid">
   <section id="phone-box">
-    <h2>📱 Use this panel on your phone</h2>
+    <h2><svg class="i"><use href="#i-phone"/></svg> Use this panel on your phone</h2>
     <label class="toggle"><input type="checkbox" id="panel_on_phone" onchange="save()"> Let my phone open this panel</label>
     <p class="hint" id="phone-hint">Switch it on and the QR code shows up here (no restart). If Windows asks whether to
       allow RoKWatcher on networks, tick <b>both</b> boxes and click <b>Allow</b>.</p>
@@ -247,7 +253,7 @@
     </div>
   </section>
   <section id="upd-box">
-    <h2>⬆ Updates</h2>
+    <h2><svg class="i"><use href="#i-refresh"/></svg> Updates</h2>
     <p id="upd-info" style="margin:0">-</p>
     <div class="row">
       <button class="primary" onclick="checkNow()">Check for updates now</button>
@@ -260,19 +266,19 @@
       for you to press "Update now".</p>
   </section>
   <section id="snap-box">
-    <h2>📸 Snapshots (pictures to send Claude)</h2>
+    <h2><svg class="i"><use href="#i-camera"/></svg> Snapshots (pictures to send Claude)</h2>
     <p class="hint">Saves exactly what the bot sees, plus what it read from it. Save one whenever the bot gets
       something wrong (or right!), then send the pictures over so it can be tuned.</p>
     <div class="row">
       <input id="snap_note" placeholder="What's on screen? (optional, e.g. 'his scout near my farm')" style="flex:1;min-width:180px">
-      <button class="primary" onclick="snap()">📸 Save snapshot</button>
+      <button class="primary" onclick="snap()"><svg class="i"><use href="#i-camera"/></svg> Save snapshot</button>
     </div>
     <div class="row">
       <label style="margin:0">Also save one automatically every</label>
       <input id="snap_every" inputmode="numeric" style="width:70px" onchange="save()">
       <label style="margin:0">minutes while patrolling / hunting (0 = off). Every alert saves one too.</label>
     </div>
-    <div class="row"><a href="/api/snapshots.zip" style="color:var(--accent)">⬇ Download the newest 40 as a .zip</a>
+    <div class="row"><a href="/api/snapshots.zip" style="color:var(--accent)"><svg class="i"><use href="#i-download"/></svg> Download the newest 40 as a .zip</a>
       <span class="hint" id="snap-count"></span></div>
     <div class="snaps" id="snaps"></div>
   </section>
@@ -387,8 +393,9 @@ async function updateLater() {
   await fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"action":"later"}' });
   refresh();
 }
-const ICON = { 'gathering': '⛏', 'parked / gathering': '⛺', 'marching out': '➜', 'going home': '↩',
-               'marching': '➜', 'scout': '👁', 'at his city': '🏰' };
+const ico = k => `<svg class="i"><use href="#i-${k}"/></svg>`;
+const ICON = { 'gathering': 'pickaxe', 'parked / gathering': 'tent', 'marching out': 'arrow', 'going home': 'back',
+               'marching': 'arrow', 'scout': 'eye', 'at his city': 'castle' };
 function ago(ts) {
   if (!ts) return '';
   const s = Math.max(0, Date.now() / 1000 - ts);
@@ -400,14 +407,14 @@ function drawArmies(ar, radar) {
   const count = k => his.filter(a => a.kind === k || a.state === k).length;
   if (!ar.length) $('his-sum').textContent = 'None of his armies seen yet' + (radar ? ' (still looking, or all at home).' : '. Press "Watch & track him".');
   else $('his-sum').innerHTML = `<b>${his.length}</b> confirmed his` + (ar.length > his.length ? `, ${ar.length - his.length} not checked yet` : '')
-    + ` · ⛏ ${count('gathering')} farming · ➜ ${his.filter(a => /march/.test(a.state)).length} marching · ↩ ${count('going home')} going home`
-    + (threats.length ? ` · <span style="color:var(--bad);font-weight:700">⚠ ${threats.length} coming at you</span>` : '');
+    + ` · ${ico('pickaxe')} ${count('gathering')} farming · ${ico('arrow')} ${his.filter(a => /march/.test(a.state)).length} marching · ${ico('back')} ${count('going home')} going home`
+    + (threats.length ? ` · <span style="color:var(--bad);font-weight:700">${ico('alert')} ${threats.length} coming at you</span>` : '');
   $('his-list').innerHTML = ar.map(a => `<div class="army ${a.his ? 'his' : ''} ${a.threat ? 'threat' : ''}">
-      <div class="ic">${ICON[a.state] || '◆'}</div>
+      <div class="ic">${ico(ICON[a.state] || 'diamond')}</div>
       <div><div class="what">${esc(a.state)} ${a.his ? '' : '<small>(not confirmed his)</small>'}</div>
         <a class="xy" onclick="jumpTo(${+a.x}, ${+a.y})">X:${esc(a.x)} Y:${esc(a.y)}</a>
-        ${a.dest ? ` <small class="hint">→ ${esc(a.dest[0])}, ${esc(a.dest[1])}</small>` : ''}
-        ${a.threat ? `<div class="threat-t">⚠ ${a.threat_how === 'aimed' ? 'heading for' : 'moving close to'} ${esc(a.threat)}</div>` : ''}</div>
+        ${a.dest ? ` <small class="hint">${ico('arrow')} ${esc(a.dest[0])}, ${esc(a.dest[1])}</small>` : ''}
+        ${a.threat ? `<div class="threat-t">${ico('alert')} ${a.threat_how === 'aimed' ? 'heading for' : 'moving close to'} ${esc(a.threat)}</div>` : ''}</div>
       <div class="ago">${esc(ago(a.seen_ts))}<br><small>${esc(a.dist_home)} from his city</small></div></div>`).join('');
   drawRadar(ar, radar);
 }
@@ -488,7 +495,7 @@ async function save() {
       update_every: $('update_every').value,
       recall_scope: $('recall_scope').value }) });
   await loadSettings(); refresh(); loadPhone();
-  toast('Saved ✓', 'good');
+  toast('Saved', 'good');
 }
 
 function facts(el, pairs) { el.innerHTML = pairs.map(([k, v]) => `<span>${esc(k)}</span><span>${esc(v)}</span>`).join(''); }
@@ -586,7 +593,7 @@ function drawRoute() {
   if ($('phone-qr').hidden) return;
   if (!opts.some(o => o.kind === route)) route = (opts.find(o => o.url) || opts[0]).kind;
   $('phone-routes').innerHTML = opts.map(o =>
-    `<button data-r="${esc(o.kind)}" class="${o.kind === route ? 'on' : ''}">${o.kind === 'local' ? '🏠' : '🌍'} ${esc(o.label)}</button>`).join('');
+    `<button data-r="${esc(o.kind)}" class="${o.kind === route ? 'on' : ''}">${ico(o.kind === 'local' ? 'home' : 'globe')} ${esc(o.label)}</button>`).join('');
   $('phone-routes').querySelectorAll('button').forEach(b => b.onclick = () => {
     route = b.dataset.r; try { localStorage.setItem('rok-route', route); } catch {} drawRoute(); });
   const o = opts.find(x => x.kind === route);

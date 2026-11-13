@@ -4,10 +4,10 @@ Keeps the browser version of Rise of Kingdoms open on a PC, watches it, and send
 
 | Alert | When |
 |---|---|
-| 🚨 **YOU ARE UNDER ATTACK** | The screen edges flash red (or a warning icon you saved shows up) |
-| 🚨 **ENEMY MARCH HEADING YOUR WAY** | A march line leaves **his** city pointing at your city or one of your gathering spots. Comes before the game warns you, and says which spot |
-| 👀 **Enemy sent a march** | He sent troops out, but not toward you |
-| ⚠️ **Lost the map / can't see the game** | A menu is covering the map, the map moved away, the stream froze, or you got logged out |
+| **YOU ARE UNDER ATTACK** | The screen edges flash red (or a warning icon you saved shows up) |
+| **ENEMY MARCH HEADING YOUR WAY** | A march line leaves **his** city pointing at your city or one of your gathering spots. Comes before the game warns you, and says which spot |
+| **Enemy sent a march** | He sent troops out, but not toward you |
+| **Lost the map / can't see the game** | A menu is covering the map, the map moved away, the stream froze, or you got logged out |
 
 Every alert comes with a screenshot, with arrows drawn on the marches it saw.
 
@@ -42,8 +42,8 @@ To update, the black window closes and a small update window shows the download 
 
 In the panel, tick **Let my phone open this panel**. A QR code appears right away (no restart). Pick which one with the switch above it:
 
-- **🏠 Home Wi-Fi:** works while the phone is on the same Wi-Fi as the laptop.
-- **🌍 Tailscale:** works from anywhere, including mobile data. Install the free **Tailscale** app on the laptop and on the phone and sign in to both with the same account. The Tailscale QR code shows up by itself once Tailscale is running (no restart).
+- **Home Wi-Fi:** works while the phone is on the same Wi-Fi as the laptop.
+- **Tailscale:** works from anywhere, including mobile data. Install the free **Tailscale** app on the laptop and on the phone and sign in to both with the same account. The Tailscale QR code shows up by itself once Tailscale is running (no restart).
 
 Scan it with the phone camera. The link has a secret key in it, so nobody else can open the panel. When Windows asks whether RoKWatcher may use networks, tick **both** boxes (Private and Public) and click **Allow**. Tailscale often counts as a "Public" network.
 
@@ -56,7 +56,7 @@ The bar under the title shows what it's doing and how far along it is. **Live vi
 ## Snapshots (to improve the bot)
 
 The bot keeps pictures of what it sees in the **`snapshots`** folder, each with a `.json` of what it read from it:
-- whenever you press **📸 Save snapshot** in the panel (add a note like "his scout near my farm"),
+- whenever you press **Save snapshot** in the panel (add a note like "his scout near my farm"),
 - with every alert,
 - every 10 minutes while patrolling or hunting (change or switch off in the panel).
 
