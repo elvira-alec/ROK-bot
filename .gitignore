@@ -16,3 +16,6 @@ dist/
 *.spec
 snapshots/
 rokwatch/version.txt
+his_activity.csv
+his_watch.csv
+his_armies.csv
