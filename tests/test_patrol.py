@@ -187,13 +187,17 @@ def test_tells_leaving_from_returning(game, tmp_path):
 
 
 def test_zoom_bounces_between_two_levels(game):
-    """Set up at the searching zoom; then only ever goes between it and the close zoom."""
+    """Two presses: searching zoom, then (zoomed in by hand) close zoom. Then it only
+    goes between those two."""
     js(game, "sim.state.zoom = 1; sim.state.simple = true")
     time.sleep(0.2)
-    gap, ok = game.calibrate_zoom()
-    assert ok and gap == 1 and js(game, "sim.state.zoom") == 1      # 1 notch to the close view here
-    assert game.to_close() and js(game, "sim.state.zoom") == 0
+    ref = game.zoom_reference()
+    js(game, "sim.state.zoom = 0; sim.state.simple = false")
+    time.sleep(0.2)
+    cfg, score = game.calibrate_close(ref)
+    assert cfg and cfg["gap"] == 1 and js(game, "sim.state.zoom") == 0, (cfg, score)
     assert game.to_sweep() and js(game, "sim.state.zoom") == 1
+    assert game.to_close() and js(game, "sim.state.zoom") == 0
     js(game, "sim.state.zoom = 2; sim.state.simple = true")   # someone zoomed too far out
     game._at = None
     assert game.to_sweep() and js(game, "sim.state.zoom") == 1   # back in, not further out

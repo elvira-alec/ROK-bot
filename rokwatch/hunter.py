@@ -405,9 +405,9 @@ class Hunter:
         self.method = h.get("method", "zoomed_out")
         self.axes_close = h.get("axes_close")
         self.axes_out = cfg.get("patrol", {}).get("axes")
-        gap = h.get("zoom_gap")
-        if gap not in (None, ""):
-            game.zoom_gap = int(gap)
+        z = h.get("zoom")
+        if isinstance(z, dict) and z.get("gap"):
+            game.zoom_cfg = z
         self.progress = (0, 0, "")
         self.on_progress = None
         self.axes = self.axes_out if self.method == "zoomed_out" else self.axes_close

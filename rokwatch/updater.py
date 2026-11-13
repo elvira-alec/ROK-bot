@@ -65,8 +65,31 @@ def _fetch_powershell(timeout):
     return json.loads(r.stdout)
 
 
+WEB_LATEST = f"https://github.com/{REPO}/releases/latest"
+
+
+def _latest_from_web(timeout):
+    """The newest release from GitHub's web page (it redirects to /releases/tag/vX.Y).
+    Unlike the API this has no 60-checks-an-hour limit."""
+    req = urllib.request.Request(WEB_LATEST, headers={"User-Agent": "RoKWatcher-updater"}, method="HEAD")
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        final = r.geturl()
+    tag = final.rstrip("/").rsplit("/", 1)[-1]
+    if "/releases/tag/" not in final or not parse(tag):
+        return None
+    v = tag.lstrip("vV")
+    return {"version": v, "url": f"https://github.com/{REPO}/releases/download/{tag}/{ASSET}",
+            "notes": "", "page": final}
+
+
 def latest_release(timeout=10, verbose=False):
     """{'version', 'url', 'notes', 'page'} of the newest numbered release, or None."""
+    try:
+        return _latest_from_web(timeout)
+    except Exception as e:
+        if verbose:
+            print("Web check failed:", e, "- trying the GitHub API...")
+        log.info("Update check: web page failed (%s); trying the API", e)
     try:
         data = _fetch_urllib(timeout)
     except Exception as e:

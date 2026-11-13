@@ -180,9 +180,9 @@ class Worker:
         cfg = self._cfg()
         g = make_game(self.gb, cfg)
         g.stop_check = self.stop_patrol.is_set           # Stop works even mid-jump / mid-zoom
-        gap = (cfg.get("hunt") or {}).get("zoom_gap")
-        if gap:
-            g.zoom_gap = int(gap)
+        z = (cfg.get("hunt") or {}).get("zoom")
+        if isinstance(z, dict) and z.get("gap"):
+            g.zoom_cfg = z
         return g
 
     def _do_open(self):
@@ -312,32 +312,51 @@ class Worker:
         self._set("ready", f"Learned the map directions for {what}.")
 
     def _do_remember_zoom(self, kind="sweep"):
-        """One-time zoom setup. You zoom the game to where you can see as much map as
-        possible with the army icons still showing; the bot counts the scroll notches
-        in to the close zoom (where resource points can be tapped and names show) and
-        back, and learns the map directions at your zoom. From then on it only ever
-        moves between those two zooms."""
+        """Zoom setup, two presses. 'sweep': you've zoomed by hand to your searching zoom
+        (simplified map, icons showing): learn the map directions there and remember
+        the picture. 'close': you've zoomed in by hand to where names show: step back
+        out one notch at a time to the remembered picture, counting the notches."""
         from .patrol import learn_axes
         game = self._game()
-        if game.level() != "patrol":
-            self._set("ready", "First zoom the game out to the simplified map (army icons still "
-                               "showing, no 3D buildings), close any menus, then press this again.")
+        if kind == "sweep":
+            if game.level() != "patrol":
+                self._set("ready", "That isn't the simplified map. Zoom out until the map turns simple "
+                                   "(army icons, no 3D buildings), close any menus, and press again.")
+                return
+            self._set("busy", "Learning the map directions at this zoom (two small drags)...")
+            m = learn_axes(game)
+            if m is None:
+                self._set("ready", "Couldn't learn the map directions (is the coordinate readout "
+                                   "visible?). Nothing was saved.")
+                return
+            self._zoom_ref = game.zoom_reference()
+            game._at = "sweep"
+            config.save_fields({"patrol.axes": m}, self.cfg_path)
+            self._set("ready", "Searching zoom remembered. Now zoom IN by hand (mouse wheel, without "
+                               "dragging the map) until names show over armies and resource points can "
+                               "be tapped, then press 'This is my close zoom'.")
             return
-        self._set("busy", "Setting up the zoom: counting notches to the close zoom and back...")
-        gap, ok = game.calibrate_zoom()
-        if not gap or not ok:
-            self._set("ready", "Couldn't measure the zoom (it didn't come back to the same picture). "
-                               "Close any menus and try again. Nothing was saved.")
+        ref = getattr(self, "_zoom_ref", None)
+        if ref is None:
+            self._set("ready", "First set your searching zoom (the first button).")
             return
-        self.status.doing = "Learning the map directions at this zoom (two small drags)"
-        m = learn_axes(game)
-        if m is None:
-            self._set("ready", "Couldn't learn the map directions (is the coordinate readout "
-                               "visible?). Nothing was saved.")
+        if game.level() != "close":
+            self._set("ready", "That isn't the close view yet: zoom in further (3D buildings, names over "
+                               "armies), then press again.")
             return
-        config.save_fields({"hunt.zoom_gap": gap, "patrol.axes": m}, self.cfg_path)
-        self._set("ready", f"Zoom set up: it searches at this zoom and goes {gap} notches in to "
-                           "check names. Ready to watch him.")
+        self._set("busy", "Measuring: stepping out one notch at a time back to your searching zoom...")
+        cfg, score = game.calibrate_close(ref)
+        if not cfg or score < 0.6:
+            self._set("ready", f"Couldn't find your searching zoom again (best match {score:.2f}). Set the "
+                               "searching zoom again, then zoom in WITHOUT dragging the map, and retry. "
+                               "Nothing was saved.")
+            return
+        game.zoom_cfg = cfg
+        ok = game.to_sweep() and game.match_score(ref) > 0.6     # and check the way back
+        config.save_fields({"hunt.zoom": cfg}, self.cfg_path)
+        self._set("ready", f"Zoom set up: {cfg['gap']} notches between your two zooms"
+                  + ("" if ok else " (the check back didn't match perfectly; it corrects itself "
+                                   "while running)") + ". Ready to watch him.")
 
     def _do_recall(self):
         game = self._game()

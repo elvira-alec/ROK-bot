@@ -195,7 +195,8 @@ class Panel:
         out = {k: _get(cfg, v) for k, v in EDITABLE.items()}
         out["axes_learned"] = bool(_get(cfg, "patrol.axes"))
         out["close_axes_learned"] = bool(_get(cfg, "hunt.axes_close"))
-        out["zoom_gap"] = _get(cfg, "hunt.zoom_gap")
+        z = _get(cfg, "hunt.zoom")
+        out["zoom_gap"] = z.get("gap") if isinstance(z, dict) else None
         if not out["game_window"] and not out["game_url"]:
             out["game_window"] = "Rise of Kingdoms"       # the PC game's window title
         out["panel_on_phone"] = bool(_get(cfg, "panel_on_phone"))

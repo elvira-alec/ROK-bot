@@ -50,6 +50,7 @@ class Game:
         self.notch_wait = 0.25
         self._size = None
         self.zoom_gap = None           # notches between the searching and the close zoom
+        self.zoom_cfg = None           # {'gap', 't_out', 't_in'} from the zoom setup
         self._cam = None               # last camera position read
         self._fresh = None             # (time, picture, camera) of the last read
         self.stop_check = None         # returns True when Stop was pressed
@@ -203,21 +204,29 @@ class Game:
         """Share of the picture that's different (marching icons are only a few pixels)."""
         return float(np.mean(np.abs(a - b) > 12))
 
-    def _settled(self, timeout=1.2):
-        """Wait for the zoom animation to finish; returns the still picture (small)."""
+    def _settled(self, timeout=2.0, min_wait=0.3):
+        """Wait until the zoom animation has completely finished (the picture is still
+        on two looks in a row), so the next notch can't get lost."""
+        time.sleep(min_wait)
         prev = self._small()
+        still = 0
         end = time.time() + timeout
         while time.time() < end:
-            time.sleep(0.08)
+            time.sleep(0.1)
             cur = self._small()
-            if self._changed(cur, prev) < 0.004:
-                return cur
+            if self._changed(cur, prev) < 0.002:
+                still += 1
+                if still >= 2:
+                    return cur
+            else:
+                still = 0
             prev = cur
         return prev
 
     def _notch(self, out: bool):
         self.check_stop()
         H, W = self._size or self.frame().shape[:2]
+        self._size = (H, W)
         self.b.wheel(W // 2, H // 2, 100 if out else -100)
         return self._settled()
 
@@ -229,61 +238,97 @@ class Game:
     def level(self) -> str:
         return screen.view_level(self.frame())
 
+    # The zoom is remembered as: gap = notches between your close zoom and your searching
+    # zoom; t_out = notches out from the close zoom until the simplified map shows;
+    # t_in = notches in from the searching zoom until the 3D view shows. Those switch
+    # points are checked every time, so a lost notch is corrected straight away.
+    def _zoom_numbers(self):
+        z = self.zoom_cfg or {}
+        gap = int(z.get("gap") or self.zoom_gap or 0)
+        return gap, int(z.get("t_out") or 0), int(z.get("t_in") or 0)
+
     def to_close(self) -> bool:
-        """From the searching zoom to the close zoom (resource points can be tapped,
-        names show over armies): the remembered number of notches in, then checked."""
-        if self._at == "close":
-            if self.level() == "close":
-                return True
-            self._at = None
-        if self.zoom_gap and self._at == "sweep":
-            self.steps(self.zoom_gap)
-        for _ in range(8):                         # not there yet: one more at a time
-            if self.level() == "close":
-                self._at = "close"
-                return True
+        """To your close zoom (names show, resource points can be tapped)."""
+        if self._at == "close" and self.level() == "close":
+            return True
+        gap, t_out, t_in = self._zoom_numbers()
+        j = 0
+        while self.level() != "close":              # in, one at a time, until the 3D view
+            if j >= max(gap, 4) + 6:
+                return False
             self._notch(out=False)
-        return False
+            j += 1
+        if gap and t_in:
+            self.steps(max(0, gap - t_in))          # the rest of the way to your zoom
+        self._at = "close"
+        return True
 
     def to_sweep(self) -> bool:
-        """Back to the searching zoom: the same number of notches out, then checked
-        (never further out than where the map icons still show)."""
-        if self._at == "sweep":
-            if self.level() == "patrol":
-                return True
-            self._at = None
-        if self._at == "close" and self.zoom_gap:
-            self.steps(-self.zoom_gap)
-        for _ in range(10):
-            lv = self.level()
-            if lv == "patrol":
-                self._at = "sweep"
-                return True
-            self._notch(out=(lv == "close"))       # too close: out; too far: in
-        return False
-
-    def calibrate_zoom(self):
-        """Call at the zoom you want for searching (simplified map, icons showing).
-        Counts the notches in to the close zoom, comes back the same way and checks
-        it landed where it started. Returns (gap, ok)."""
-        if self.level() != "patrol":
-            return None, False
-        ref = self._settled()
-        H, W = self.frame().shape[:2]
-        self._size = (H, W)
-        n = 0
-        while n < 30 and self.level() != "close":
+        """Back to your searching zoom (never further out than the simplified map)."""
+        lv = self.level()
+        if self._at == "sweep" and lv == "patrol":
+            return True
+        gap, t_out, t_in = self._zoom_numbers()
+        if lv == "close":
+            j = 0
+            while self.level() == "close":           # out, one at a time, until the map shows
+                if j >= max(gap, 4) + 6:
+                    return False
+                self._notch(out=True)
+                j += 1
+            if gap and t_out:
+                self.steps(-max(0, gap - t_out))     # the rest of the way to your zoom
+        for _ in range(8):                           # too far out (icons gone): back in
+            if self.level() != "far":
+                break
             self._notch(out=False)
-            n += 1
-        if n >= 30:
-            return None, False
-        before = self._settled()
-        after = self._notch(out=False)             # one more: resource points load in
-        gap = n + 1 if self._changed(after, before) > 0.004 else n   # (unless that's the end)
-        self.steps(-gap)
-        ok = self._changed(self._settled(), ref) < 0.08 and self.level() == "patrol"
-        self.zoom_gap, self._at = gap, "sweep"
-        return gap, ok
+        ok = self.level() == "patrol"
+        self._at = "sweep" if ok else None
+        return ok
+
+    def zoom_reference(self):
+        """Picture of your searching zoom, to find it again when measuring."""
+        return self._settled()
+
+    def match_score(self, ref, cur=None) -> float:
+        """How well the current picture matches the reference at the same zoom (0-1).
+        Small sideways shifts don't matter; a different zoom scores low."""
+        import cv2
+        cur = self._small() if cur is None else cur
+        h, w = ref.shape
+        crop = ref[int(h * 0.2):int(h * 0.8), int(w * 0.2):int(w * 0.8)]
+        r = cv2.matchTemplate(cur, crop, cv2.TM_CCOEFF_NORMED)
+        return float(r.max())
+
+    def calibrate_close(self, ref, max_steps=30):
+        """You're at your close zoom; ref is the picture of your searching zoom. Steps
+        out one notch at a time until the picture matches ref again, noting where the
+        simplified map appears; then goes back in, noting where the 3D view appears.
+        Returns ({'gap', 't_out', 't_in'}, score) - ends at your close zoom."""
+        if self.level() != "close":
+            return None, 0.0
+        scores, t_out, k = [], 0, 0
+        while k < max_steps:
+            cur = self._notch(out=True)
+            k += 1
+            if not t_out and self.level() != "close":
+                t_out = k
+            scores.append(self.match_score(ref, cur))
+            best = max(range(len(scores)), key=lambda i: scores[i])
+            if scores[best] > 0.75 and k >= best + 1 + 3:      # clearly past the match
+                break
+        best = max(range(len(scores)), key=lambda i: scores[i])
+        gap, score = best + 1, scores[best]
+        self.steps(k - gap)                                   # back in to the matching notch
+        t_in = 0
+        for j in range(1, gap + 1):                           # and on in to your close zoom
+            self._notch(out=False)
+            if not t_in and self.level() == "close":
+                t_in = j
+        self._at = "close"
+        cfg = {"gap": gap, "t_out": t_out or gap, "t_in": t_in or gap}
+        self.zoom_cfg = cfg
+        return cfg, score
 
     # old names, used by simple patrol
     def zoom_to_patrol_level(self, max_steps=10) -> bool:

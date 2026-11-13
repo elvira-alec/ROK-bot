@@ -193,11 +193,17 @@
 
   <section>
     <h2><span class="step">3</span> Set up the zoom <span class="hint" style="margin:0">(once)</span></h2>
-    <p class="hint" style="margin-top:0">In the game, zoom out until you see as much map as possible while the army
-      icons and resource points still show (simplified map, no 3D buildings). Close any menus. Then press the
-      button: the bot measures how far it is to the close zoom (where names show and resource points can be
-      tapped) and learns the map directions. From then on it only moves between those two zooms.</p>
-    <div class="row"><button class="primary" onclick="post('remember_zoom')">Set up the zoom</button></div>
+    <ol class="hint" style="margin:0;padding-left:18px;line-height:1.6">
+      <li>In the game, zoom out to where you see as much map as possible while the army icons and resource
+        points still show (simplified map). Close any menus. Press <b>This is my searching zoom</b>.</li>
+      <li>Then zoom <b>in</b> with the mouse wheel (don't drag the map) until names show over armies and resource
+        points can be tapped. Press <b>This is my close zoom</b>. The bot steps back out one notch at a time to
+        count the notches between your two zooms.</li>
+    </ol>
+    <div class="row">
+      <button class="primary" onclick="post('remember_zoom', { kind: 'sweep' })">1. This is my searching zoom</button>
+      <button class="primary" onclick="post('remember_zoom', { kind: 'close' })">2. This is my close zoom</button>
+    </div>
     <p class="hint" id="zoom-set"></p><span id="close-axes" hidden></span>
   </section>
 
@@ -485,7 +491,7 @@ async function loadSettings() {
   $('target_forget').disabled = !targets.some(t => t.name === s.player_name);
   $('game_window_zoom_key').checked = s.game_window_zoom_key === 'ctrl';
   $('hunt_radius').value = s.hunt_radius || 25;
-  $('zoom-set').textContent = s.zoom_gap ? `Done: it searches at your zoom and goes ${s.zoom_gap} notches in to check names.` : 'Not set up yet.';
+  $('zoom-set').textContent = s.zoom_gap ? `Done: ${s.zoom_gap} notches between your searching zoom and your close zoom.` : 'Not set up yet.';
   $('close-axes').textContent = s.axes_learned ? '(Done: map directions are learned.)' : '(Not done yet.)';
   $('auto_recall').checked = !!s.auto_recall;
   $('panel_on_phone').checked = !!s.panel_on_phone;
