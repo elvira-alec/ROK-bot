@@ -339,7 +339,8 @@ def test_farm_rate_time_left_and_his_load(tmp_path):
     book = farms.FarmBook(tmp_path / "cap.json")
     book.learn({"what": "Level 6 Cropland", "reserves": 1_236_669})
     book.learn({"what": "Level 6 Cropland", "reserves": 1_100_000})
-    assert book.capacity("level 6  cropland") == 1_236_669                    # the highest seen
+    assert book.capacity("Level 6 Cropland") == 1_260_000                    # from the table
+    assert book.capacity("level 9 something") is None
     # one of his farms watched from the start ended after 20 min: his load ~60,000
     book.farm_ended({"readings": [[0, 900_000], [600, 870_000]]}, True, 1200)
     assert book.typical_load() == 60_000
@@ -357,3 +358,16 @@ def test_zoom_kept_at_the_searching_scale():
     sim.level = sim.shown = 6                                # drifted 2 notches too far out
     r = g.keep_scale(ss)
     assert sim.level == 8 and 0.89 <= r <= 1.12, (sim.level, r)
+
+
+def test_how_long_hes_been_gathering_from_the_full_amount():
+    from rokwatch import farms
+    # your Spanish screenshot: Level 6 Cropland with 1,236,669 left; 5 min later 1,221,669
+    info = {"what": "Campo de Cultivo de Nivel 6", "readings": [[0, 1_236_669], [300, 1_221_669]]}
+    assert farms.full_amount(info["what"]) == 1_260_000
+    assert farms.gathered(info, 300) == 38_331                         # taken so far
+    assert abs(farms.minutes_gathering(info, 300) - 12.8) < 0.1        # at 3,000 a minute
+    assert abs(farms.minutes_to_full(info, 300, 60_000) - 7.2) < 0.1   # with a 60,000 load
+    assert farms.parse_kind("Level 3 Stone Deposit") == ("stone", 3)
+    assert farms.full_amount("Level 3 Stone Deposit") == 354_375
+    assert farms.full_amount("Level 2 Gold Deposit") == 105_000

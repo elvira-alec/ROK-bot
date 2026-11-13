@@ -464,6 +464,7 @@ function drawArmies(ar, radar) {
         <a class="xy" onclick="jumpTo(${+a.x}, ${+a.y})">X:${esc(a.x)} Y:${esc(a.y)}</a>
         ${a.dest ? ` <small class="hint">${ico('arrow')} ${esc(a.dest[0])}, ${esc(a.dest[1])}</small>` : ''}
         ${a.info && (a.info.what || a.info.reserves) ? `<div class="detail">${esc(a.info.what || '')}${a.info.reserves ? ' · ' + a.info.reserves.toLocaleString() + ' left' : ''}</div>` : ''}
+        ${a.gathered ? `<div class="detail">has taken ${a.gathered.toLocaleString()}${a.full ? ' of ' + a.full.toLocaleString() : ''}${a.gathering_min != null ? ' · gathering for about ' + Math.round(a.gathering_min) + ' min' : ''}</div>` : ''}
         ${a.full_in_min != null ? `<div class="detail">${ico('clock')} army full and heading home in about ${Math.max(1, Math.round(a.full_in_min))} min</div>`
           : a.runs_out_min != null ? `<div class="detail">${ico('clock')} point runs out in about ${Math.round(a.runs_out_min)} min at his rate${a.rate ? ' (' + a.rate.toLocaleString() + '/min)' : ''}</div>` : ''}
         ${a.eta_min != null ? `<div class="detail">${ico('clock')} arrives ${a.eta_min < 1 ? 'in under a minute' : 'in about ' + Math.round(a.eta_min) + ' min'} (${esc(a.speed)} tiles/min)</div>` : ''}

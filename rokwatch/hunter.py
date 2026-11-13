@@ -475,7 +475,10 @@ class Tracker:
             return {}
         now = time.time()
         rate = farms.rate_per_min(a.info.get("readings"))
-        return {"rate": round(rate) if rate else None,
+        full = farms.full_amount(a.info.get("what", ""))
+        return {"rate": round(rate) if rate else None, "full": full,
+                "gathered": round(farms.gathered(a.info, now) or 0) or None,
+                "gathering_min": _r(farms.minutes_gathering(a.info, now)),
                 "runs_out_min": _r(farms.minutes_left(a.info, now)),
                 "full_in_min": _r(farms.minutes_to_full(a.info, now, self.load))}
 

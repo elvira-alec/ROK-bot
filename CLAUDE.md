@@ -59,6 +59,21 @@ was fixed, how to test, and how to build and publish. Read it all before changin
 - **Esc doesn't close this box on PC, and Esc on the plain map opens the profile.** Close it
   with a short map drag on the side away from the box.
 
+**Resource points (full amounts, from the user)**
+
+| Level | Stone | Wood | Food | Gold |
+|---|---|---|---|---|
+| 2 | 236,250 | 315,000 | 315,000 | 105,000 |
+| 3 | 354,375 | 472,500 | 472,500 | 157,500 |
+| 4 | 472,500 | 630,000 | 630,000 | 210,000 |
+| 5 | 708,750 | 945,000 | 945,000 | 315,000 |
+| 6 | 945,000 | 1,260,000 | 1,260,000 | 420,000 |
+
+- Gems: 10/20/30/40 at levels 1–4. All of this is in `rokwatch/farms.py` (`FULL`).
+- Full minus reserves = what he's taken. Reading it again later gives his rate, so: how long
+  he's been there, when the point runs out, and (with his learned load) when his army heads home.
+- Gathering, and armies walking home by themselves, do **not** count as him being online.
+
 **Danger**
 - **Red eye** (bottom right): being scouted. **Red crossed swords** (also bottom right):
   being attacked.
