@@ -86,7 +86,7 @@ class Trace:
         small = cv2.resize(img, (960, max(1, int(h * 960 / w)))) if w > 960 else img
         cv2.imwrite(str(self.dir / "frames" / name), small, [cv2.IMWRITE_JPEG_QUALITY, 70])
         self._frame_name = name
-        self.event("frame", file=name, tag=tag, size=[w, h])
+        self.event("frame", file=name, tag=tag, size=[w, h], capture_ms=getattr(self, "last_capture_ms", None))
 
     def zip_bytes(self):
         """The newest recording as a .zip."""
@@ -124,14 +124,26 @@ def instrument(gb):
     """Log every action on the game window (positions are in game-window pixels)."""
     if getattr(gb, "_traced", False):
         return gb
+    shot = getattr(gb, "screenshot", None)
+    if shot is not None:
+        def timed_shot(*a, _orig=shot, **k):
+            t = time.time()
+            f = _orig(*a, **k)
+            if TRACE.on:
+                TRACE.last_capture_ms = round(1000 * (time.time() - t))
+            return f
+        gb.screenshot = timed_shot
     for name in ("click", "drag", "wheel", "press", "type"):
         orig = getattr(gb, name, None)
         if orig is None:
             continue
 
         def wrap(*a, _orig=orig, _name=name, **k):
-            TRACE.event("action", what=_name, args=[str(x) for x in a])
-            return _orig(*a, **k)
+            t = time.time()
+            try:
+                return _orig(*a, **k)
+            finally:                              # logged with how long it took
+                TRACE.event("action", what=_name, args=[str(x) for x in a], ms=round(1000 * (time.time() - t)))
         setattr(gb, name, wrap)
     gb._traced = True
     return gb

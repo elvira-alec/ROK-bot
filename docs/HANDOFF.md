@@ -282,6 +282,12 @@ frames, and find the first step that went wrong. Turn that frame into a regressi
   tapping the magnifier, and again to find the X/Y boxes (2.6 s); the name check at close zoom
   read the whole screen (1.5–2 s); pans used two drags. Now: strip reader ~0.13 s, the bar row
   only (~0.2 s), the middle of the screen only (~0.35 s), one drag covers 60% of the view.
+- (v1.12) Fixed waits trimmed: closing a box waits only until it's gone (was a flat 0.35 s),
+  click-to-type 0.06 s, name re-read 0.2 s. The debug recording now logs how long every
+  control took (`action.ms`) and every screen capture (`frame.capture_ms`): use these to find
+  any gap that's left on the user's PC.
+- (v1.12) Live view: its own loop, ~3 pictures a second, 960 px (640 on phones), quality
+  70; only sent when the picture changed (`/live.jpg?have=<id>` returns 204).
 - (v1.11) A farm box left open (an error while reading it) made the zoom wheel do nothing,
   so the bot zoomed out 10 notches. Fixes: the box is always closed (`finally`), boxes are
   closed before zooming, zoom-out stops where the level numbers vanish, and the crash itself

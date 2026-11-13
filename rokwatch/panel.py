@@ -178,8 +178,8 @@ class Panel:
         f = getattr(self.worker.gb, "last_frame", None) if self.worker.gb else None
         return id(f) if f is not None else None
 
-    def live_jpeg(self, width=640, quality=55):
-        """Small, low-quality picture of what the bot last saw (for the live view)."""
+    def live_jpeg(self, width=640, quality=70):
+        """Picture of what the bot last saw (for the live view)."""
         import cv2
         f = getattr(self.worker.gb, "last_frame", None) if self.worker.gb else None
         if f is None:
@@ -365,11 +365,13 @@ def make_handler(panel: Panel, port_holder=None):
         def log_message(self, *a):
             pass
 
-        def _send(self, code, body, ctype="application/json", cookie=None):
+        def _send(self, code, body, ctype="application/json", cookie=None, headers=None):
             data = body if isinstance(body, bytes) else json.dumps(body).encode()
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Cache-Control", "no-store")
+            for k, v in (headers or {}).items():
+                self.send_header(k, v)
             if cookie:
                 self.send_header("Set-Cookie", f"rokkey={cookie}; Path=/; SameSite=Strict; HttpOnly")
             self.end_headers()
@@ -452,8 +454,11 @@ def make_handler(panel: Panel, port_holder=None):
                     width = max(240, min(1280, int(q.get("w", ["640"])[0])))
                 except ValueError:
                     width = 640
+                lid = str(panel.live_id())
+                if q.get("have", [""])[0] == lid:
+                    return self._send(204, b"", "image/jpeg")     # same picture as last time
                 data = panel.live_jpeg(width)
-                return self._send(200, data, "image/jpeg") if data else \
+                return self._send(200, data, "image/jpeg", headers={"X-Live": lid}) if data else \
                     self._send(404, {"error": "nothing seen yet"})
             if path.startswith("/view.png"):
                 p = Path(panel.worker.shot_path)

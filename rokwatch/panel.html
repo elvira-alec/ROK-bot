@@ -693,11 +693,7 @@ async function refresh() {
     $('now-bar').classList.toggle('spin', !(p && p[1]));
     if (p && p[1]) $('now-fill').style.width = Math.round(100 * p[0] / p[1]) + '%';
   }
-  if (st.live && st.live !== lastLive && $('live-on').checked && !document.hidden) {
-    lastLive = st.live;
-    $('live-img').src = '/live.jpg?w=' + (innerWidth < 700 ? 480 : 720) + '&t=' + Date.now();
-    $('live-img').hidden = false;
-  }
+  liveId = st.live;
   const sn = st.snaps || [], key = sn.map(x => x.name).join();
   if (key !== lastSnaps) {
     lastSnaps = key;
@@ -758,6 +754,24 @@ function drawRoute() {
       : 'Works from anywhere (mobile data too) while Tailscale is on, on this laptop and on your phone.')
     : (o.help || '');
 }
+// live view: its own loop, ~3 pictures a second, only when the picture changed
+let liveId = null, liveHave = '', liveUrl = null;
+async function liveLoop() {
+  try {
+    if (liveId && $('live-on').checked && !document.hidden) {
+      const r = await fetch('/live.jpg?w=' + (innerWidth < 700 ? 640 : 960) + '&have=' + liveHave + '&t=' + Date.now());
+      if (r.status === 200) {
+        const b = await r.blob();
+        const u = URL.createObjectURL(b);
+        $('live-img').src = u; $('live-img').hidden = false;
+        if (liveUrl) URL.revokeObjectURL(liveUrl);
+        liveUrl = u; liveHave = r.headers.get('X-Live') || '';
+      }
+    }
+  } catch (e) {}
+  setTimeout(liveLoop, 330);
+}
+liveLoop();
 loadSettings(); refresh(); loadPhone(); setInterval(refresh, 1500);
 loadActivity(); setInterval(() => { if (!document.hidden) loadActivity(); }, 60000);
 // closing this page closes RoK Watcher (a reload doesn't: the new page checks in at once)

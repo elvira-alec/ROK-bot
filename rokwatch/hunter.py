@@ -787,7 +787,7 @@ class Hunter:
                     a.owner = "other"
                 if a.owner:
                     break
-                time.sleep(0.4)
+                time.sleep(0.2)
         log.info("hunt: %s at %.0f,%.0f is %s", "farm" if a.kind == "farm" else "army",
                  a.tile[0], a.tile[1], a.owner or "unclear")
         TRACE.event("owner", kind=a.kind, tile=[round(a.tile[0], 1), round(a.tile[1], 1)], owner=a.owner,

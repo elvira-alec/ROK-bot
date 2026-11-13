@@ -127,7 +127,7 @@ class Game:
 
     def _wait_camera(self, x, y, timeout=4.0) -> bool:
         end = time.time() + timeout
-        time.sleep(0.12)
+        time.sleep(0.05)
         while time.time() < end:
             self.check_stop()
             cam = self.camera_fast(full=False)     # the coordinates strip only: quick
@@ -179,7 +179,7 @@ class Game:
 
     def _type_into(self, pos, val):
         self.b.click(*pos)
-        time.sleep(0.12)
+        time.sleep(0.06)
         self.b.press("Control+A")
         self.b.press("Backspace")
         self.b.type(val)
@@ -714,7 +714,9 @@ class Game:
                 # long enough that the game can't take it for a press on whatever is
                 # under the mouse (a short drag + hold opened his city's menu)
                 self.b.drag(x, y, x, y + int(0.12 * H))
-                time.sleep(0.35)
+                end = time.time() + 0.5                # gone as soon as it's gone
+                while time.time() < end and screen.find_info_box(self.frame()):
+                    time.sleep(0.04)
                 continue
             if screen.camera_coords(f) or screen.search_go_button(f):
                 return True                        # the plain map (or the search bar): fine

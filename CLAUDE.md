@@ -157,6 +157,8 @@ boxes, the user's snapshots including the Spanish photos).
   is always closed, boxes are closed before zooming, and zooming out stops where the level
   numbers vanish (`_out_keeping_tags`).
 - Update check SSL failure on Windows: certifi added. Phone section order was reversed.
+- The debug recording logs each control's duration (`action.ms`) and each capture's
+  (`frame.capture_ms`). Check those first when the user says the gaps are slow.
 
 ## 5. Open work / to verify in the real game
 
