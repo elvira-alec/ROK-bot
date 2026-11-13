@@ -196,8 +196,9 @@ def test_activity_log_and_report(tmp_path):
     assert (1, "gathering", "going home") in ch and (2, None, "marching out") in ch
     assert log.round([], t0 + 120) == [(1, "going home", None), (2, "marching out", None)]
     d = activity.data(actions=tmp_path / "a.csv", watch=tmp_path / "w.csv", now=t0 + 200)
-    kinds = [a[1] for a in d["actions"]]
-    assert kinds == ["changed", "army_seen", "army_gone", "army_gone"], kinds
+    kinds = [(a[1], a[5]) for a in d["actions"]]
+    # gathering -> going home happens by itself: not him being online; sending one out is
+    assert kinds == [("changed", 0), ("sent_out", 1), ("army_gone", 0), ("army_gone", 0)], kinds
     assert sum(w[1] for w in d["watch"]) == 3 and d["watch"][0][2] >= 1     # 3 minutes, farms out
 
 
@@ -328,3 +329,31 @@ def test_marching_army_near_the_screen_edge_keeps_its_line():
     t2 = Tracker((162, 374), [])
     t2.match([ArmySeen((190.0, 400.0), False, None, 0, unsure=True)], 0)        # new, near the edge
     assert t2.summary()[0]["state"] == "moving? (near the edge)"
+
+
+def test_farm_rate_time_left_and_his_load(tmp_path):
+    from rokwatch import farms
+    info = {"readings": [[0, 1_200_000], [300, 1_185_000]], "from_start": True}   # 3,000 a minute
+    assert farms.rate_per_min(info["readings"]) == 3000
+    assert abs(farms.minutes_left(info, 300) - 395) < 1                      # point runs out
+    book = farms.FarmBook(tmp_path / "cap.json")
+    book.learn({"what": "Level 6 Cropland", "reserves": 1_236_669})
+    book.learn({"what": "Level 6 Cropland", "reserves": 1_100_000})
+    assert book.capacity("level 6  cropland") == 1_236_669                    # the highest seen
+    # one of his farms watched from the start ended after 20 min: his load ~60,000
+    book.farm_ended({"readings": [[0, 900_000], [600, 870_000]]}, True, 1200)
+    assert book.typical_load() == 60_000
+    # a new farm: 15,000 gathered so far at 3,000/min -> full in ~15 min
+    assert abs(farms.minutes_to_full(info, 300, 60_000) - 15) < 0.1
+    assert farms.FarmBook(tmp_path / "cap.json").typical_load() == 60_000      # remembered
+
+
+def test_zoom_kept_at_the_searching_scale():
+    from test_zoom_measure import ZoomSim
+    sim = ZoomSim(8)
+    g = Game(sim, settle=0)
+    g.camera_fast = lambda full=True: sim.camera()
+    ss = sim.tpp()
+    sim.level = sim.shown = 6                                # drifted 2 notches too far out
+    r = g.keep_scale(ss)
+    assert sim.level == 8 and 0.89 <= r <= 1.12, (sim.level, r)

@@ -409,8 +409,23 @@ class Worker:
         self.status.round = 0
         self._set("patrolling", f"Hunting {hunter.name} around {hunter.city[0]},{hunter.city[1]}")
         while not self.stop_patrol.is_set() and (max_rounds is None or self.status.round < max_rounds):
-            for a in hunter.round(stop=self.stop_patrol.is_set):
-                self._alert(notifier, a)
+            try:
+                for a in hunter.round(stop=self.stop_patrol.is_set):
+                    self._alert(notifier, a)
+            except Stopped:
+                raise
+            except Exception as e:                 # one bad round mustn't stop the watching
+                log.warning("Round failed (%s); recovering and carrying on", e, exc_info=True)
+                self.status.doing = f"Recovering: {e}"[:120]
+                try:
+                    game.close_popups()
+                    game._at = None
+                    hunter.zoom_out()
+                except Stopped:
+                    raise
+                except Exception:
+                    log.debug("recovery failed", exc_info=True)
+                time.sleep(1)
             self.status.round += 1
             self._maybe_sample()
             self.status.armies = hunter.tracker.summary()

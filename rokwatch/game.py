@@ -105,20 +105,19 @@ class Game:
 
     def _wait_camera(self, x, y, timeout=4.0) -> bool:
         end = time.time() + timeout
-        time.sleep(0.4)
+        time.sleep(0.12)
         while time.time() < end:
             self.check_stop()
-            cam = self.camera_fast()
+            cam = self.camera_fast(full=False)     # the coordinates strip only: quick
             if cam and abs(cam[0] - x) <= 2 and abs(cam[1] - y) <= 2:
-                time.sleep(0.25)                   # let the map finish drawing
-                return True
-            time.sleep(0.25)
+                return True                         # (the next look waits for the icons)
+            time.sleep(0.06)
         return False
 
     def _bar_opened(self, timeout=1.5):
         end = time.time() + timeout
         while time.time() < end:
-            time.sleep(0.15)
+            time.sleep(0.06)
             f = self.frame()
             btn = screen.search_go_button(f)
             if btn:
@@ -153,7 +152,7 @@ class Game:
 
     def _type_into(self, pos, val):
         self.b.click(*pos)
-        time.sleep(0.12)
+        time.sleep(0.04)
         self.b.press("Control+A")
         self.b.press("Backspace")
         self.b.type(val)
@@ -292,6 +291,29 @@ class Game:
         self._at = "sweep" if ok else None
         return ok
 
+    def keep_scale(self, search_scale, tries=4):
+        """At the searching zoom: measure the map's scale (one small drag back and forth)
+        and step notches in / out while that brings it closer to the searching zoom's
+        scale - landing on the closest notch. Returns the final ratio."""
+        sc = self.measure_scale()
+        if not sc or not search_scale:
+            return None
+        ratio = sc / search_scale
+        if abs(math.log(ratio)) < 0.035:             # spot on
+            return ratio
+        out = ratio < 1                              # too close in: zoom out (and vice versa)
+        for _ in range(tries):
+            self._notch(out=out)
+            sc = self.measure_scale()
+            if not sc:
+                return ratio
+            r2 = sc / search_scale
+            if abs(math.log(r2)) >= abs(math.log(ratio)):   # that made it worse: step back
+                self._notch(out=not out)
+                return ratio
+            ratio = r2
+        return ratio
+
     def zoom_reference(self):
         """Picture of your searching zoom, to find it again when measuring."""
         return self._settled()
@@ -331,6 +353,7 @@ class Game:
         Returns ({'gap', 't_out', 't_in'}, ratio) - ends at your close zoom."""
         if self.level() != "close" or not search_scale:
             return None, 0.0
+        close_scale = self.measure_scale()           # for dragging between armies when zoomed in
         res, t_out, k = [], 0, 0
         while k < max_steps:
             self._notch(out=True)
@@ -356,6 +379,8 @@ class Game:
                 t_in = j
         self._at = "close"
         cfg = {"gap": gap, "t_out": t_out or gap, "t_in": t_in or gap}
+        if close_scale:
+            cfg["close_ratio"] = round(close_scale / search_scale, 4)
         self.zoom_cfg = cfg
         return cfg, sc / search_scale
 
@@ -409,11 +434,12 @@ class Game:
             self._cam = (c[1], c[2])
         return c[:3] if c else None
 
-    def camera_fast(self):
-        """Camera (x, y) from the coordinate readout only (much quicker than look())."""
+    def camera_fast(self, full=True):
+        """Camera (x, y) from the coordinate readout only (much quicker than look()).
+        full: if that fails, read the whole screen (slow; not while waiting for a jump)."""
         f = self.frame()
         c = screen.camera_coords(f)
-        if not c:                                  # quick read failed: read the whole screen
+        if not c and full:                         # quick read failed: read the whole screen
             c = screen.camera_coords(f, screen.read_text(f))
         self._cam = (c[1], c[2]) if c else None
         self._fresh = (time.time(), f, c)

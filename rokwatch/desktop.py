@@ -115,7 +115,7 @@ class DesktopWindow:
         import pyautogui
         self._mss = mss
         pyautogui.FAILSAFE = True                  # mouse into a corner = stop
-        pyautogui.PAUSE = 0.05
+        pyautogui.PAUSE = 0.01                     # (pyautogui waits this long after every action)
         self._pg = pyautogui
         self._attach()
         return self

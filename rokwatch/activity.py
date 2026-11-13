@@ -23,14 +23,22 @@ class ActivityLog:
         self._last_minute = None
         self._prev = None            # {army id: state} from the last round
 
-    def action(self, kind, detail="", x=None, y=None, now=None):
+    # what counts as him being online: things only a player does on purpose. Not his
+    # farms gathering, nor an army walking home by itself after gathering.
+    ACTIVE = {"farm_started", "scout_sent", "recalled_farm", "scouted_you", "attacked_you",
+              "sent_out", "recalled"}
+
+    def action(self, kind, detail="", x=None, y=None, now=None, active=None):
         now = now or time.time()
+        if active is None:
+            active = kind in self.ACTIVE
         new = not self.actions.exists()
         with self.actions.open("a", newline="") as f:
             w = csv.writer(f)
             if new:
-                w.writerow(["time", "kind", "x", "y", "detail"])
-            w.writerow([int(now), kind, "" if x is None else int(x), "" if y is None else int(y), detail])
+                w.writerow(["time", "kind", "x", "y", "detail", "active"])
+            w.writerow([int(now), kind, "" if x is None else int(x), "" if y is None else int(y), detail,
+                        1 if active else 0])
 
     def watched(self, armies_out, farms_out, now=None):
         """Called every round: the bot was watching this minute."""
@@ -57,11 +65,18 @@ class ActivityLog:
                 if before != a["state"]:
                     changes.append((i, before, a["state"]))
                 if before is None:
-                    kind = "farm_started" if a["state"] == "gathering" else \
-                        "scout_sent" if a["state"] == "scout" else "army_seen"
-                    self.action(kind, a["state"], a["x"], a["y"], now)
+                    st = a["state"]
+                    kind = "farm_started" if st == "gathering" else "scout_sent" if st == "scout" else \
+                        "sent_out" if st in ("marching out", "marching") else "army_seen"
+                    self.action(kind, st, a["x"], a["y"], now)
                 elif before != a["state"]:
-                    self.action("changed", f"{before} -> {a['state']}", a["x"], a["y"], now)
+                    after = a["state"]
+                    marching = ("marching out", "marching")
+                    # sent somewhere new, or turned round mid-march: on purpose. Walking home
+                    # after gathering happens by itself.
+                    kind = "sent_out" if after == "marching out" else \
+                        "recalled" if before in marching and after == "going home" else "changed"
+                    self.action(kind, f"{before} -> {after}", a["x"], a["y"], now)
             for i, st in self._prev.items():
                 if i not in cur:
                     changes.append((i, st, None))
@@ -92,7 +107,10 @@ def data(days=14, actions=ACTIONS, watch=WATCH, now=None):
         except (KeyError, ValueError):
             continue
         if t >= since:
-            acts.append([t, r.get("kind", ""), r.get("detail", ""), r.get("x", ""), r.get("y", "")])
+            active = r.get("active")
+            active = (r.get("kind") in ActivityLog.ACTIVE) if active in (None, "") else active == "1"
+            acts.append([t, r.get("kind", ""), r.get("detail", ""), r.get("x", ""), r.get("y", ""),
+                         1 if active else 0])
     hours = {}
     for r in _read(watch):
         try:

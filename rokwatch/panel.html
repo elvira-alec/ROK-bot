@@ -171,7 +171,8 @@
     <p id="act-now" style="margin:0">-</p>
     <div class="heat" id="heat"></div>
     <p class="hint">Each square is an hour of the week in your time (last 14 days). Darker = more of his actions
-      (armies sent, farms started or ended, armies going home, scouting you). Grey = the bot wasn't watching then.</p>
+      (armies sent out or recalled, gatherers sent, farms pulled back early, scouting or attacking you;
+      farming and armies walking home by themselves don't count). Grey = the bot wasn't watching then.</p>
     <ul class="insights" id="act-ins"></ul>
     <details><summary class="hint">Older report (simple patrol)</summary><pre id="report">-</pre></details>
   </section>
@@ -463,6 +464,8 @@ function drawArmies(ar, radar) {
         <a class="xy" onclick="jumpTo(${+a.x}, ${+a.y})">X:${esc(a.x)} Y:${esc(a.y)}</a>
         ${a.dest ? ` <small class="hint">${ico('arrow')} ${esc(a.dest[0])}, ${esc(a.dest[1])}</small>` : ''}
         ${a.info && (a.info.what || a.info.reserves) ? `<div class="detail">${esc(a.info.what || '')}${a.info.reserves ? ' · ' + a.info.reserves.toLocaleString() + ' left' : ''}</div>` : ''}
+        ${a.full_in_min != null ? `<div class="detail">${ico('clock')} army full and heading home in about ${Math.max(1, Math.round(a.full_in_min))} min</div>`
+          : a.runs_out_min != null ? `<div class="detail">${ico('clock')} point runs out in about ${Math.round(a.runs_out_min)} min at his rate${a.rate ? ' (' + a.rate.toLocaleString() + '/min)' : ''}</div>` : ''}
         ${a.eta_min != null ? `<div class="detail">${ico('clock')} arrives ${a.eta_min < 1 ? 'in under a minute' : 'in about ' + Math.round(a.eta_min) + ' min'} (${esc(a.speed)} tiles/min)</div>` : ''}
         ${a.threat ? `<div class="threat-t">${ico('alert')} ${a.threat_how === 'aimed' ? 'heading for' : 'moving close to'} ${esc(a.threat)}</div>` : ''}</div>
       <div class="ago">${esc(ago(a.seen_ts))}<br><small>${esc(a.dist_home)} from his city</small></div>
@@ -503,7 +506,7 @@ async function loadActivity() {
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const hh = h => String(h).padStart(2, '0') + ':00';
 function drawActivity(d) {
-  const acts = d.actions || [], watch = d.watch || [];
+  const acts = (d.actions || []).filter(a => a[5] !== 0), watch = d.watch || [];   // only what he did on purpose
   const W = Array.from({ length: 7 }, () => Array(24).fill(0)), A = Array.from({ length: 7 }, () => Array(24).fill(0));
   const F = Array.from({ length: 7 }, () => Array(24).fill(0));
   const cell = t => { const x = new Date(t * 1000); return [(x.getDay() + 6) % 7, x.getHours()]; };

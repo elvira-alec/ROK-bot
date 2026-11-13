@@ -93,6 +93,10 @@ def _speed(a):
     return math.dist(p0, p1) / ((t1 - t0) / 60)
 
 
+def _r(x):
+    return round(x, 1) if x is not None else None
+
+
 def predict(a, now):
     """Where a marching army probably is now: along its march line, toward where the
     line goes, at the speed it was seen going - never past the end of the line."""
@@ -286,9 +290,8 @@ class Tracker:
                                           "your alliance.", {"target": "you", "id": a.id}))
         for a in getattr(self, "gone", []):
             if a.kind == "farm" and include(a) and a.owner == "him":
-                events.append(("farm_left", f"He stopped gathering at {a.tile[0]:.0f},{a.tile[1]:.0f} "
-                                            "(pulled that army back or sent it somewhere).",
-                               {"id": a.id}))
+                events.append(("farm_left", f"He stopped gathering at {a.tile[0]:.0f},{a.tile[1]:.0f}.",
+                               {"id": a.id, "info": a.info, "tile": a.tile}))
         self.gone = []
         mine = [a for a in his if a.kind != "scout"]    # scouts don't count as troops
         def heading_home(a):
@@ -458,10 +461,23 @@ class Tracker:
                         "threat": th[0] if th else None, "threat_how": th[1] if th else None,
                         "dist_home": round(math.dist(a.tile, self.city)),
                         "trail": [[round(p[0]), round(p[1])] for _, p in a.history[-10:]],
-                        "info": a.info, **self._motion(a)})
+                        "info": {k: v for k, v in (a.info or {}).items() if k != "readings"},
+                        **self._farm_timing(a), **self._motion(a)})
         # the dangerous ones first, then his confirmed ones, nearest to you first
         out.sort(key=lambda r: (r["threat"] is None, not r["his"], r["dist_home"]))
         return out
+
+    load = None                     # his armies' typical load (set by the hunter)
+
+    def _farm_timing(self, a):
+        from . import farms
+        if a.kind != "farm" or not a.info:
+            return {}
+        now = time.time()
+        rate = farms.rate_per_min(a.info.get("readings"))
+        return {"rate": round(rate) if rate else None,
+                "runs_out_min": _r(farms.minutes_left(a.info, now)),
+                "full_in_min": _r(farms.minutes_to_full(a.info, now, self.load))}
 
     @staticmethod
     def _motion(a):
@@ -524,6 +540,10 @@ class Hunter:
         self._pool = ThreadPoolExecutor(max_workers=1)
         self.timing = {"move": 0.0, "look": 0.0, "check": 0.0}
         self.last_round = None
+        self._scale_checked = 0.0
+        self._last_refresh = 0.0
+        from .farms import FarmBook
+        self.farms = FarmBook()
         self.focus: dict = {}          # army id -> {"follow", "alert_moves", "alert_home"} (panel)
         self._last_full = 0.0
         self._rounds = 0
@@ -648,23 +668,43 @@ class Hunter:
             log.warning("hunt: couldn't zoom in to read names")
             return 0
         done = 0
+        # nearest-first order, so each next one is usually a short drag away
+        order, here = [], tuple(self.game._cam or todo[0].tile)
+        rest = list(todo)
+        while rest:
+            nxt = min(rest, key=lambda a: math.dist(a.tile, here))
+            rest.remove(nxt)
+            order.append(nxt)
+            here = nxt.tile
         try:
-            for i, a in enumerate(todo):
-                self._progress(i, len(todo), f"Checking whose {'farm' if a.kind == 'farm' else 'army'} "
-                                             f"is at {a.tile[0]:.0f},{a.tile[1]:.0f}")
-                self._check_owner(a)
+            for i, a in enumerate(order):
+                if a.owner is not None:            # already settled from the same frame
+                    continue
+                self._progress(i, len(order), f"Checking whose {'farm' if a.kind == 'farm' else 'army'} "
+                                              f"is at {a.tile[0]:.0f},{a.tile[1]:.0f}")
+                self._check_owner(a, others=[o for o in order if o is not a and o.owner is None])
                 done += 1
         finally:
             self.zoom_out()
         return done
 
-    def _check_owner(self, a):
+    def _axes_close(self):
+        r = (self.game.zoom_cfg or {}).get("close_ratio")
+        return (np.array(self.axes_out, float) * float(r)).tolist() if r and self.axes_out else None
+
+    def _check_owner(self, a, others=()):
         a.checks += 1
         x, y = int(round(a.tile[0])), int(round(a.tile[1]))
-        if not self.game.goto(x, y):
+        ac = self._axes_close()
+        # zoomed in already: a nearby one is a drag away; far ones are typed in
+        moved = self.game.pan_to(x, y, ac, max_drags=2) if ac else self.game.goto(x, y)
+        if not moved:
             return
         if a.kind == "farm":
             self._identify_farm(a)
+            # other unchecked farms in this same frame: tap them too, without moving
+            if ac:
+                self._farms_in_frame([o for o in others if o.kind == "farm"], ac)
         else:
             for attempt in range(2):          # a name can be missed on one look
                 v = self.game.look()
@@ -704,8 +744,8 @@ class Hunter:
 
     def _identify_farm(self, a):
         """A gathering army shows no name over it: tap the resource point (only works
-        at the close zoom) and read its box. His name anywhere in the box = his
-        (works in any game language); the box's X:Y gives the exact spot."""
+        at the close zoom) and read its box. His name anywhere in the box = his (works in
+        any game language); the box's X:Y gives the exact spot."""
         for attempt in range(2):
             self.game.check_stop()
             f = self.game.frame()
@@ -716,33 +756,50 @@ class Hunter:
                 tap = (bx, int(by + 0.045 * H))          # the camp just under its badge
             else:
                 tap = (W // 2, H // 2)
-            self.game.b.click(int(tap[0]), int(tap[1]))
-            box = None
-            for _ in range(10):                          # wait for the box (up to ~1.2 s)
-                time.sleep(0.12)
-                f = self.game.frame()
-                box = screen.find_info_box(f)
-                if box:
-                    break
-            if not box:
-                continue
-            time.sleep(0.2)                              # let the text finish drawing
-            f = self.game.frame()
-            texts = screen.read_text(f, box)
-            self.seen_text[getattr(a, "id", 0)] = [t.text for t in texts]
-            mine = [t for t in texts if screen.name_score(t.text, self.name) >= 0.75]
-            coords = next((screen.parse_coords(t.text) for t in texts if screen.parse_coords(t.text)), None)
-            a.info = self._farm_details(texts) or a.info
-            if mine:
-                a.owner = "him"
-            elif any(self.GATHER_RX.search(t.text) for t in texts):
-                a.owner = "other"                        # someone else is gathering there
-            if coords and a.owner == "him":
-                a.info = {**a.info, "xy": [int(coords[1]), int(coords[2])]}
-            self.game.close_popups()
-            return
+            if self._read_farm_box(a, tap):
+                return
         log.info("hunt: couldn't open the resource point at %.0f,%.0f", a.tile[0], a.tile[1])
         self.game.close_popups()
+
+    def _read_farm_box(self, a, tap) -> bool:
+        """Tap at `tap`, read the resource point's box (owner, X:Y, what, reserves), close
+        it. False if no box opened."""
+        self.game.b.click(int(tap[0]), int(tap[1]))
+        box = None
+        for _ in range(16):                              # wait for the box (up to ~1 s)
+            time.sleep(0.06)
+            f = self.game.frame()
+            box = screen.find_info_box(f)
+            if box:
+                break
+        if not box:
+            return False
+        time.sleep(0.12)                                 # let the text finish drawing
+        f = self.game.frame()
+        texts = screen.read_text(f, box)
+        self.seen_text[getattr(a, "id", 0)] = [t.text for t in texts]
+        mine = [t for t in texts if screen.name_score(t.text, self.name) >= 0.75]
+        coords = next((screen.parse_coords(t.text) for t in texts if screen.parse_coords(t.text)), None)
+        details = self._farm_details(texts)
+        if mine:
+            a.owner = "him"
+        elif any(self.GATHER_RX.search(t.text) for t in texts):
+            a.owner = "other"                            # someone else is gathering there
+        if a.owner == "him":
+            info = dict(a.info or {})
+            info.update(details)
+            if coords:
+                info["xy"] = [int(coords[1]), int(coords[2])]
+            if details.get("reserves") is not None:
+                hist = info.setdefault("readings", [])
+                if not hist and self._rounds > 1:
+                    info["from_start"] = True       # appeared after the first sweep: just started
+                hist.append([round(time.time()), details["reserves"]])
+                del hist[:-6]
+            a.info = info
+            self.farms.learn(details)
+        self.game.close_popups()
+        return True
 
     RESOURCE_RX = re.compile(r"(level|nivel|niveau|stufe)|camp|farm|quarry|mine|cropland|"
                              r"tala|campo|cantera|mina|cultivo", re.I)
@@ -764,6 +821,48 @@ class Hunter:
                     out["reserves"] = int(digits)
                     break
         return out
+
+    def _refresh_one_farm(self, now, every=240):
+        """Re-read one of his farms' reserves (the oldest reading, if a few minutes old),
+        for his gathering rate. At most one a round, and not more than every 2 minutes."""
+        if now - self._last_refresh < 120:
+            return
+        due = [a for a in self.tracker.armies if a.kind == "farm" and a.owner == "him"
+               and now - ((a.info or {}).get("readings") or [[0]])[-1][0] > every]
+        if not due:
+            return
+        a = min(due, key=lambda a: ((a.info or {}).get("readings") or [[0]])[-1][0])
+        self._last_refresh = now
+        t0 = time.time()
+        self._progress(0, 1, f"Re-reading his farm at {a.tile[0]:.0f},{a.tile[1]:.0f}")
+        try:
+            if self.zoom_close():
+                xy = (a.info or {}).get("xy") or a.tile
+                if self.game.goto(int(round(xy[0])), int(round(xy[1]))):
+                    self._identify_farm(a)
+        finally:
+            self.zoom_out()
+            self.timing["check"] += time.time() - t0
+
+    def _farms_in_frame(self, farms, axes_close):
+        """Tap every red-pickaxe farm visible right now (close zoom) that matches one of
+        `farms`, and read its box - no moving between them."""
+        if not farms:
+            return
+        f = self.game.fresh_frame()
+        H, W = f.shape[:2]
+        cam = self.game.read_camera(f)
+        if not cam:
+            return
+        for bx, by in screen.find_gather_badges(f):
+            tap = (bx, int(by + 0.045 * H))
+            tile = to_tile(cam[1:3], axes_close, tap, f.shape)
+            cand = [o for o in farms if o.owner is None and math.dist(o.tile, tile) < 4]
+            if not cand:
+                continue
+            o = min(cand, key=lambda o: math.dist(o.tile, tile))
+            o.checks += 1
+            self._read_farm_box(o, tap)
 
     def update_my_spots(self):
         """Where are my gathering troops right now? Tap each gathering troop's portrait
@@ -968,9 +1067,17 @@ class Hunter:
         self.toasts = []
         self.dangers = set()
         self.timing = {"move": 0.0, "look": 0.0, "check": 0.0}
-        if self.method == "zoomed_out" and self.game._at != "sweep":
-            self._progress(0, 1, "Getting to the searching zoom")
-            self.zoom_out()
+        if self.method == "zoomed_out":
+            if self.game._at != "sweep":
+                self._progress(0, 1, "Getting to the searching zoom")
+                self.zoom_out()
+            # every few minutes: is the zoom still right? (measured, corrected by a notch)
+            if self.axes and now - self._scale_checked > 300:
+                self._scale_checked = now
+                ss = float(np.linalg.norm(np.array(self.axes, float)[:, 0]))
+                r = self.game.keep_scale(ss)
+                if r and not 0.89 <= r <= 1.12:
+                    log.warning("hunt: zoom is off (%.2fx the searching zoom) and couldn't be fixed", r)
         self._rounds += 1
         self.mode = self.plan(now)
         covered = None
@@ -1045,7 +1152,23 @@ class Hunter:
             title = {"scouted": "YOU'VE BEEN SCOUTED", "attacked": "YOU'RE UNDER ATTACK",
                      "rallied": "A RALLY IS COMING AT YOU"}[kind]
             alerts.append(Alert(f"toast-{kind}", title, f"The game says: {text}", urgent=True))
+        from . import farms as _farms
+        self.tracker.load = self.farms.typical_load()
         for kind, msg, info in events:
+            if kind == "farm_left":
+                # finished (army full / point empty) or pulled back early (he's online)?
+                fi = info.get("info") or {}
+                est = _farms.minutes_to_full(fi, now, self.tracker.load)
+                if est is None:
+                    est = _farms.minutes_left(fi, now)
+                self.farms.farm_ended(fi, bool(fi.get("from_start")), now)
+                if est is not None and est > 5:
+                    msg += f" He pulled it back early (about {est:.0f} min of gathering left): he's online."
+                    self.activity.action("recalled_farm", "pulled a farmer back early", *info.get("tile", (None, None)), now=now)
+                elif est is not None:
+                    msg += " It had finished: his army is on its way home."
+                else:
+                    msg += " His army is heading home."
             urgent = kind in ("army_out", "scout_at", "scout_any", "hostile", "army_close") and bool(info.get("target"))
             title = {"army_out": "HE SENT AN ARMY OUT" + (" AT YOU" if urgent else ""),
                      "army_close": "HIS ARMY IS MOVING CLOSE TO YOU",
@@ -1054,7 +1177,7 @@ class Hunter:
                      "scout_any": "A SCOUT IS HEADING FOR YOU",
                      "pulling_back": "He's pulling his troops back",
                      "all_home": "All his troops are home",
-                     "farm_left": "He pulled a farmer back"}[kind]
+                     "farm_left": "His farmer is heading home"}[kind]
             alerts.append(Alert(f"hunt-{kind}-{now}-{info.get('id', '')}", title, msg,
                                 urgent=urgent, cooldown=False))
             if urgent and kind in ("army_out", "hostile", "army_close") and self.auto_recall \
@@ -1064,6 +1187,21 @@ class Hunter:
                 report = self.game.recall_all([pos] if pos else None)
                 alerts.append(Alert(f"recall-{now}", "Auto-recall", "; ".join(report),
                                     urgent=True, cooldown=False))
+        for a in self.tracker.armies:
+            if a.kind != "farm" or a.owner != "him" or not a.info:
+                continue
+            est = _farms.minutes_to_full(a.info, now, self.tracker.load)
+            what = "his army is full and heads home"
+            if est is None:
+                est, what = _farms.minutes_left(a.info, now), "the resource point runs out"
+            for lim in (10, 5):
+                if est is not None and est <= lim and ("soon", lim) not in a.alerted:
+                    a.alerted.add(("soon", lim))
+                    xy = a.info.get("xy") or [round(a.tile[0]), round(a.tile[1])]
+                    alerts.append(Alert(f"soon-{a.id}-{lim}", f"His farmer leaves in about {max(1, round(est))} min",
+                                        f"At {xy[0]},{xy[1]}: {what} in about {est:.0f} min.", cooldown=False))
+        if self.mode != "sweep" and not self.timing["check"]:
+            self._refresh_one_farm(now)
         his = [a for a in self.tracker.armies if self.is_his(a) or (self.method == "close")]
         t = self.timing
         log.info("Round (%s): %d spots, %d armies seen (%d his) in %.1f s - moving %.1f s, "

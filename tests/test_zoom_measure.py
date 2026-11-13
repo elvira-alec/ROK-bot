@@ -84,7 +84,9 @@ def setup(search=8, close=15):
 
 def test_two_presses_measure_exactly():
     sim, g, _, cfg, ratio = setup(8, 15)
-    assert cfg == {"gap": 7, "t_out": 3, "t_in": 5} and abs(ratio - 1) < 0.05, (cfg, ratio)
+    assert {k: cfg[k] for k in ("gap", "t_out", "t_in")} == {"gap": 7, "t_out": 3, "t_in": 5} \
+        and abs(ratio - 1) < 0.05, (cfg, ratio)
+    assert abs(cfg["close_ratio"] - 1.08 ** -7) < 0.03          # scale at the close zoom, for drags
     assert sim.level == 15 and sim.lowest >= 7       # at most one notch past your searching zoom
     for _ in range(2):
         assert g.to_sweep() and sim.level == 8
