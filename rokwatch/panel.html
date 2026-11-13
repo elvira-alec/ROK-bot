@@ -433,7 +433,7 @@ async function updateLater() {
 }
 const ico = k => `<svg class="i"><use href="#i-${k}"/></svg>`;
 const ICON = { 'gathering': 'pickaxe', 'parked / gathering': 'tent', 'marching out': 'arrow', 'going home': 'back',
-               'marching': 'arrow', 'scout': 'eye', 'at his city': 'castle' };
+               'marching': 'arrow', 'scout': 'eye', 'at his city': 'castle', 'moving? (near the edge)': 'arrow' };
 function ago(ts) {
   if (!ts) return '';
   const s = Math.max(0, Date.now() / 1000 - ts);

@@ -76,6 +76,8 @@ class ArmySeen:
     kind: str = "army"          # "army", "scout" (plain diamond) or "farm" (gathering)
     id: int = 0
     checks: int = 0
+    unsure: bool = False        # near the screen edge with no line: may be marching (lines
+                                # aren't drawn that far from the middle of the view)
 
 
 DEFAULT_SPEED = 4.0       # tiles a minute: a guess for a march seen only once
@@ -133,6 +135,7 @@ class Army:
     checks: int = 0                # how many times we zoomed in to read its name
     info: dict = field(default_factory=dict)   # farm details read from its box (what, reserves, xy)
     missed: int = 0                # looked right at its spot and didn't see it (times in a row)
+    unsure: bool = False           # seen only near the screen edge without a line so far
 
 
 class Tracker:
@@ -223,6 +226,16 @@ class Tracker:
                     a.owner = s.owner
             a.prev_tile = prev_tile
             a.missed = 0
+            if getattr(s, "unsure", False) and not s.moving and best is not None and a.moving:
+                # near the edge without its line: still the march we knew - keep its line
+                a.tile, a.last_seen = s.tile, now
+                a.history.append((now, s.tile))
+                if a.owner is None and getattr(s, "owner", None):
+                    a.owner = s.owner
+                a.checks = max(a.checks, getattr(s, "checks", 0))
+                current.append(a)
+                continue
+            a.unsure = bool(getattr(s, "unsure", False)) and not s.moving
             a.tile, a.last_seen, a.moving, a.ends = s.tile, now, s.moving, s.ends
             a.kind = getattr(s, "kind", "army")
             if a.owner is None and getattr(s, "owner", None):
@@ -428,6 +441,8 @@ class Tracker:
                 return "scout"
             if a.kind == "farm":
                 return "gathering"
+            if a.unsure:
+                return "moving? (near the edge)"
             return "at his city" if self.at_home(a.tile) else "parked / gathering"
         out = []
         for a in self.armies:
@@ -565,10 +580,14 @@ class Hunter:
         H = frame.shape[0]
         lines = [ln for ln in screen.find_march_lines(frame) if ln.color != "green"]
         out = []
+        W = frame.shape[1]
         for d, kind in screen.find_map_icons(frame):
             line = min(lines, key=lambda ln: ln.distance_to(d), default=None)
             moving = bool(line and line.distance_to(d) < 0.05 * H)  # the icon hides the first dots
-            out.append((d, kind, line if moving else None))
+            # the game only draws march lines near the middle of the view: an army near the
+            # edge without a line may still be marching
+            edge = not (0.22 * W < d[0] < 0.78 * W and 0.22 * H < d[1] < 0.78 * H)
+            out.append((d, kind, line if moving else ("edge" if edge else None)))
         # someone not in your alliance gathering: red pickaxe badge over a resource point
         for bx, by in screen.find_gather_badges(frame):
             out.append(((bx, by + 0.035 * H), "farm", None))
@@ -579,8 +598,10 @@ class Hunter:
         out = []
         for d, kind, line in found:
             tile = to_tile(cam, self.axes_out, d, shape)
+            unsure = line == "edge"
+            line = None if unsure else line
             ends = tuple(to_tile(cam, self.axes_out, p, shape) for p in (line.p1, line.p2)) if line else None
-            out.append(ArmySeen(tile, line is not None, ends, now, kind=kind))
+            out.append(ArmySeen(tile, line is not None, ends, now, kind=kind, unsure=unsure))
         return out
 
     def read_view_out(self, view) -> list[ArmySeen]:

@@ -304,3 +304,27 @@ def test_marching_army_followed_along_its_line(tmp_path):
     assert len(pts) >= 3 and any(math.dist(p, (205, 417)) < 4 for p in pts), pts
     t.match([], 260, covered=[lambda p: True])
     assert t.armies == [] and [g.id for g in t.gone] == [a.id]   # given up: lost (a new sweep)
+
+
+def test_marching_army_near_the_screen_edge_keeps_its_line():
+    """Lines aren't drawn near the edge of the view: an army seen there without one is
+    'unsure', and a march we already knew keeps its line and destination."""
+    from rokwatch.hunter import ArmySeen, Tracker
+    import numpy as np
+    # edge icon with no line -> unsure (detect works in pixels: fake one icon each)
+    found = [((60, 300), "army", "edge"), ((700, 330), "army", None)]
+    h = Hunter(Game(Clicky(), settle=0), {"hunt": {"player_name": NAME, "city": [162, 374]},
+                                          "patrol": {"axes": [[0.012, 0.004], [-0.004, 0.012]]}},
+               [], str(G.parent / "unused.csv"))
+    seen = h.to_map(found, (180, 390), (660, 1434))
+    assert seen[0].unsure and not seen[0].moving and not seen[1].unsure
+    t = Tracker((162, 374), [])
+    line = ((165.0, 377.0), (205.0, 417.0))
+    t.match([ArmySeen((170.0, 382.0), True, line, 0)], 0)
+    t.match([ArmySeen((173.0, 385.0), True, ((173.0, 385.0), (205.0, 417.0)), 30)], 30)
+    t.match([ArmySeen((176.0, 388.0), False, None, 60, unsure=True)], 60)    # near the edge now
+    a = t.armies[0]
+    assert len(t.armies) == 1 and a.moving and a.ends and a.tile == (176.0, 388.0)
+    t2 = Tracker((162, 374), [])
+    t2.match([ArmySeen((190.0, 400.0), False, None, 0, unsure=True)], 0)        # new, near the edge
+    assert t2.summary()[0]["state"] == "moving? (near the edge)"
