@@ -8,12 +8,15 @@ from pathlib import Path
 import PyInstaller.__main__
 
 sep = ";" if os.name == "nt" else ":"
+if not Path("rokwatch/version.txt").exists():      # the release build writes the real number
+    Path("rokwatch/version.txt").write_text("dev")
 PyInstaller.__main__.run([
     "rokwatch_app.py", "--name", "RoKWatcher", "--noconfirm", "--console",
     "--collect-all", "rapidocr_onnxruntime",   # text-reading models
     "--collect-all", "playwright",              # browser control
     "--collect-binaries", "onnxruntime",
     "--add-data", f"rokwatch/panel.html{sep}rokwatch",
+    "--add-data", f"rokwatch/version.txt{sep}rokwatch",
     "--add-data", f"rokwatch/badges{sep}rokwatch/badges",
     "--add-data", f"rokwatch/hud{sep}rokwatch/hud",
     *sys.argv[1:],

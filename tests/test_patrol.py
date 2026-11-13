@@ -188,9 +188,8 @@ def test_tells_leaving_from_returning(game, tmp_path):
 
 def test_fixed_zoom_presets(game):
     """Zoom is set by wheel notches from fully zoomed out, so it's the same every time."""
-    game.notch_wait = 0.15
     assert js(game, "sim.state.zoom") == 0                 # close 3D view
-    assert game.measure_zoom() == 2                        # 2 notches in from fully out
+    assert game.measure_zoom() == (2, True)                # 2 notches in from fully out
     assert js(game, "sim.state.zoom") == 0                 # and put back
     game.set_zoom(1, anchor=True)
     assert js(game, "sim.state.zoom") == 1 and game.zoom() == "patrol"

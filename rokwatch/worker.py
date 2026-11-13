@@ -307,7 +307,12 @@ class Worker:
         game = self._game()
         what = "hunting sweeps" if kind == "sweep" else "reading names"
         self._set("busy", f"Measuring this zoom for {what} (zooming out and back)...")
-        n = game.measure_zoom()
+        n, ok = game.measure_zoom()
+        if not ok:
+            self._set("ready", "Couldn't measure this zoom reliably (the picture didn't come back the "
+                               "same). Close any menus, make sure nothing is moving in the middle of "
+                               "the screen, and try again. Nothing was saved.")
+            return
         self.status.doing = "Learning map directions at this zoom (small drags)"
         m = learn_axes(game)
         upd = {("hunt.zoom_notches" if kind == "sweep" else "hunt.close_notches"): n}

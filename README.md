@@ -32,6 +32,12 @@ It needs Windows 10/11 with **Google Chrome or Microsoft Edge** (Edge comes with
 
 Windows may warn about an unknown app the first time. Click **More info → Run anyway**: the exe isn't code-signed. It's built automatically from this repo's code on GitHub, and the build log is under **Actions → windows-exe**.
 
+## Updates
+
+Releases are numbered 1.0, 1.1, 1.2, … (see **Releases** on GitHub). The panel checks for a new one every 30 minutes and shows it at the top. When you're not watching anything, it updates by itself after a minute, unless you press **Not now**. While it's watching, it waits for you to press **Update now**.
+
+To update, the black window closes and a small update window shows the download and install. The new program files replace the old ones; your settings, logs and snapshots stay. Then RoKWatcher starts again and the panel page reloads by itself.
+
 ## The panel on your phone (home Wi-Fi or Tailscale)
 
 In the panel, tick **Let my phone open this panel**. A QR code appears right away (no restart). Pick which one with the switch above it:
@@ -43,7 +49,7 @@ Scan it with the phone camera. The link has a secret key in it, so nobody else c
 
 ## Hunting: set the zoom once
 
-In **Hunt his armies**, zoom the game by hand to the widest view where army icons still show, and press **Remember this zoom for sweeping**. Then zoom in until names show over armies and press **Remember this zoom for reading names**. From then on the bot gets to exactly those zooms the same way every time: it zooms all the way out, then scrolls back in the same number of notches. It also learns the map directions at each zoom. While sweeping it drags the map to nearby spots, which is much quicker than typing coordinates, and only types coordinates for far-away jumps.
+In **Hunt his armies**, zoom the game by hand to the widest view where army icons still show, and press **Remember this zoom for sweeping**. Then zoom in until names show over armies and press **Remember this zoom for reading names**. To measure a zoom, the bot notes how the screen looks, zooms all the way out, then steps back in one notch at a time until the screen looks the same again. It then checks that it can get back to that zoom the same way, and only saves the zoom if that works. It also learns the map directions at each zoom. While sweeping it drags the map to nearby spots, which is much quicker than typing coordinates, and only types coordinates for far-away jumps.
 
 The bar under the title shows what it's doing and how far along it is. **Live view** shows a small picture of what it sees, updated about every 2 seconds.
 

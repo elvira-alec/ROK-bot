@@ -23,7 +23,7 @@ from urllib.parse import parse_qs, urlsplit
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import config, snapshots
+from . import config, snapshots, updater
 from .patrol import activity_report
 from .worker import MemoryLog, Worker
 
@@ -76,6 +76,45 @@ class Panel:
         self.memlog = MemoryLog()
         logging.getLogger("rokwatch").addHandler(self.memlog)
         logging.getLogger("rokwatch").setLevel(logging.INFO)
+        self.version = updater.current_version()
+        self.update = None          # newer release found on GitHub
+        self.update_at = None       # when it installs by itself (None = waiting for you)
+        self.updating = None        # version being installed
+        self.last_request = 0.0
+
+    # ------------------------------------------------------------ updates
+    def check_for_update(self):
+        try:
+            info = updater.latest_release()
+        except Exception as e:
+            log.debug("update check failed: %s", e)
+            return None
+        if info and updater.newer(info["version"], self.version):
+            if not self.update or self.update["version"] != info["version"]:
+                log.info("Version %s is available (you have %s)", info["version"], self.version)
+                self.update = info
+                busy = self.worker.status.phase in ("patrolling", "busy", "opening")
+                # installs by itself in a minute unless you're running something
+                self.update_at = None if busy else time.time() + 60
+        return self.update
+
+    def update_tick(self):
+        if (self.update and self.update_at and time.time() >= self.update_at and not self.updating
+                and self.worker.status.phase not in ("patrolling", "busy", "opening")):
+            self.install_update()
+
+    def install_update(self):
+        if not self.update:
+            return "No update to install"
+        if not updater.can_self_update():
+            return (f"Version {self.update['version']} is out. This copy can't update itself "
+                    "(not the Windows .exe): download it from GitHub.")
+        self.updating = self.update["version"]
+        self.worker.send("stop")
+        updater.launch_updater(self.update)
+        # close this program so its files can be replaced (the updater waits for it)
+        threading.Timer(1.5, lambda: os._exit(0)).start()
+        return "Updating"
 
     def phone_key(self) -> str:
         """Secret that a phone must present (in the link / QR code). Kept in setup.yaml."""
@@ -199,7 +238,12 @@ class Panel:
     def state(self):
         st = self.worker.status
         cfg = config.load(self.cfg_path)
+        self.last_request = time.time()
         return {
+            "version": self.version,
+            "update": self.update,
+            "update_in": max(0, int(self.update_at - time.time())) if self.update_at else None,
+            "updating": self.updating,
             "phase": st.phase, "message": st.message, "round": st.round,
             "last_site": st.last_site, "alerts": st.alerts, "look": st.look,
             "armies": st.armies,
@@ -391,6 +435,16 @@ def make_handler(panel: Panel, port_holder=None):
                     "/api/stop": "stop", "/api/look": "look", "/api/axes": "axes",
                     "/api/recall": "recall", "/api/test_alert": "test_alert",
                     "/api/hunt": "hunt"}
+            if path == "/api/update":
+                if data.get("action") == "later":
+                    panel.update_at = None
+                    return self._send(200, {"ok": True})
+                if data.get("action") == "check":
+                    info = panel.check_for_update()
+                    return self._send(200, {"ok": True, "update": info})
+                msg = panel.install_update()
+                return self._send(200, {"ok": msg == "Updating", "message": msg,
+                                        "version": panel.updating})
             if path == "/api/remember_zoom":
                 panel.worker.send("remember_zoom", kind="close" if data.get("kind") == "close" else "sweep")
                 return self._send(200, {"ok": True})
@@ -411,7 +465,20 @@ def make_handler(panel: Panel, port_holder=None):
     return H
 
 
+def _update_loop(panel, every=1800):
+    time.sleep(5)
+    nxt = 0.0
+    while True:
+        if time.time() >= nxt:
+            panel.check_for_update()
+            nxt = time.time() + every
+        panel.update_tick()
+        time.sleep(1)
+
+
 def serve(cfg_path=config.DEFAULT_PATH, port=8765, open_browser=True):
+    """open_browser: True, False, or "if_no_client" (after an update the old tab comes
+    back by itself; open a new one only if it doesn't)."""
     from pathlib import Path as P
     Path("debug").mkdir(exist_ok=True)
     if not P(cfg_path).exists() and P("config.example.yaml").exists():
@@ -428,7 +495,7 @@ def serve(cfg_path=config.DEFAULT_PATH, port=8765, open_browser=True):
         srv = ThreadingHTTPServer(("0.0.0.0", 0), make_handler(panel, holder))
     holder["port"] = srv.server_port
     url = f"http://127.0.0.1:{srv.server_port}/"
-    print(f"RoK watcher control panel: {url}  (keep this window open; Ctrl+C to quit)")
+    print(f"RoK Watcher {panel.version} control panel: {url}  (keep this window open; Ctrl+C to quit)")
     print("If Windows asks whether to allow RoKWatcher on networks, tick BOTH boxes (Private and "
           "Public) and click Allow: that's what lets your phone in (it still needs the secret key).")
     if phone:
@@ -436,7 +503,13 @@ def serve(cfg_path=config.DEFAULT_PATH, port=8765, open_browser=True):
         if tailscale_address():
             print(f"On your phone (Tailscale): http://{tailscale_address()}:{srv.server_port}/"
                   f"?key={panel.phone_key()}")
-    if open_browser:
+    threading.Thread(target=_update_loop, args=(panel,), daemon=True).start()
+    if open_browser == "if_no_client":
+        def maybe_open():
+            if time.time() - panel.last_request > 10:
+                webbrowser.open(url)
+        threading.Timer(12, maybe_open).start()
+    elif open_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     try:
         srv.serve_forever()

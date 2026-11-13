@@ -5,6 +5,10 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+# one build at a time, so two builds never take the same version number
+concurrency:
+  group: windows-release
+  cancel-in-progress: false
 jobs:
   build:
     runs-on: windows-latest
@@ -15,6 +19,18 @@ jobs:
           python-version: "3.12"
       - name: Install
         run: pip install -r requirements.txt pyinstaller
+      - name: Pick the version number (1.0, 1.1, 1.2, ...)
+        id: ver
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          last=$(gh release list --limit 200 --json tagName -q '.[].tagName' \
+                 | grep -E '^v[0-9]+\.[0-9]+$' | sed 's/^v//' | sort -t. -k1,1n -k2,2n | tail -1 || true)
+          if [ -z "$last" ]; then v=1.0; else v="${last%%.*}.$(( ${last#*.} + 1 ))"; fi
+          echo "$v" > rokwatch/version.txt
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "Building version $v"
       - name: Build RoKWatcher.exe
         run: python build_exe.py
       - name: Test the exe (self-test + control panel driving the test game in Edge)
@@ -31,6 +47,18 @@ jobs:
           Remove-Item dist/RoKWatcher/setup.yaml, dist/RoKWatcher/rokwatch.log -ErrorAction SilentlyContinue
           Remove-Item dist/RoKWatcher/debug, dist/RoKWatcher/browser-profile -Recurse -ErrorAction SilentlyContinue
           Compress-Archive -Path dist/RoKWatcher -DestinationPath RoKWatcher-windows.zip
+      - name: Test the updater (installs this zip over an "old" copy, keeps user files, restarts it)
+        run: python tests/updater_smoke.py RoKWatcher-windows.zip
+      - name: Publish as a numbered release (the app's updater looks for these)
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ steps.ver.outputs.version }}
+        run: |
+          gh release create "v$V" RoKWatcher-windows.zip --target "$GITHUB_SHA" --latest \
+            --title "RoK Watcher $V" \
+            --notes "$(git log -1 --pretty=%s). Download RoKWatcher-windows.zip, unzip it, double-click RoKWatcher.exe. If you already have it, the control panel updates itself."
       - name: Publish as the "latest" download
         if: github.ref == 'refs/heads/main'
         shell: bash

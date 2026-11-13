@@ -15,13 +15,16 @@ def main():
                     for a in sys.argv[1:]]
     if getattr(sys, "frozen", False):
         os.chdir(Path(sys.executable).parent)  # keep config, logs and screenshots next to the exe
+    updated = "--updated" in sys.argv
+    if updated:
+        sys.argv.remove("--updated")
     if len(sys.argv) > 1:
         from rokwatch.__main__ import main as cli
         sys.exit(cli(sys.argv[1:]))
     from rokwatch.__main__ import setup_logging
     from rokwatch.panel import serve
     setup_logging()
-    serve()
+    serve(open_browser="if_no_client" if updated else True)
 
 
 if __name__ == "__main__":

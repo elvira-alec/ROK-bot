@@ -66,6 +66,16 @@
   .bar.spin i { width: 30% !important; animation: slide 1.2s linear infinite; }
   @keyframes slide { from { margin-left: -30%; } to { margin-left: 100%; } }
   #live-img { width: 100%; border-radius: 8px; border: 1px solid var(--line); margin-top: 10px; display: block; background: #000; }
+  #upd { background: #1d3a5c; border-bottom: 1px solid var(--accent); padding: 10px 22px; display: flex; gap: 10px;
+         align-items: center; flex-wrap: wrap; }
+  #upd[hidden], #upd-screen[hidden] { display: none; }
+  #upd-screen { position: fixed; inset: 0; background: rgba(10,14,22,.96); z-index: 50; display: grid; place-items: center;
+                text-align: center; padding: 24px; }
+  #upd-screen h2 { font-size: 22px; justify-content: center; }
+  .spinner { width: 46px; height: 46px; border: 4px solid var(--line); border-top-color: var(--accent); border-radius: 50%;
+             animation: spin 1s linear infinite; margin: 0 auto 18px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .ver { color: var(--muted); font-size: 12px; }
   .notes { margin: 10px 0 0; padding-left: 18px; color: var(--warn); font-size: 13px; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
   .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
@@ -94,10 +104,16 @@
 <body>
 <div id="toasts" aria-live="polite"></div>
 <header>
-  <h1>RoK Watcher</h1>
+  <h1>RoK Watcher <span class="ver" id="ver"></span></h1>
   <span class="pill" id="phase">stopped</span>
   <span id="msg">Loading...</span>
 </header>
+<div id="upd" hidden><b id="upd-t"></b><span id="upd-c" class="hint" style="margin:0"></span>
+  <button class="primary" onclick="updateNow()">Update now</button>
+  <button id="upd-later" onclick="updateLater()">Not now</button></div>
+<div id="upd-screen" hidden><div><div class="spinner"></div><h2 id="upd-s-t">Updating RoK Watcher…</h2>
+  <p class="hint" id="upd-s-m">The black RoKWatcher window closes and an update window shows the progress.<br>
+  This page comes back by itself when the new version is running (usually under a minute).</p></div></div>
 <div id="now" hidden><div class="t" id="now-t"></div><div class="bar" id="now-bar"><i id="now-fill"></i></div></div>
 <main>
   <section id="live-box">
@@ -309,6 +325,20 @@ async function forgetTarget() {
     body: JSON.stringify({ forget_target: name }) });
   loadSettings();
 }
+let updatingTo = null, lastUpdSeen = null;
+function showUpdating(v) {
+  updatingTo = v; $('upd-screen').hidden = false; $('upd').hidden = true;
+  $('upd-s-t').textContent = `Updating RoK Watcher to ${v}…`;
+}
+async function updateNow() {
+  const r = await (await fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).json();
+  if (r.ok) showUpdating(r.version);
+  else toast(r.message || 'Update failed', 'bad');
+}
+async function updateLater() {
+  await fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"action":"later"}' });
+  refresh();
+}
 function jump() { post('goto', { x: $('gx').value, y: $('gy').value }); }
 function snap() { post('snap', { note: $('snap_note').value }); $('snap_note').value = ''; }
 
@@ -367,7 +397,20 @@ function facts(el, pairs) { el.innerHTML = pairs.map(([k, v]) => `<span>${esc(k)
 let lastLook = null, lastMsg = null, lastSnaps = null, lastLive = null;
 async function refresh() {
   let st;
-  try { st = await (await fetch('/api/state')).json(); } catch { $('msg').textContent = 'Panel not running'; return; }
+  try { st = await (await fetch('/api/state')).json(); } catch {
+    $('msg').textContent = updatingTo ? 'Updating…' : 'Panel not running'; return; }
+  $('ver').textContent = st.version && st.version !== 'dev' ? 'v' + st.version : '';
+  if (updatingTo && st.version === updatingTo) { location.reload(); return; }   // new version is up
+  if (st.updating) showUpdating(st.updating);
+  const u = st.update;
+  $('upd').hidden = !u || !!st.updating;
+  if (u && !st.updating) {
+    $('upd-t').textContent = `Version ${u.version} is available (you have ${st.version}).`;
+    $('upd-c').textContent = st.update_in != null ? `Updating by itself in ${st.update_in}s…`
+      : (st.phase === 'patrolling' ? 'Press Update now when you can (it stops the watching for about a minute).' : '');
+    $('upd-later').hidden = st.update_in == null;
+    if (u.version !== lastUpdSeen) { lastUpdSeen = u.version; toast(`New version ${u.version} is available`, 'good'); }
+  }
   $('phase').textContent = st.phase; $('phase').className = 'pill ' + st.phase; $('msg').textContent = st.message;
   if (lastMsg !== null && st.message !== lastMsg)      // every new status pops up so it can't be missed
     toast(st.message, st.phase === 'error' || /couldn|can't|failed|blank|not find/i.test(st.message) ? 'bad'

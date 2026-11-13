@@ -40,6 +40,7 @@ class Game:
         self._bar_cache = None          # where the X / Y boxes and button are (fractions)
         self.notch_wait = 0.25
         self._zoom_now = None          # notches in from fully out, when known
+        self._size = None
         if area and hasattr(browser, "set_area"):
             browser.set_area(area)
 
@@ -183,55 +184,77 @@ class Game:
         return cv2.resize(g, (160, max(8, int(160 * g.shape[0] / g.shape[1]))),
                           interpolation=cv2.INTER_AREA).astype(np.float32)
 
-    def zoom_all_out(self, max_notches=60, count=False) -> int:
-        """Scroll out until the picture stops changing (fully zoomed out).
-        count=True: one notch at a time, returning how many it took (slower). Otherwise
-        it scrolls in quick bursts (going past the end does no harm)."""
-        H, W = self.frame().shape[:2]
+    @staticmethod
+    def _changed(a, b) -> float:
+        """Share of the picture that's different (marching icons are only a few pixels)."""
+        return float(np.mean(np.abs(a - b) > 12))
+
+    def _settled(self, timeout=1.5):
+        """Wait for the zoom animation to finish; returns the still picture (small)."""
         prev = self._small()
-        still, n = 0, 0
-        burst = 1 if count else 6
-        while n < max_notches:
-            for _ in range(burst):
-                self.b.wheel(W // 2, H // 2, 100)
-                time.sleep(self.notch_wait if count else 0.04)
-            n += burst
-            if not count:
-                time.sleep(self.notch_wait)
+        end = time.time() + timeout
+        while time.time() < end:
+            time.sleep(0.12)
             cur = self._small()
-            # share of the picture that changed (marching icons are only a few pixels)
-            if float(np.mean(np.abs(cur - prev) > 12)) < 0.004:
-                still += 1
-                if still >= (2 if count else 1):
-                    return n - 2 * burst if count else n
-            else:
-                still = 0
+            if self._changed(cur, prev) < 0.004:
+                return cur
             prev = cur
-        return max_notches
+        return prev
+
+    def _notch(self, out: bool, settle=True):
+        H, W = self._size or self.frame().shape[:2]
+        self.b.wheel(W // 2, H // 2, 100 if out else -100)
+        return self._settled() if settle else None
+
+    def zoom_all_out(self, max_notches=80) -> int:
+        """Scroll out until the picture stops changing (fully zoomed out). Scrolls in
+        quick bursts: going past the end does no harm."""
+        H, W = self.frame().shape[:2]
+        self._size = (H, W)
+        prev = self._small()
+        n = 0
+        while n < max_notches:
+            for _ in range(6):
+                self.b.wheel(W // 2, H // 2, 100)
+                time.sleep(0.04)
+            n += 6
+            cur = self._settled()
+            if self._changed(cur, prev) < 0.004:
+                break
+            prev = cur
+        self._zoom_now = 0
+        return n
 
     def set_zoom(self, notches_in: int, anchor=False):
-        """The same zoom every time: all the way out, then N notches in. When the zoom
-        is already known it just scrolls the difference (quicker)."""
-        H, W = self.frame().shape[:2]
+        """The same zoom every time: all the way out, then N notches in (waiting for
+        each zoom step to finish, so none gets lost). When the zoom is already known
+        it just steps the difference."""
         if anchor or self._zoom_now is None:
             self.zoom_all_out()
-            self._zoom_now = 0
         diff = int(notches_in) - self._zoom_now
         for _ in range(abs(diff)):
-            self.b.wheel(W // 2, H // 2, -100 if diff > 0 else 100)
-            time.sleep(self.notch_wait)
+            self._notch(out=diff < 0)
         self._zoom_now = int(notches_in)
-        self.wait(0.6)
 
-    def measure_zoom(self) -> int:
-        """How many notches in from fully zoomed out the view is now (and put it back)."""
-        n = self.zoom_all_out(count=True)
-        H, W = self.frame().shape[:2]
-        for _ in range(n):
-            self.b.wheel(W // 2, H // 2, -100)
-            time.sleep(self.notch_wait)
-        self.wait(0.6)
-        return n
+    def measure_zoom(self, max_in=45):
+        """Work out the zoom you've set by hand, as 'N notches in from fully zoomed out'.
+        Remembers how the screen looks, zooms all the way out, then steps back in until
+        it looks the same again; then checks that set_zoom(N) gets there too.
+        Returns (N, ok)."""
+        ref = self._settled()
+        self.zoom_all_out()
+        best_k, best_d, k = 0, self._changed(self._small(), ref), 0
+        while k < max_in:
+            k += 1
+            d = self._changed(self._notch(out=False), ref)
+            if d < best_d:
+                best_k, best_d = k, d
+            if best_d < 0.05 and k >= best_k + 3:   # clearly past the match
+                break
+        self.set_zoom(best_k, anchor=True)           # the way it'll be done from now on
+        check = self._changed(self._settled(), ref)
+        log.info("zoom: %d notches in (match %.3f, check %.3f)", best_k, best_d, check)
+        return best_k, best_d < 0.08 and check < 0.08
 
     # ------------------------------------------------------------- panning
     def fast_view(self) -> View:
