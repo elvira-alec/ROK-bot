@@ -277,7 +277,7 @@ class Panel:
             "can_self_update": updater.can_self_update(),
             "phase": st.phase, "message": st.message, "round": st.round,
             "last_site": st.last_site, "alerts": st.alerts, "look": st.look,
-            "armies": st.armies, "radar": st.radar,
+            "armies": st.armies, "radar": st.radar, "focus": {str(k): v for k, v in st.focus.items()},
             "snaps": snapshots.listing(limit=24),
             "progress": st.progress, "doing": st.doing,
             "live": self.live_id(),
@@ -430,6 +430,9 @@ def make_handler(panel: Panel, port_holder=None):
                 self.end_headers()
                 self.wfile.write(data)
                 return
+            if path == "/api/activity":
+                from . import activity
+                return self._send(200, activity.data())
             if path.startswith("/live.jpg"):
                 q = parse_qs(urlsplit(self.path).query)
                 try:
@@ -471,6 +474,16 @@ def make_handler(panel: Panel, port_holder=None):
                     "/api/stop": "stop", "/api/look": "look", "/api/axes": "axes",
                     "/api/recall": "recall", "/api/test_alert": "test_alert",
                     "/api/hunt": "hunt"}
+            if path == "/api/army":
+                try:
+                    aid = int(data["id"])
+                except (KeyError, TypeError, ValueError):
+                    return self._send(400, {"error": "id needed"})
+                f = panel.worker.status.focus.setdefault(aid, {})
+                for k in ("follow", "alert_moves", "alert_home"):
+                    if k in data:
+                        f[k] = bool(data[k])
+                return self._send(200, {"ok": True, "focus": f})
             if path == "/api/quit":
                 log.info("Quit from the panel")
                 panel.worker.send("stop")

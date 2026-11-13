@@ -140,3 +140,56 @@ def test_army_list_marks_threats_first():
     assert rows[0]["threat"] == "stone" and rows[0]["threat_how"] == "aimed"
     assert rows[1]["state"] == "gathering" and rows[1]["threat"] is None
     assert t.map_info()["city"] == [162, 374] and len(t.map_info()["mine"]) == 2
+
+
+def test_badges_not_diamonds_and_found_in_your_snapshot():
+    # red hostile diamonds have a white symbol too, but aren't farms
+    for n in ("attack_red_diamond_simple", "scouted_toast_simple"):
+        assert screen.find_gather_badges(cv2.imread(str(REAL / f"{n}.png"))) == [], n
+    # his farm in the snapshot you sent (the bot's own window size)
+    f = cv2.imread(str(G / "snap_stuck_box_and_profile.jpg"))
+    assert len(screen.find_gather_badges(f)) == 1
+    # no fake march lines along the quest panel on the left
+    assert screen.find_march_lines(cv2.imread(str(G / "snap_side_panel_no_marches.jpg"))) == []
+
+
+def test_his_farm_never_takes_a_neighbours_owner():
+    from rokwatch.hunter import ArmySeen, Tracker
+    t = Tracker((162, 374), [])
+    t.match([ArmySeen((170.0, 390.0), False, None, 0, kind="farm")], 0)
+    t.armies[0].owner, t.armies[0].checks = "other", 1
+    # his farm 5 tiles away: a different farm, not the same one
+    t.match([ArmySeen((170.0, 390.0), False, None, 60, kind="farm"),
+             ArmySeen((175.0, 390.0), False, None, 60, kind="farm")], 60)
+    owners = sorted((a.tile, a.owner) for a in t.armies)
+    assert owners == [((170.0, 390.0), "other"), ((175.0, 390.0), None)]
+    # checked without finding his name: not listed; not checked yet: listed
+    assert [r["x"] for r in t.summary()] == [175]
+
+
+def test_farm_details_and_arrival_time():
+    from rokwatch.hunter import Army, Hunter, Tracker
+    f = img("camp_popup_gatherer")
+    texts = screen.read_text(f, screen.find_info_box(f))
+    d = Hunter._farm_details(Hunter, texts)
+    assert "Logging Camp" in d.get("what", "") and d.get("reserves") == 99863, d
+    a = Army(1, (170.0, 390.0), 0, 60, moving=True)
+    a.history = [(0, (160.0, 380.0)), (60, (170.0, 390.0))]
+    a.dest = (184.0, 404.0)
+    m = Tracker._motion(a)
+    assert abs(m["speed"] - 14.1) < 0.2 and abs(m["eta_min"] - 1.4) < 0.1, m
+
+
+def test_activity_log_and_report(tmp_path):
+    from rokwatch import activity
+    log = activity.ActivityLog(tmp_path / "a.csv", tmp_path / "w.csv")
+    t0 = 1_700_000_000
+    assert log.round([{"id": 1, "state": "gathering", "his": True, "x": 1, "y": 2}], t0) == []
+    ch = log.round([{"id": 1, "state": "going home", "his": True, "x": 1, "y": 2},
+                    {"id": 2, "state": "marching out", "his": True, "x": 5, "y": 6}], t0 + 60)
+    assert (1, "gathering", "going home") in ch and (2, None, "marching out") in ch
+    assert log.round([], t0 + 120) == [(1, "going home", None), (2, "marching out", None)]
+    d = activity.data(actions=tmp_path / "a.csv", watch=tmp_path / "w.csv", now=t0 + 200)
+    kinds = [a[1] for a in d["actions"]]
+    assert kinds == ["changed", "army_seen", "army_gone", "army_gone"], kinds
+    assert sum(w[1] for w in d["watch"]) == 3 and d["watch"][0][2] >= 1     # 3 minutes, farms out

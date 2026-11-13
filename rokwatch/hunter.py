@@ -105,6 +105,7 @@ class Army:
     kind: str = "army"             # "army", "scout" or "farm" (gathering at a resource point)
     prev_tile: tuple | None = None # where it was last sweep
     checks: int = 0                # how many times we zoomed in to read its name
+    info: dict = field(default_factory=dict)   # farm details read from its box (what, reserves)
 
 
 class Tracker:
@@ -176,7 +177,9 @@ class Tracker:
         for s in sorted(sightings, key=lambda s: s.tile):
             same = [a for a in unmatched if a.kind == getattr(s, "kind", "army")]
             best = min(same, key=lambda a: math.dist(a.tile, s.tile), default=None)
-            if best and math.dist(best.tile, s.tile) <= self.match_dist:
+            # farms don't move and sit close together: only the same spot is the same farm
+            limit = 3.0 if getattr(s, "kind", "army") == "farm" else self.match_dist
+            if best and math.dist(best.tile, s.tile) <= limit:
                 unmatched.remove(best)
                 a, prev_tile, prev_moving = best, best.tile, best.moving
             else:
@@ -361,7 +364,8 @@ class Tracker:
         return (close[0], "close") if close else None
 
     def summary(self, include=None):
-        include = include or (lambda a: a.owner in (None, "him"))
+        # his, plus ones not checked yet; ones checked without finding his name are left out
+        include = include or (lambda a: a.owner == "him" or (a.owner is None and a.checks == 0))
 
         def state(a):
             if a.moving:
@@ -381,10 +385,25 @@ class Tracker:
                         "last_seen": datetime.fromtimestamp(a.last_seen).strftime("%H:%M:%S"),
                         "seen_ts": a.last_seen, "his": a.owner == "him", "kind": a.kind,
                         "threat": th[0] if th else None, "threat_how": th[1] if th else None,
-                        "dist_home": round(math.dist(a.tile, self.city))})
+                        "dist_home": round(math.dist(a.tile, self.city)),
+                        "trail": [[round(p[0]), round(p[1])] for _, p in a.history[-10:]],
+                        "info": a.info, **self._motion(a)})
         # the dangerous ones first, then his confirmed ones, nearest to you first
         out.sort(key=lambda r: (r["threat"] is None, not r["his"], r["dist_home"]))
         return out
+
+    @staticmethod
+    def _motion(a):
+        """Speed (tiles a minute) from its last moves, and minutes until it gets where
+        its march line ends."""
+        if not a.moving or len(a.history) < 2:
+            return {"speed": None, "eta_min": None}
+        (t0, p0), (t1, p1) = a.history[-2], a.history[-1]
+        if t1 - t0 < 5:
+            return {"speed": None, "eta_min": None}
+        speed = math.dist(p0, p1) / ((t1 - t0) / 60)
+        eta = math.dist(p1, a.dest) / speed if a.dest and speed > 0.05 else None
+        return {"speed": round(speed, 1), "eta_min": round(eta, 1) if eta is not None else None}
 
     def map_info(self):
         """For the panel's little map: his city and your spots."""
@@ -424,7 +443,10 @@ class Hunter:
         self.auto_recall = bool(cfg.get("patrol", {}).get("auto_recall", False))
         self.seen_text: dict = {}     # army id -> text read when we zoomed in (for checking)
         self.warning = AttackAlertDetector()
+        from .activity import ActivityLog
+        self.activity = ActivityLog()
         self.full_sweep_every = float(h.get("full_sweep_minutes", 4)) * 60
+        self.focus: dict = {}          # army id -> {"follow", "alert_moves", "alert_home"} (panel)
         self._last_full = 0.0
         self._rounds = 0
         self.mode = ""                 # what the last round did: sweep / track / base
@@ -596,6 +618,7 @@ class Hunter:
             self.seen_text[getattr(a, "id", 0)] = [t.text for t in texts]
             mine = [t for t in texts if screen.name_score(t.text, self.name) >= 0.75]
             coords = next((screen.parse_coords(t.text) for t in texts if screen.parse_coords(t.text)), None)
+            a.info = self._farm_details(texts) or a.info
             if mine:
                 a.owner = "him"
             elif any(self.GATHER_RX.search(t.text) for t in texts):
@@ -606,6 +629,27 @@ class Hunter:
             return
         log.info("hunt: couldn't open the resource point at %.0f,%.0f", a.tile[0], a.tile[1])
         self.game.close_popups()
+
+    RESOURCE_RX = re.compile(r"(level|nivel|niveau|stufe)|camp|farm|quarry|mine|cropland|"
+                             r"tala|campo|cantera|mina|cultivo", re.I)
+    RESERVES_RX = re.compile(r"reserv|r[ée]serv|vorr", re.I)
+
+    def _farm_details(self, texts):
+        """What the resource point is (e.g. 'Level 6 Logging Camp') and its reserves."""
+        out = {}
+        what = [t.text.strip() for t in texts if self.RESOURCE_RX.search(t.text)
+                and not self.GATHER_RX.search(t.text) and len(t.text.strip()) > 6]
+        if what:
+            out["what"] = max(what, key=len)
+        lab = next((t for t in texts if self.RESERVES_RX.search(t.text)), None)
+        if lab:
+            row = [t for t in texts if t is not lab and abs(t.center[1] - lab.center[1]) < max(12, lab.box[3])]
+            for t in row:
+                digits = re.sub(r"[^0-9]", "", t.text)
+                if len(digits) >= 3:
+                    out["reserves"] = int(digits)
+                    break
+        return out
 
     def update_my_spots(self):
         """Where are my gathering troops right now? Tap each gathering troop's portrait
@@ -704,8 +748,13 @@ class Hunter:
         """Where to look: each tracked army's likely spot now, plus his city; spots close
         together are looked at in one go. Ordered so the camera moves the least."""
         vw, vh = view_size_tiles(self.axes, frame_shape)
-        pts = [predict(a, now) for a in self.tracker.armies if a.owner != "other"]
-        pts.append(tuple(self.city))
+        followed = [a for a in self.tracker.armies if (self.focus.get(a.id) or {}).get("follow")]
+        if followed and self._rounds % 3:
+            # following some closely: just those (the rest every third round)
+            pts = [predict(a, now) for a in followed]
+        else:
+            pts = [predict(a, now) for a in self.tracker.armies if a.owner != "other"]
+            pts.append(tuple(self.city))
         merged = []
         for p in pts:
             if all(abs(p[0] - q[0]) > 0.3 * vw or abs(p[1] - q[1]) > 0.3 * vh for q in merged):
@@ -755,7 +804,8 @@ class Hunter:
                 continue
             k = min((a for a in known if a.kind == s.kind),
                     key=lambda a: math.dist(predict(a, time.time()), s.tile), default=None)
-            if k and math.dist(predict(k, time.time()), s.tile) < 8:
+            near = 2.5 if s.kind == "farm" else 8      # farms: only the very same spot
+            if k and math.dist(predict(k, time.time()), s.tile) < near:
                 s.owner = k.owner
                 continue
             new.append(s)
@@ -802,7 +852,25 @@ class Hunter:
         else:
             events = self.tracker.update(sightings, now)
         self._log()
+        changes = []
+        try:
+            changes = self.activity.round(self.tracker.summary(), now) or []
+            if "attacked" in self.dangers or "scouted" in self.dangers:
+                self.activity.action("scouted_you" if "scouted" in self.dangers else "attacked_you", now=now)
+        except Exception:
+            log.debug("activity log failed", exc_info=True)
         alerts = []
+        for aid, before, after in changes:                 # alerts you asked for on one army
+            f = self.focus.get(aid) or {}
+            if f.get("alert_moves") and before and after and before != after:
+                alerts.append(Alert(f"army-{aid}-{now}", f"His army #{aid} changed",
+                                    f"Was {before}, now {after}.", urgent=False, cooldown=False))
+            elif f.get("alert_moves") and after is None:
+                alerts.append(Alert(f"army-{aid}-{now}", f"His army #{aid} is gone",
+                                    f"It was {before}; it's no longer where it was.", cooldown=False))
+            if f.get("alert_home") and after in ("going home", "at his city") and before != after:
+                alerts.append(Alert(f"home-{aid}-{now}", f"His army #{aid} is heading home",
+                                    f"Was {before}, now {after}.", cooldown=False))
         if "attacked" in self.dangers:
             alerts.append(Alert("danger-attacked", "YOU'RE UNDER ATTACK",
                                 "The red sword is showing in the game: an attack is coming at you.",

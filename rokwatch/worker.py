@@ -45,6 +45,7 @@ class Status:
     armies: list = field(default_factory=list)   # his armies, from the last hunt sweep
     snaps: int = 0                               # snapshots saved this session
     radar: dict | None = None                    # his city + your spots, for the panel map
+    focus: dict = field(default_factory=dict)    # army id -> {"follow", "alert_moves", "alert_home"}
     progress: list | None = None                 # [done, total] of the current job
     doing: str = ""                              # what it's doing right now (short)
 
@@ -402,6 +403,7 @@ class Worker:
             self.status.radar = hunter.tracker.map_info()
             self._maybe_sample_quick()
         hunter.on_progress = prog
+        hunter.focus = self.status.focus          # the panel's per-army choices, live
         notifier = Notifier.from_config(cfg.get("notify", {}))
         self.stop_patrol.clear()
         self.status.round = 0

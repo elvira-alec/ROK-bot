@@ -273,6 +273,9 @@ def find_march_lines(frame: np.ndarray, min_dots=8, colors=None) -> list[MarchLi
             a, b = p[t.argmin()], p[t.argmax()]
             if a[1] > chat_top and b[1] > chat_top:
                 continue
+            W = frame.shape[1]
+            if a[0] < 0.13 * W and b[0] < 0.13 * W:       # the quest / side panel on the left
+                continue
             lines.append(MarchLine((int(a[0]), int(a[1])), (int(b[0]), int(b[1])), name,
                                    len(members), spacing))
     return _merge_lines(lines, H)
@@ -1145,13 +1148,22 @@ def find_gather_badges(frame: np.ndarray, colour="red") -> list:
     out = []
     for i in range(1, n):
         x, y, w, h, a = st[i]
-        if not (0.026 * H <= w <= 0.05 * H and 0.75 < w / h < 1.33 and a >= 0.5 * w * h):
+        if not (0.016 * H <= w <= 0.06 * H and 0.75 < w / h < 1.33 and a >= 0.55 * w * h):
             continue
         k = max(2, w // 6)                       # round: the bounding box corners are empty
         corners = [mask[y:y + k, x:x + k], mask[y:y + k, x + w - k:x + w],
                    mask[y + h - k:y + h, x:x + k], mask[y + h - k:y + h, x + w - k:x + w]]
         if max(float(np.mean(cc > 0)) for cc in corners) > 0.35:
             continue                             # e.g. a red banner (square top corners)
+        # round, not a diamond (red hostile army icons): just inside each corner, along
+        # the diagonal, a circle is still red and a diamond isn't
+        diag = 0
+        for fx, fy in ((0.21, 0.21), (0.79, 0.21), (0.21, 0.79), (0.79, 0.79)):
+            px, py, r = x + int(fx * w), y + int(fy * h), max(1, w // 14)
+            if np.mean(mask[py - r:py + r + 1, px - r:px + r + 1] > 0) > 0.4:
+                diag += 1
+        if diag < 3:
+            continue
         inner = white[y + h // 5:y + h - h // 5, x + w // 5:x + w - w // 5]
         if inner.size and np.mean(inner > 0) > 0.08:             # the white pickaxe
             out.append((int(c[i][0]) + x0, int(c[i][1]) + y0))
