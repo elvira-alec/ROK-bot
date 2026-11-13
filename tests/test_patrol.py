@@ -213,3 +213,21 @@ def test_pan_to_drags_instead_of_typing(game):
     assert js(game, "sim.state.typed || ''") == typed      # no coordinates typed
     assert game.pan_to(100, 300, axes)                     # far away: types them in
     assert js(game, "[sim.state.cam.x, sim.state.cam.y]") == [100, 300]
+
+
+def test_my_troops_by_tapping_the_troop_list(game):
+    """Each commander in the list is tapped: the game jumps to it; gathering ones give
+    their exact X:Y from the box. Then back to the searching zoom."""
+    from rokwatch.hunter import Hunter
+    h = Hunter(game, {"hunt": {"player_name": "x", "city": [162, 374]}}, [("camp", (205, 424))])
+    js(game, "sim.state.zoom = 1; sim.state.simple = true")
+    time.sleep(0.3)
+    h.update_my_troops()
+    got = sorted((t["state"], t["x"], t["y"], t["exact"]) for t in h.my_troops.values())
+    want = sorted(("gathering", *xy, True) for xy in js(game, "sim.state.troops.map(t => t.at)"))
+    assert got == want, got
+    assert js(game, "sim.state.box") is None                 # boxes closed again
+    assert {n for n, _ in h.tracker.my_sites} >= {"camp"}
+    assert len(h.tracker.my_sites) == 1 + len(want)          # its spots count for alerts
+    rows = h.my_troops_summary()
+    assert [r["index"] for r in rows] == [0, 1, 2] and all(r["checked"] for r in rows)

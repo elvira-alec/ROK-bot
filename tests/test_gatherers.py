@@ -550,3 +550,14 @@ def test_farm_estimate_wobble_is_not_a_move():
              ArmySeen((152.4, 383.0), False, None, 30, kind="farm")], 30)
     assert [e for e in t.events() if e[0] == "pulling_back"] == []
     assert all(r["trail"] == [] for r in t.summary())
+
+
+def test_my_marching_troop_speed():
+    h = Hunter.__new__(Hunter)
+    h.my_troops = {0: {"index": 0, "state": "marching", "checked": 120, "x": 210, "y": 430,
+                       "exact": False, "history": [(60, (200, 420)), (120, (206, 428))]},
+                   1: {"index": 1, "state": "gathering", "checked": 120, "x": 205, "y": 424,
+                       "exact": True, "history": [(60, (205, 424)), (120, (205, 424))]}}
+    rows = h.my_troops_summary()
+    assert rows[0]["speed"] == 10.0 and rows[0]["trail"]
+    assert rows[1]["speed"] is None and rows[1]["trail"] == []

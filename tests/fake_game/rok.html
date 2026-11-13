@@ -191,7 +191,8 @@
   });
   cv.addEventListener('mouseup', e => {
     const d = down; down = null;
-    if (d && d.dragged) return;
+    // like the game: dragging the map outside an info box closes it
+    if (d && d.dragged) { if (state.box !== null && !inside(box, d.x, d.y)) state.box = null; return; }
     click(e.offsetX, e.offsetY);
   });
   function click(x, y) {

@@ -282,6 +282,10 @@ frames, and find the first step that went wrong. Turn that frame into a regressi
   tapping the magnifier, and again to find the X/Y boxes (2.6 s); the name check at close zoom
   read the whole screen (1.5–2 s); pans used two drags. Now: strip reader ~0.13 s, the bar row
   only (~0.2 s), the middle of the screen only (~0.35 s), one drag covers 60% of the view.
+- (v1.15) "Your troops": taps each commander in the troop list (the game jumps to it) for its
+  position and state. It's rechecked about every 45 s while one is marching, and its spots
+  count for alerts. To verify in the real game: does the jump always land before the camera
+  read (1.2 s cap)? Does a jump change the zoom (`to_sweep` runs after)?
 - (v1.14) From the army recording: at the close view the army is a red troop cluster with a
   tiny name above it, which the normal read missed. Added `find_troop_clusters`,
   `read_army_label` (3x enlarged) and `army_owner_at_close`; the hunter's army check uses them

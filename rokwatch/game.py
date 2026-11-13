@@ -726,8 +726,51 @@ class Game:
 
     # ---------------------------------------------------------------- troops
     def troops(self, view: View | None = None):
-        v = view or self.look()
-        return screen.troop_panel(v.frame, v.texts)
+        """Your troop list on the right: (used, total, [TroopSlot]) or None.
+        Reads only the right-hand part of the screen (quick); the whole screen if that fails."""
+        if view is not None:
+            return screen.troop_panel(view.frame, view.texts)
+        f = self.frame()
+        H, W = f.shape[:2]
+        x0 = int(0.72 * W)
+        res = screen.troop_panel(f, screen.read_text(f, (x0, 0, W - x0, int(0.5 * H)), strip=True))
+        if not res or not res[2]:
+            v = self.look(f)
+            res = screen.troop_panel(v.frame, v.texts)
+        return res
+
+    def troop_spot(self, slot) -> dict | None:
+        """Tap one of your commanders in the troop list: the game jumps to that army.
+        Returns {"xy": (x, y), "exact": bool}: the exact X:Y from its box when it's
+        gathering, else where the camera went. None if nothing could be read."""
+        before = self._cam or self.camera_fast(full=False)
+        self.b.click(*slot.portrait)
+        xy, exact, box, f = None, False, None, None
+        end = time.time() + 1.2
+        last = None
+        while time.time() < end:                   # wait for the jump to land
+            time.sleep(0.08)
+            f = self.frame()
+            box = screen.find_info_box(f)
+            c = screen.camera_coords(f)
+            cam = (c[1], c[2]) if c else None
+            if cam and cam == last and (cam != before or time.time() > end - 0.6):
+                break                              # moved and settled (or it was already here)
+            last = cam
+        if box is not None and f is not None:
+            H = f.shape[0]
+            for t in screen.read_text(f, box):
+                if t.box[1] < H * 0.12:
+                    continue
+                c = screen.parse_coords(t.text)
+                if c:
+                    xy, exact = (c[1], c[2]), True
+                    break
+        if xy is None and last:
+            xy = last
+        self.close_popups()
+        self._cam = None                           # the camera moved: read it again next time
+        return {"xy": xy, "exact": exact} if xy else None
 
     def troop_location(self, slot) -> tuple | None:
         """Select a troop; returns (x, y) of where it's gathering (from the info box)."""

@@ -277,7 +277,7 @@ class Panel:
             "can_self_update": updater.can_self_update(),
             "phase": st.phase, "message": st.message, "round": st.round,
             "last_site": st.last_site, "alerts": st.alerts, "look": st.look,
-            "armies": st.armies, "radar": st.radar, "focus": {str(k): v for k, v in st.focus.items()},
+            "armies": st.armies, "radar": st.radar, "my_troops": st.my_troops, "focus": {str(k): v for k, v in st.focus.items()},
             "snaps": snapshots.listing(limit=24),
             "progress": st.progress, "doing": st.doing, "trace": __import__("rokwatch.trace", fromlist=["TRACE"]).TRACE.status(),
             "live": self.live_id(),
@@ -536,6 +536,9 @@ def make_handler(panel: Panel, port_holder=None):
                 msg = panel.install_update()
                 return self._send(200, {"ok": msg == "Updating", "message": msg,
                                         "version": panel.updating})
+            if path == "/api/my_troops":
+                panel.worker.send("my_troops")
+                return self._send(200, {"ok": True})
             if path == "/api/record_army":
                 panel.worker.send("record_army")
                 return self._send(200, {"ok": True})

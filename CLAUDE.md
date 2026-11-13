@@ -103,6 +103,13 @@ was fixed, how to test, and how to build and publish. Read it all before changin
 
 **The troop list** (right side, under "N/M") shows the user's commanders. Badge symbols tell
 the state: gathering, marching, returning, fighting and so on. Scouts appear at the bottom.
+**Tapping a commander makes the game jump to that army** (and opens its box when it's
+gathering). "Your troops" uses this: `Game.troops()` (reads only the right side),
+`Game.troop_spot(slot)` (tap, wait for the jump, exact X:Y from the box or the camera), and
+`Hunter.update_my_troops()`. It runs every `track_my_gathering_minutes` (default 10), and every
+45 s while one of the user's armies is moving. Each troop's spot is added to
+`tracker.my_sites`, so his armies heading for it raise alerts. Panel: "Your troops" with
+"Check my troops now".
 
 **Real screenshots** are in `tests/real_screens/`, `tests/real_screens/crops/`,
 `tests/real_screens/icons/` (red swords) and `tests/real_screens/gather/` (farms, info

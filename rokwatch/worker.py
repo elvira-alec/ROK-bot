@@ -48,6 +48,7 @@ class Status:
     focus: dict = field(default_factory=dict)    # army id -> {"follow", "alert_moves", "alert_home"}
     progress: list | None = None                 # [done, total] of the current job
     doing: str = ""                              # what it's doing right now (short)
+    my_troops: list = field(default_factory=list)  # your armies: state, where, speed
 
 
 class Worker:
@@ -407,6 +408,23 @@ class Worker:
         report = game.recall_all()
         self._set("ready", "Recall: " + "; ".join(report))
 
+    def _do_my_troops(self):
+        """'Check my troops now': tap each of your commanders in the troop list and note
+        where it is and what it's doing."""
+        from .commands import sites_from
+        from .hunter import Hunter
+        cfg = self._cfg()
+        game = self._game()
+        mine = [(s.name, (s.x, s.y)) for s in sites_from(cfg) if s.kind == "mine"]
+        h = getattr(self, "hunter", None) or Hunter(game, cfg, mine)
+        h.game = game
+        self._set("busy", "Checking your troops (tapping each in the troop list)...")
+        h.update_my_troops()
+        self.status.my_troops = h.my_troops_summary()
+        n = len(self.status.my_troops)
+        self._set("ready", f"Your troops: {n} out" if n else "None of your troops are out (or the troop "
+                                                              "list isn't showing on the right)")
+
     def _do_test_alert(self):
         n = Notifier.from_config(self._cfg().get("notify", {}), background=False)
         if not n.has_target:
@@ -441,6 +459,7 @@ class Worker:
             self.status.doing = (mode + ": " if mode and not doing.startswith(mode) else "") + doing
             self.status.armies = hunter.tracker.summary()
             self.status.radar = hunter.tracker.map_info()
+            self.status.my_troops = hunter.my_troops_summary()
             self._maybe_sample_quick()
         hunter.on_progress = prog
         hunter.focus = self.status.focus          # the panel's per-army choices, live
@@ -469,6 +488,7 @@ class Worker:
             self.status.round += 1
             self._maybe_sample()
             self.status.armies = hunter.tracker.summary()
+            self.status.my_troops = hunter.my_troops_summary()
             self.status.last_site = f"{len(self.status.armies)} of his armies tracked"
             end = time.time() + float(h.get("pause_between_sweeps", 0))     # no idle between rounds
             while time.time() < end and not self.stop_patrol.is_set():

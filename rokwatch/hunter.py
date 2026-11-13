@@ -584,6 +584,7 @@ class Hunter:
                                h.get("match_distance", 12), h.get("near_site", 8),
                                h.get("moving_close", 20))
         self.fixed_sites = list(my_sites)
+        self.my_troops = {}                       # troop list index -> what we know of it
         self.refresh_spots = float(h.get("track_my_gathering_minutes", 10)) * 60
         self._spots_at = 0.0
         self.log_path = Path(log_path)
@@ -961,9 +962,13 @@ class Hunter:
             o.checks += 1
             self._read_farm_box(o, tap)
 
-    def update_my_spots(self):
-        """Where are my gathering troops right now? Tap each gathering troop's portrait
-        and read the resource point's coordinates from its info box (viewing only)."""
+    MOVING_STATES = ("marching", "returning", "fighting", "stopped")
+
+    def update_my_troops(self):
+        """Where are your armies right now, and what are they doing? Tap each commander
+        in the troop list on the right: the game jumps to it. Gathering ones give their
+        exact X:Y (from the box); marching ones where the camera went. No map search.
+        Their spots then count for 'heading for your troops' alerts."""
         try:
             panel = self.game.troops()
         except Exception as e:
@@ -971,17 +976,53 @@ class Hunter:
             return
         if not panel:
             return
-        spots = []
+        now = time.time()
+        seen = {}
         for slot in panel[2]:
-            if slot.state != "gathering":
-                continue
-            loc = self.game.troop_location(slot)
-            self.game.close_popups()
-            if loc:
-                spots.append((f"your troop {slot.index + 1} (gathering at {loc[0]},{loc[1]})", loc))
+            if slot.state in ("scout", "idle"):
+                continue                          # scouts, and commanders at home
+            self.game.check_stop()
+            spot = self.game.troop_spot(slot)
+            t = self.my_troops.get(slot.index) or {"index": slot.index, "history": []}
+            t.update(state=slot.state, checked=now)
+            if spot:
+                t.update(x=int(spot["xy"][0]), y=int(spot["xy"][1]), exact=spot["exact"])
+                t["history"] = (t["history"] + [(now, (t["x"], t["y"]))])[-10:]
+            seen[slot.index] = t
+        self.my_troops = seen
+        # back to the searching zoom (a jump can change the view)
+        self.game._at = None
+        self.zoom_out()
+        spots = [(f"your troop {t['index'] + 1} ({t['state']} at {t['x']},{t['y']})", (t["x"], t["y"]))
+                 for t in seen.values() if "x" in t]
         self.tracker.my_sites = self.fixed_sites + spots
-        if spots:
-            log.info("hunt: your gathering troops are at %s", [s[1] for s in spots])
+        if seen:
+            log.info("hunt: your troops: %s", "; ".join(
+                f"{t['index'] + 1} {t['state']}" + (f" at {t['x']},{t['y']}" if "x" in t else "")
+                for t in seen.values()))
+
+    update_my_spots = update_my_troops            # (old name)
+
+    def my_troops_summary(self):
+        """For the panel: your troops, with speed for moving ones."""
+        out = []
+        for t in sorted(self.my_troops.values(), key=lambda t: t["index"]):
+            r = {k: t.get(k) for k in ("index", "state", "x", "y", "exact")}
+            r["checked"] = datetime.fromtimestamp(t["checked"]).strftime("%H:%M:%S") if t.get("checked") else None
+            h = t.get("history") or []
+            r["speed"] = None
+            if t.get("state") in self.MOVING_STATES and len(h) >= 2 and h[-1][0] - h[-2][0] >= 10:
+                (t0, p0), (t1, p1) = h[-2], h[-1]
+                r["speed"] = round(math.dist(p0, p1) / ((t1 - t0) / 60), 1)
+            r["trail"] = [list(p) for _, p in h] if t.get("state") in self.MOVING_STATES else []
+            out.append(r)
+        return out
+
+    def _troops_due(self, now):
+        if not self.refresh_spots:
+            return False
+        moving = any(t.get("state") in self.MOVING_STATES for t in self.my_troops.values())
+        return now - self._spots_at >= (min(self.refresh_spots, 45) if moving else self.refresh_spots)
 
     def is_his(self, a) -> bool:
         """His for sure (name read), or not checked yet but on a route that starts or
@@ -1242,10 +1283,10 @@ class Hunter:
             sightings, covered = self.visit(pts, stop)
             visited = len(covered)
         # where my troops are gathering (after the search, so it gets going at once)
-        if self.refresh_spots and now - self._spots_at >= self.refresh_spots:
+        if self._troops_due(now):
             self._spots_at = now
-            self._progress(0, 1, "Checking where your troops are gathering")
-            self.update_my_spots()
+            self._progress(0, 1, "Checking your troops (tapping each in the troop list)")
+            self.update_my_troops()
         if self.method == "zoomed_out":
             self.tracker.match(sightings, now, covered)
             lost = [a for a in getattr(self.tracker, "gone", [])

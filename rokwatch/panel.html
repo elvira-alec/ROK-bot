@@ -166,6 +166,16 @@
       city or troops. The map shows map coordinates (X to the right, Y up), not the game's tilted camera.</p>
   </section>
 
+  <section id="mine-box">
+    <h2><svg class="i"><use href="#i-target"/></svg> Your troops</h2>
+    <p id="mine-sum" class="hint" style="margin:0">Not checked yet.</p>
+    <div id="mine-list"></div>
+    <div class="row"><button onclick="checkMine()">Check my troops now</button></div>
+    <p class="hint">It taps each of your commanders in the troop list on the right (the game jumps to it) and
+      notes where it is and what it's doing. While watching it does this every few minutes, and about every
+      45 s while one of yours is marching. His armies heading for any of them raise an alert.</p>
+  </section>
+
   <section id="act-box" style="grid-column:1/-1">
     <h2><svg class="i"><use href="#i-chart"/></svg> Activity: when is he online?</h2>
     <p id="act-now" style="margin:0">-</p>
@@ -462,7 +472,8 @@ async function updateLater() {
 }
 const ico = k => `<svg class="i"><use href="#i-${k}"/></svg>`;
 const ICON = { 'gathering': 'pickaxe', 'parked / gathering': 'tent', 'marching out': 'arrow', 'going home': 'back',
-               'marching': 'arrow', 'scout': 'eye', 'at his city': 'castle', 'moving? (near the edge)': 'arrow' };
+               'marching': 'arrow', 'scout': 'eye', 'at his city': 'castle', 'moving? (near the edge)': 'arrow',
+               'returning': 'back', 'fighting': 'alert', 'stopped': 'clock' };
 function ago(ts) {
   if (!ts) return '';
   const s = Math.max(0, Date.now() / 1000 - ts);
@@ -478,6 +489,21 @@ async function setFocus(id, k, v) {
   const r = await (await fetch('/api/army', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id, [k]: v }) })).json();
   focus[id] = r.focus; toast(v ? 'On for army #' + id : 'Off for army #' + id, 'good'); refresh();
+}
+function drawMine(tr) {
+  if (!tr.length) { $('mine-sum').textContent = 'Not checked yet (or none of your troops are out).'; $('mine-list').innerHTML = ''; return; }
+  $('mine-sum').textContent = `${tr.length} out`;
+  $('mine-list').innerHTML = tr.map(t => `<div class="army">
+      <div class="ic">${ico(ICON[t.state] || 'diamond')}</div>
+      <div><div class="what">Troop ${t.index + 1}: ${esc(t.state)}</div>
+        ${t.x != null ? `<a class="xy" onclick="jumpTo(${+t.x}, ${+t.y})">X:${esc(t.x)} Y:${esc(t.y)}</a>
+          <small class="hint">${t.exact ? 'exact' : 'about'}</small>` : '<small class="hint">position not read</small>'}
+        ${t.speed != null ? `<div class="detail">${ico('clock')} ${esc(t.speed)} tiles/min</div>` : ''}</div>
+      <div class="ago">${esc(t.checked || '')}</div></div>`).join('');
+}
+async function checkMine() {
+  await fetch('/api/my_troops', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  toast('Checking your troops', 'good');
 }
 function drawArmies(ar, radar) {
   const his = ar.filter(a => a.his), threats = ar.filter(a => a.threat);
@@ -715,6 +741,7 @@ async function refresh() {
   }
   focus = st.focus || {};
   drawArmies(st.armies || [], st.radar);
+  drawMine(st.my_troops || []);
   const lg = $('log'), atEnd = lg.scrollTop + lg.clientHeight >= lg.scrollHeight - 5;
   lg.textContent = st.log.join('\n'); if (atEnd) lg.scrollTop = lg.scrollHeight;
   if (st.look && st.look.time !== lastLook) {
@@ -739,7 +766,7 @@ async function loadPhone() {
     const main = document.querySelector('main');
     const find = t => [...main.children].find(sec => sec.querySelector('h2')?.textContent.includes(t));
     // top to bottom: what he's doing, then the steps 1-4 in order, then the rest
-    const order = ['Live view', 'His armies', 'Connect to the game', 'Who to watch', 'Set up the zoom',
+    const order = ['Live view', 'His armies', 'Your troops', 'Connect to the game', 'Who to watch', 'Set up the zoom',
                    '4 Watch', 'Recent alerts', 'Alerts to your phone', 'Activity'];
     order.slice().reverse().forEach(t => { const sec = find(t); if (sec) main.prepend(sec); });
     return;
