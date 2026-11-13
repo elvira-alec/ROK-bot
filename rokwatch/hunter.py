@@ -372,8 +372,10 @@ class Tracker:
         if close:
             if ("close", close[0]) not in a.alerted:
                 a.alerted.add(("close", close[0]))
-                out.append(("army_close", f"His army is moving close to {close[0]} (its march "
-                                          f"ends about {close[1]:.0f} tiles away).",
+                near = self._close_to(a, every=True)
+                names = ", ".join(f"{n} (~{d:.0f} tiles)" for n, d in near)
+                out.append(("army_close", f"His army is moving close to {names}: its path passes "
+                                          f"about {close[1]:.0f} tiles from the nearest.",
                             {"target": close[0], "id": a.id}))
             return out          # already told; "sent an army out" would only repeat it
         elif a.direction == "out" and "out" not in a.alerted and not hit:
@@ -382,9 +384,9 @@ class Tracker:
             out.append(("army_out", f"He sent an army out{dest}.", {"target": None, "id": a.id}))
         return out
 
-    PAST_EDGE = 15.0          # tiles: how far a march line may run on past where the screen cut it
+    PAST_EDGE = 30.0          # tiles: how far a march line may run on past where the screen cut it
 
-    def _close_to(self, a: Army):
+    def _close_to(self, a: Army, every=False):
         """(spot name, distance) when its march passes within `approach` tiles of one of
         your spots (and it isn't walking away home). Uses the closest point of its path,
         followed a little past the end we saw: a line running off the screen is cut
@@ -401,14 +403,17 @@ class Tracker:
             return None
         ux, uy = (far[0] - start[0]) / length, (far[1] - start[1]) / length
         reach = length + self.PAST_EDGE
-        best = None
+        hits = []
         for name, pos in self.my_sites:
             t = (pos[0] - start[0]) * ux + (pos[1] - start[1]) * uy
             t = max(0.0, min(reach, t))
             d = math.dist(pos, (start[0] + ux * t, start[1] + uy * t))
-            if d <= self.approach and (best is None or d < best[1]):
-                best = (name, d)
-        return best
+            if d <= self.approach:
+                hits.append((name, d))
+        hits.sort(key=lambda h: h[1])
+        if every:
+            return hits                  # all of your spots it passes close to, nearest first
+        return hits[0] if hits else None
 
     def _scout_events(self, a: Army):
         """His scout on a route to (or pointing at) one of your spots."""
