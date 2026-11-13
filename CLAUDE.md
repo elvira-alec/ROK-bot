@@ -6,6 +6,10 @@ issues. This file is everything the previous (cloud) session
 knew: the goal, how the game looks, how the bot works, what went wrong before and how it
 was fixed, how to test, and how to build and publish. Read it all before changing anything.
 
+**Before changing anything, read `docs/HANDOFF.md` section 2 ("RULES: don't undo earlier
+work").** Each rule there comes from a real failure in the user's game, and names the test that
+guards it. Section 7 there is the open work. Section 10 is where the last session stopped.
+
 ## 1. Goal and the user
 
 - **What it does:** a watcher/bot for Rise of Kingdoms, the **official PC game** in window
@@ -185,13 +189,15 @@ boxes, the user's snapshots including the Spanish photos).
 
 ## 5. Open work / to verify in the real game
 
-1. **Speed:** a full track round should take about **5–10 s**. Check the panel log's
-   "Round (…): N spots … in X s - moving / looking / checking owners" lines and cut whatever
-   dominates. Text reading (rapidocr) of the top strip is the main per-spot cost.
-2. **Farms:** check his farms are found at the user's searching zoom. The red badge size
-   range was widened; it was tuned on one sweep screenshot plus one snapshot.
-3. Per-army features in the real game: follow, alerts, ETA, farm details.
-4. Not built yet (needs screenshots): sending a scout, sharing a location to alliance chat.
+See `docs/HANDOFF.md` section 7 (the full list) and section 10 (where the last session
+stopped). In short:
+1. **Several armies at once** (the user asked; awaiting their go-ahead): global matching in
+   `Tracker.match` instead of greedy nearest-first; read every troop cluster's name in one
+   zoom-in; an owner never moves from one army to another. Fixtures with 2–4 armies are in
+   `tests/real_screens/army_close/`.
+2. Owner checks make a round ~19 s: cut zoom in/out.
+3. Verify live: "Your troops" (v1.15), the close-view owner read on his armies, farm taps.
+4. Not built: sending a scout, sharing a location to alliance chat.
 
 ## 6. Testing
 
