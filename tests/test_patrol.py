@@ -191,7 +191,7 @@ def test_zoom_bounces_between_two_levels(game):
     js(game, "sim.state.zoom = 1; sim.state.simple = true")
     time.sleep(0.2)
     gap, ok = game.calibrate_zoom()
-    assert ok and gap == 2 and js(game, "sim.state.zoom") == 1
+    assert ok and gap == 1 and js(game, "sim.state.zoom") == 1      # 1 notch to the close view here
     assert game.to_close() and js(game, "sim.state.zoom") == 0
     assert game.to_sweep() and js(game, "sim.state.zoom") == 1
     js(game, "sim.state.zoom = 2; sim.state.simple = true")   # someone zoomed too far out
