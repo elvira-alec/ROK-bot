@@ -77,6 +77,11 @@
     }
   }
 
+  function levelPlate(x, y, txt) {        // small light tag with a dark number (a level)
+    ctx.fillStyle = '#e8e8e8'; ctx.fillRect(x - 11, y, 22, 12);
+    ctx.fillStyle = '#111'; ctx.font = 'bold 10px Arial'; ctx.fillText(txt, x - 3 * txt.length, y + 10);
+  }
+
   function draw(now) {
     const t = now / 1000;
     // map: real grass texture, shifted with the camera
@@ -86,6 +91,20 @@
       const sx = ((ox % gw) + gw) % gw - gw, sy = ((oy % gh) + gh) % gh - gh;
       for (let x = sx; x < W; x += gw) for (let y = sy; y < H; y += gh) ctx.drawImage(A.grass, x, y);
     } else { ctx.fillStyle = '#7fae4a'; ctx.fillRect(0, 0, W, H); }
+    // resource points all over the map, each with its level plate underneath, as in the
+    // real game at the searching zoom (the bot only trusts a look once these have drawn)
+    if (window.NOGRID !== true && state.zoom === 1 && A.res.complete) {
+      const g = 9, cx = state.cam.x, cy = state.cam.y;
+      for (let tx = Math.floor((cx - 40) / g) * g; tx <= cx + 40; tx += g)
+        for (let ty = Math.floor((cy - 40) / g) * g; ty <= cy + 40; ty += g) {
+          const qx = tx + ((ty * 7) % 4), qy = ty + ((tx * 5) % 3);           // not a perfect grid
+          if (Object.values(state.sites).some(([sx, sy]) => Math.abs(sx - qx) < 5 && Math.abs(sy - qy) < 5)) continue;
+          const [x, y] = toScreen(qx, qy);
+          if (x < 60 || y < 60 || x > W - 60 || y > H - 60) continue;
+          ctx.drawImage(A.res, x - A.res.width / 2, y - A.res.height / 2);
+          levelPlate(x, y + A.res.height / 2 + 2, String(2 + ((qx + qy) % 5)));
+        }
+    }
     // places
     for (const [name, [tx, ty]] of Object.entries(state.sites)) {
       const [x, y] = toScreen(tx, ty);
@@ -93,6 +112,7 @@
       if (state.zoom === 2 && !owner[name]) continue;  // too far out: no resource points
       const im = owner[name] ? A.city : A.res;
       if (im.complete) ctx.drawImage(im, x - im.width / 2, y - im.height / 2);
+      if (!owner[name] && im.complete) levelPlate(x, y + im.height / 2 + 2, '4');
       if (owner[name]) {
         // city name on a dark plate, with the city level in a small light tag underneath
         ctx.font = 'bold 13px Arial'; const tw = ctx.measureText(owner[name]).width;

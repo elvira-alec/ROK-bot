@@ -34,6 +34,17 @@ def to_tile(camera, axes, point, frame_shape):
     return float(t[0]), float(t[1])
 
 
+def to_screen(camera, axes, tile, frame_shape):
+    """Screen point of a map tile (the inverse of to_tile), or None."""
+    h, w = frame_shape[:2]
+    try:
+        inv = np.linalg.inv(np.array(axes, float))
+    except np.linalg.LinAlgError:
+        return None
+    d = inv @ (np.array(tile, float) - np.array(camera, float))
+    return float(w / 2 + d[0]), float(h / 2 + d[1])
+
+
 def view_size_tiles(axes, frame_shape):
     """How many tiles the screen covers across and down (roughly)."""
     h, w = frame_shape[:2]
@@ -164,6 +175,8 @@ class Army:
     info: dict = field(default_factory=dict)   # farm details read from its box (what, reserves, xy)
     missed: int = 0                # looked right at its spot and didn't see it (times in a row)
     unsure: bool = False           # seen only near the screen edge without a line so far
+    line_since: float | None = None  # seen on a march line in every look since this time
+    missed_at: float | None = None   # when the last miss was counted
 
 
 class Tracker:
@@ -196,28 +209,66 @@ class Tracker:
             return best[0]
         return None
 
+    TREND = 2.5          # tiles: how far it must clearly have gone before we call a direction
+    STILL_AFTER = 60.0   # s on a line without moving before we say the line isn't its own
+    STILL_SPAN = 1.6     # tiles: "without moving" (the zoomed-out estimate wobbles about that)
+
+    def _moving_points(self, a: Army):
+        """Where it was seen since it's been on a march line (oldest first)."""
+        since = a.line_since or 0
+        return [(t, p) for t, p in a.history if t >= since]
+
+    def _trend(self, a: Army):
+        """How it has moved while marching: (change in distance to his city, displacement)
+        between its first and last few sightings, or None if too little to go on. Averages
+        a few sightings at each end: one zoomed-out estimate is off by a tile or two."""
+        pts = self._moving_points(a)
+        if len(pts) < 2 or pts[-1][0] - pts[0][0] < 8:
+            return None
+        k = max(1, len(pts) // 3)
+        first = np.mean([p for _, p in pts[:k]], axis=0)
+        last = np.mean([p for _, p in pts[-k:]], axis=0)
+        return (math.dist(last, self.city) - math.dist(first, self.city)), np.subtract(last, first)
+
+    def _line_but_still(self, a: Army, now) -> bool:
+        """On a march line for a good while yet hasn't moved: someone else's line passing
+        it (one look can't tell: armies sit anywhere along their own line too)."""
+        if a.kind == "farm" or a.line_since is None or now - a.line_since < self.STILL_AFTER:
+            return False
+        pts = [p for _, p in self._moving_points(a)]
+        if len(pts) < 3:
+            return False
+        return max(math.dist(p, q) for p in pts for q in pts) <= self.STILL_SPAN
+
     def _direction(self, a: Army, prev_tile, prev_moving, s: ArmySeen):
-        """Work out which way a moving army is going, and where to."""
+        """Work out which way a moving army is going, and where to. Decided by how it has
+        clearly moved over its last sightings (not by one step: the estimate wobbles a tile
+        or two, which flipped it between 'going home' and 'marching out' every round), and
+        kept until there's clear evidence the other way."""
         e0, e1 = s.ends
+        tr = self._trend(a)
         city_end = next((e for e in (e0, e1) if self.at_home(e)), None)
         if city_end is not None:
             other = e1 if city_end is e0 else e0
-            if prev_tile is not None:
-                d_now, d_before = math.dist(s.tile, self.city), math.dist(prev_tile, self.city)
-                if not prev_moving and not self.at_home(prev_tile):
+            if tr is not None and tr[0] <= -self.TREND:
+                return "home", city_end
+            if tr is not None and tr[0] >= self.TREND:
+                return "out", other
+            if a.direction in ("home", "out"):
+                return a.direction, (city_end if a.direction == "home" else other)
+            if prev_tile is not None and not prev_moving:
+                if not self.at_home(prev_tile):
                     return "home", city_end           # was parked out there, now on the way in
-                if not prev_moving and self.at_home(prev_tile):
-                    return "out", other               # was at his city, now leaving
-                if d_now < d_before - 0.5:
-                    return "home", city_end
-                if d_now > d_before + 0.5:
-                    return "out", other
-            return a.direction, (city_end if a.direction == "home" else other)
+                return "out", other                   # was at his city, now leaving
+            # first sighting, way not known yet: expect it further out along its line (the
+            # end away from his city), not walking back into his city
+            return a.direction, other
         # a line that doesn't touch his city: the army heads for the end it moved toward
-        if prev_tile is not None and math.dist(prev_tile, s.tile) > 0.5:
-            v = np.subtract(s.tile, prev_tile)
-            dest = max((e0, e1), key=lambda e: float(np.subtract(e, s.tile) @ v))
+        if tr is not None and float(np.hypot(*tr[1])) >= self.TREND:
+            dest = max((e0, e1), key=lambda e: float(np.subtract(e, s.tile) @ tr[1]))
             return "out", dest
+        if a.direction == "out" and a.dest is not None:
+            return a.direction, min((e0, e1), key=lambda e: math.dist(e, a.dest))
         return a.direction, a.dest
 
     def update(self, sightings: list[ArmySeen], now: float) -> list[tuple[str, str, dict]]:
@@ -232,26 +283,46 @@ class Tracker:
         self.sweeps += 1
         unmatched = list(self.armies)
         current = []
-        for s in sorted(sightings, key=lambda s: s.tile):
-            same = [a for a in unmatched if a.kind == getattr(s, "kind", "army")]
+        sights = sorted(sightings, key=lambda s: s.tile)
+
+        def where(a, s):
             # compare with where each one should be by now (marching ones move on)
-            def where(a):
-                if a.kind == "farm" and a.info and a.info.get("xy"):
-                    # its exact X:Y or where the zoomed-out view put it, whichever is closer
-                    xy = tuple(a.info["xy"])
-                    return xy if math.dist(xy, s.tile) < math.dist(a.tile, s.tile) else a.tile
-                return predict(a, now)
-            best = min(same, key=lambda a: math.dist(where(a), s.tile), default=None)
+            if a.kind == "farm" and a.info and a.info.get("xy"):
+                # its exact X:Y or where the zoomed-out view put it, whichever is closer
+                xy = tuple(a.info["xy"])
+                return xy if math.dist(xy, s.tile) < math.dist(a.tile, s.tile) else a.tile
+            return predict(a, now)
+
+        def limit(a, s):
             if getattr(s, "kind", "army") == "farm":
                 # farms don't move; the zoomed-out estimate drifts a few tiles with where the
                 # camera is, so allow that (two farms seen together still pair up correctly)
-                limit = 5.0
-            elif best is not None and best.moving:
+                return 5.0
+            if a.moving:
                 # the longer since it was seen, the further it may be off the prediction
-                limit = self.match_dist + 0.5 * (_speed(best) or DEFAULT_SPEED) * (now - best.last_seen) / 60
-            else:
-                limit = self.match_dist
-            if best and math.dist(where(best), s.tile) <= limit:
+                return self.match_dist + 0.5 * (_speed(a) or DEFAULT_SPEED) * (now - a.last_seen) / 60
+            return self.match_dist
+
+        # Pair them all at once, closest pairs first (not each sighting grabbing its nearest
+        # in turn): two farms side by side otherwise swap ids, which shows as both "moving".
+        pairs = []
+        for si, s in enumerate(sights):
+            for a in unmatched:
+                if a.kind != getattr(s, "kind", "army"):
+                    continue
+                dd = math.dist(where(a, s), s.tile)
+                if dd <= limit(a, s):
+                    pairs.append((dd, si, a.id, a))
+        pairs.sort(key=lambda p: (p[0], p[1], p[2]))
+        chosen, taken = {}, set()
+        for dd, si, _aid, a in pairs:
+            if si in chosen or id(a) in taken:
+                continue
+            chosen[si] = a
+            taken.add(id(a))
+        for si, s in enumerate(sights):
+            best = chosen.get(si)
+            if best is not None:
                 unmatched.remove(best)
                 a, prev_tile, prev_moving = best, best.tile, best.moving
             else:
@@ -261,7 +332,7 @@ class Tracker:
                 if getattr(s, "owner", None):
                     a.owner = s.owner
             a.prev_tile = prev_tile
-            a.missed = 0
+            a.missed, a.missed_at = 0, None
             if getattr(s, "unsure", False) and not s.moving and best is not None and a.moving:
                 # near the edge without its line: still the march we knew - keep its line
                 a.tile, a.last_seen = s.tile, now
@@ -280,11 +351,37 @@ class Tracker:
             if getattr(s, "info", None):
                 a.info = {**(a.info or {}), **s.info}
             a.history.append((now, s.tile))
+            del a.history[:-30]
+            if a.kind == "farm" and not s.moving:
+                # stays put: its spot is the median of where it was seen (the zoomed-out
+                # estimate wobbles a few tiles), so it neither drifts on the map nor swaps
+                pts = [p for _, p in a.history[-8:]]
+                a.tile = (float(np.median([p[0] for p in pts])), float(np.median([p[1] for p in pts])))
+            a.line_since = (a.line_since or now) if s.moving else None
             if s.moving and s.ends:
                 a.direction, a.dest = self._direction(a, prev_tile, prev_moving, s)
             else:
                 a.direction, a.dest = None, None
+            if a.moving and self._line_but_still(a, now):
+                # someone else's march line runs past it; it isn't going anywhere
+                a.moving, a.direction, a.dest, a.ends = False, None, None, None
             current.append(a)
+        # the same farm tracked twice (seen again before its box was read): one id
+        merged = []
+        for a in current:
+            xy = (a.info or {}).get("xy") if a.kind == "farm" else None
+            dup = next((b for b in merged if xy and b.kind == "farm" and (b.info or {}).get("xy")
+                        and math.dist(xy, b.info["xy"]) <= 1.0), None)
+            if dup is None:
+                merged.append(a)
+                continue
+            keep, drop = (dup, a) if dup.id < a.id else (a, dup)
+            keep.owner = keep.owner or drop.owner
+            keep.info = {**(drop.info or {}), **(keep.info or {})}
+            keep.checks = max(keep.checks, drop.checks)
+            keep.tile = tuple(keep.info["xy"])
+            merged[merged.index(dup)] = keep
+        current = merged
         if covered is not None:
             def looked_at(a):
                 p = predict(a, now)
@@ -293,14 +390,28 @@ class Tracker:
             gone = []
             for a in unmatched:
                 if looked_at(a):
+                    if not a.moving and now - (a.missed_at or 0) < 2.0:
+                        current.append(a)    # looked again a moment later: same evidence
+                        continue
                     a.missed += 1
+                    a.missed_at = now
+                    if (a.kind == "farm" and a.owner != "other" and a.missed >= 2
+                            and any(b.kind == "farm" and b.owner is None and b is not a
+                                    and math.dist(b.tile, a.tile) <= 7 for b in current)):
+                        # an unchecked farm right where his was: most likely the same one
+                        # seen again under a new id - not "he stopped gathering" (the two
+                        # are merged once its box is read)
+                        current.append(a)
+                        continue
                     # something that stays put (a farm, a parked army) is gone only after its
                     # spot was in view twice without it (one look can miss); a marching one
                     # simply isn't there any more
                     # stays put: gone after two looks without it; marching: also searched
                     # once more further along its line before giving up on it
                     # (other players' armies: no second look, we don't follow them)
-                    (gone if a.missed >= 2 or a.owner == "other" else current).append(a)
+                    # someone else's farm stays known too (dropped on one miss, it was zoomed in on
+                    # again a minute later - 4 times in one run); their armies we don't follow
+                    (gone if a.missed >= 2 or (a.owner == "other" and a.kind != "farm") else current).append(a)
                 elif now - a.last_seen < 900:
                     current.append(a)
             self.gone = gone
@@ -578,7 +689,13 @@ class Hunter:
         self.progress = (0, 0, "")
         self.on_progress = None
         self.axes = self.axes_out if self.method == "zoomed_out" else self.axes_close
+        # the calibration's map scale: the close-zoom scale is fixed to it (absolute), while
+        # the searching-zoom scale is refined from real moves while hunting (_learn_scale)
+        self._axes_cal = [list(r) for r in self.axes_out] if self.axes_out else None
+        self._scale_samples: list = []
+        self._scale_new = 0
         self.checks_per_sweep = int(h.get("checks_per_sweep", 3))
+        self.farm_every = float(h.get("farm_look_seconds", 30))   # how often his farms are looked at
         self.my_sites = my_sites
         self.tracker = Tracker(self.city, list(my_sites), h.get("near_city", 6),
                                h.get("match_distance", 12), h.get("near_site", 8),
@@ -665,9 +782,22 @@ class Hunter:
         lines = [ln for ln in screen.find_march_lines(frame) if ln.color != "green"]
         out = []
         W = frame.shape[1]
+        def on_line(ln, d):
+            if ln.distance_to(d) < 0.05 * H:                  # the icon hides the first dots
+                return True
+            # more of its first dots hidden (another icon over them): the army is still right
+            # on the line's extension, just short of where the visible dots start
+            v = np.subtract(ln.p2, ln.p1).astype(float)
+            n = float(np.hypot(*v))
+            if n < 1:
+                return False
+            side = abs(float(np.cross(v, np.subtract(d, ln.p1)))) / n
+            end = min(math.dist(d, ln.p1), math.dist(d, ln.p2))
+            return side < 0.025 * H and end < 0.12 * H
+
         for d, kind in screen.find_map_icons(frame):
             line = min(lines, key=lambda ln: ln.distance_to(d), default=None)
-            moving = bool(line and line.distance_to(d) < 0.05 * H)  # the icon hides the first dots
+            moving = bool(line and on_line(line, d))
             # the game only draws march lines near the middle of the view: an army near the
             # edge without a line may still be marching
             edge = not (0.22 * W < d[0] < 0.78 * W and 0.22 * H < d[1] < 0.78 * H)
@@ -698,11 +828,52 @@ class Hunter:
         """One look: a fresh picture; reading its coordinates and finding the armies on it
         run at the same time (neither waits for the other). Returns (view, sightings)."""
         t0 = time.time()
-        frame = self.game.fresh_frame()            # as soon as the icons have loaded
+        expected = getattr(self.game, "_cam", None)  # where the last drag / jump left it
+        frame = self.game.fresh_frame()            # the map has stopped moving
+        if screen.modal_dialog(frame):
+            # a game dialog over the map (lost connection): the dimmed coordinates can
+            # still be read, so without this it carried on "looking" at nothing for minutes
+            from .game import View
+            self.game.recover_connection()
+            view = View(frame, [], None, True)
+            view.icons_loaded = False
+            return view, []
+        # ...but the icons pop in a moment after the map is drawn: a look straight after a
+        # jump saw bare ground, his farms "weren't there" and he "stopped gathering" (both
+        # false alerts in the 2026-11-14 run). Wait for the level plates to show.
+        tags = screen.icons_drawn(frame)
+        if not tags:
+            end = time.time() + 2.0
+            while time.time() < end:
+                self.game.check_stop()
+                time.sleep(0.1)
+                frame = self.game.frame()
+                tags = screen.icons_drawn(frame)
+                if tags:
+                    time.sleep(0.15)                # the rest finish popping in
+                    frame = self.game.frame()
+                    break
         job = self._pool.submit(self.game.read_camera, frame)
         found = self.detect(frame)
         self._dangers_frame(frame)
         cam = job.result()
+        if cam and expected and math.dist(cam[1:3], expected) > 10:
+            # a digit lost in the readout ('174' read as '17') put everything ~150 tiles
+            # off and sent it off to check a "farm" at 19,358. Read it twice more (the whole
+            # screen; a new picture) and go with a position two readings agree on - the
+            # expected one, or a real move (a drag that didn't take); none: skip this look
+            c2 = screen.camera_coords(frame, screen.read_text(frame))
+            c3 = self.game.camera_fast()
+            reads = [tuple(cam[1:3])] + ([tuple(c2[1:3])] if c2 else []) + ([tuple(c3)] if c3 else [])
+            agreed = next((p for p in reads if sum(math.dist(p, q) <= 1.5 for q in reads) >= 2), None)
+            if agreed is None:
+                log.info("hunt: camera readings disagree (%s, expected about %.0f,%.0f); this look skipped",
+                         reads, expected[0], expected[1])
+                self.game._cam = expected
+                cam = None
+            else:
+                cam = (cam[0], agreed[0], agreed[1])
+                self.game._cam = agreed
         self.timing["look"] += time.time() - t0
         from .trace import TRACE
         if TRACE.on:
@@ -711,13 +882,24 @@ class Hunter:
                                 "edge": l == "edge"} for d, k, l in found])
         from .game import View
         view = View(frame, [], cam, True)
+        # no level plate anywhere: icons not drawn (or nothing there). Either way this look
+        # can't show that something has gone - a farm there would show its own plate
+        view.icons_loaded = bool(tags)
         try:
             self.game.b.last_view = view
         except AttributeError:
             pass
         if not cam:
             return view, []
-        return view, self.to_map(found, cam[1:3], frame.shape)
+        pf = getattr(self.game, "_pan_from", None)
+        if pf is not None and self.game._at == "sweep":
+            self._learn_scale(self.game._pan_px, np.subtract(cam[1:3], pf))
+        self.game._pan_from = None
+        seen = self.to_map(found, cam[1:3], frame.shape)
+        if not hasattr(self, "_round_seen"):
+            self._round_seen = []
+        self._round_seen += seen          # (what's checked on these is remembered this round)
+        return view, seen
 
     def identify(self, armies, limit=None) -> int:
         """Zoom in on armies we don't know the owner of and find out: a marching army
@@ -759,16 +941,57 @@ class Hunter:
 
     def _axes_close(self):
         r = (self.game.zoom_cfg or {}).get("close_ratio")
-        return (np.array(self.axes_out, float) * float(r)).tolist() if r and self.axes_out else None
+        base = self._axes_cal or self.axes_out
+        return (np.array(base, float) * float(r)).tolist() if r and base else None
+
+    def _learn_scale(self, drag_px, dcam):
+        """One real move at the searching zoom: the map was dragged drag_px pixels and the
+        camera readout moved dcam tiles. The game's zoom doesn't land on exactly the same
+        scale every time (the fitted scale differed by +-10-15% between runs), so a fixed
+        scale from the calibration put things a tile or two off away from the middle of the
+        screen. Every 8 moves: fit the scale (outliers dropped), check it's sane against the
+        calibration, and move half way to it."""
+        if np.linalg.norm(drag_px) < 80:
+            return                                   # too small a move to say much
+        self._scale_samples.append((-np.array(drag_px, float), np.array(dcam, float)))
+        del self._scale_samples[:-80]
+        self._scale_new += 1
+        if self._scale_new < 8 or len(self._scale_samples) < 12 or not self._axes_cal:
+            return
+        self._scale_new = 0
+        X = np.array([a for a, _ in self._scale_samples])
+        Y = np.array([b for _, b in self._scale_samples])
+        A = np.linalg.lstsq(X, Y, rcond=None)[0]
+        r = np.linalg.norm(X @ A - Y, axis=1)
+        ok = r <= max(1.5, 2 * float(np.median(r)))   # a misread or a drag that didn't take
+        if ok.sum() < 10:
+            return
+        A = np.linalg.lstsq(X[ok], Y[ok], rcond=None)[0]
+        miss = float(np.median(np.linalg.norm(X[ok] @ A - Y[ok], axis=1)))
+        fit, cal = A.T, np.array(self._axes_cal, float)
+        rx, ry = fit[0, 0] / cal[0, 0], fit[1, 1] / cal[1, 1]
+        if miss > 1.0 or not (0.75 <= rx <= 1.33 and 0.75 <= ry <= 1.33):
+            log.info("hunt: map scale from moves doesn't look right (x %.2f, y %.2f of the set-up, "
+                     "miss %.1f tiles); kept", rx, ry, miss)
+            return
+        new = 0.5 * np.array(self.axes_out, float) + 0.5 * fit
+        self.axes_out = self.axes = new.round(6).tolist()
+        log.info("hunt: map scale from %d real moves: x %.5f y %.5f (%.2fx / %.2fx the set-up)",
+                 int(ok.sum()), fit[0, 0], fit[1, 1], rx, ry)
 
     def _check_owner(self, a, others=()):
         a.checks += 1
+        if not hasattr(self, "_round_tried"):
+            self._round_tried = []
+        self._round_tried.append((a.kind, tuple(a.tile)))
         from .trace import TRACE
         TRACE.event("check_owner", kind=a.kind, tile=[round(a.tile[0], 1), round(a.tile[1], 1)])
         x, y = int(round(a.tile[0])), int(round(a.tile[1]))
         ac = self._axes_close()
-        # zoomed in already: a nearby one is a drag away; far ones are typed in
-        moved = self.game.pan_to(x, y, ac, max_drags=2) if ac else self.game.goto(x, y)
+        # zoomed in already: a nearby one is a drag away; far ones are typed in. Centre it
+        # properly: at the close zoom a tile is ~150 px, and the old 4-tile slack left the
+        # farm outside the area searched for its badge ("couldn't open the resource point")
+        moved = self.game.pan_to(x, y, ac, max_drags=2, close_enough=1.0) if ac else self.game.goto(x, y)
         if not moved:
             return
         if a.kind == "farm":
@@ -777,6 +1000,9 @@ class Hunter:
             if ac:
                 self._farms_in_frame([o for o in others if o.kind == "farm"], ac)
         else:
+            # find the army itself before reading its name: it may have walked on since it
+            # was seen, and the zoomed-out position is only good to a tile or so
+            self._centre_on_troops(a, ac)
             # close view: the army is a cluster of red troops with a small name above it
             # (read enlarged). Two looks a moment apart: 'his' on one clear read, 'not his'
             # only if both clearly read someone else.
@@ -817,6 +1043,41 @@ class Hunter:
         TRACE.event("owner", kind=a.kind, tile=[round(a.tile[0], 1), round(a.tile[1], 1)], owner=a.owner,
                     read=self.seen_text.get(getattr(a, "id", 0)))
 
+    def _centre_on_troops(self, a, ac):
+        """At the close zoom: put the army we're checking in the middle. Takes the player
+        troop cluster nearest where it should be now (barbarians and red-roofed cities
+        don't count, see screen.cluster_is_npc) and drags it to the middle if it's off to
+        the side. Logged to the debug recording as 'close_read'."""
+        from .trace import TRACE
+        try:
+            f = self.game.frame()
+        except Exception:
+            return
+        H, W = f.shape[:2]
+        mid = (W / 2, H / 2)
+        cents = [(b[0] + b[2] / 2, b[1] + b[3] / 2) for b in screen.player_troop_clusters(f)]
+        want, cam = mid, None
+        if ac:
+            cam = self.game.read_camera(f)
+            if cam:
+                where = predict(a, time.time()) if isinstance(a, Army) else a.tile
+                p = to_screen(cam[1:3], ac, where, f.shape)
+                if p and 0 <= p[0] < W and 0 <= p[1] < H:
+                    want = p
+        TRACE.event("close_read", tile=[round(a.tile[0], 1), round(a.tile[1], 1)],
+                    moving=bool(getattr(a, "moving", False)), kind=a.kind,
+                    camera=list(cam[1:3]) if cam else None, want=[int(want[0]), int(want[1])],
+                    clusters=[[int(c[0]), int(c[1]), int(math.dist(c, mid))] for c in cents[:6]])
+        if not cents or not cam:
+            return
+        c = min(cents, key=lambda c: math.dist(c, want))
+        if math.dist(c, mid) <= 0.22 * H or math.dist(c, want) > 0.5 * H:
+            return            # already in the middle, or nothing nearby that could be it
+        tx, ty = to_tile(cam[1:3], ac, c, f.shape)
+        self.game._cam = tuple(cam[1:3])
+        self.game.pan_to(tx, ty, ac, max_drags=1, close_enough=0.3)
+        time.sleep(0.15)
+
     # ---- zoom: bounce between the searching zoom and the close zoom
     def zoom_out(self, anchor=False):
         return self.game.to_sweep()
@@ -842,13 +1103,22 @@ class Hunter:
             self.game.check_stop()
             f = self.game.frame()
             H, W = f.shape[:2]
+            # where the farm should be on screen (camera + close-zoom scale); the badge
+            # nearest that, not just the one nearest the middle (a neighbour's farm)
+            want = (W / 2, H / 2)
+            ac = self._axes_close()
+            cam = self.game.read_camera(f) if ac else None
+            if cam:
+                p = to_screen(cam[1:3], ac, a.tile, f.shape)
+                if p and math.dist(p, want) < 0.45 * H:
+                    want = p
             badges = [b for b in screen.find_gather_badges(f)
-                      if math.dist(b, (W / 2, H / 2)) < 0.3 * H]     # the farm we jumped to
+                      if math.dist(b, (W / 2, H / 2)) < 0.45 * H]    # the farm we jumped to
             if not badges:
                 # never tap blindly: near his base the middle of the screen is his city
                 time.sleep(0.15)
                 continue
-            bx, by = min(badges, key=lambda b: math.dist(b, (W / 2, H / 2)))
+            bx, by = min(badges, key=lambda b: math.dist(b, want))
             if self._read_farm_box(a, (bx, int(by + 0.02 * H))):   # the camp just under its badge
                 return
         log.info("hunt: couldn't open the resource point at %.0f,%.0f", a.tile[0], a.tile[1])
@@ -880,6 +1150,12 @@ class Hunter:
         self.seen_text[getattr(a, "id", 0)] = [t.text for t in texts]
         mine = [t for t in texts if screen.name_score(t.text, self.name) >= 0.75]
         coords = next((screen.parse_coords(t.text) for t in texts if screen.parse_coords(t.text)), None)
+        if coords and math.dist((coords[1], coords[2]), a.tile) > 6:
+            # the box is for another resource point (a neighbour's), not the one we meant:
+            # its owner isn't this farm's owner
+            log.info("hunt: tapped the resource point at %s,%s while checking %.0f,%.0f; not that one",
+                     coords[1], coords[2], a.tile[0], a.tile[1])
+            return
         details = self._farm_details(texts)
         if mine:
             a.owner = "him"
@@ -1083,7 +1359,7 @@ class Hunter:
                     sightings = self.read_view(view)
                 visited += 1
                 if view.camera:
-                    covered.append(self._on_screen(view.camera[1:3], view.frame.shape))
+                    covered.append(self._cover(view))
                 here = [s for s in sightings if not any(same_spot(s, o) for o in seen)]
                 seen += here
                 if self.method == "zoomed_out":
@@ -1137,9 +1413,17 @@ class Hunter:
         else:
             # his armies (scouts move too fast to follow), and always his city
             pts = [tuple(self.city)]
+            if not hasattr(self, "_farm_looked"):
+                self._farm_looked = {}
             for a in self.tracker.armies:
                 if a.owner == "other" or a.kind == "scout" or (a.owner is None and a.checks >= 3):
                     continue                     # not his / couldn't be confirmed 3 times
+                if a.kind == "farm" and not a.moving and a.owner == "him":
+                    # a farm can't move: all that can happen is it leaving, so a look every
+                    # ~30 s is plenty (it was a typed jump there and back every 3 s)
+                    if now - self._farm_looked.get(a.id, 0) < self.farm_every:
+                        continue
+                    self._farm_looked[a.id] = now
                 pts.append(predict(a, now))
                 if a.moving and a.missed:
                     # not where we expected last time: also look further along its line
@@ -1177,13 +1461,20 @@ class Hunter:
             if not view.camera:
                 continue
             shape = view.frame.shape
-            covered.append(self._on_screen(view.camera[1:3], shape))
+            covered.append(self._cover(view))
             here = [s for s in sightings if not any(same_spot(s, o) for o in seen)]
             seen += here
             for s2, cov in self._check_new_here(here):
                 seen += [s for s in s2 if not any(same_spot(s, o) for o in seen)]
                 covered.append(cov)
         return seen, covered
+
+    def _cover(self, view):
+        """What this look can vouch for: the tiles it showed - or nothing, if the icons
+        hadn't drawn (then it can't show that anything has gone)."""
+        if not getattr(view, "icons_loaded", True) or not view.camera:
+            return lambda tile: False
+        return self._on_screen(view.camera[1:3], view.frame.shape)
 
     def _on_screen(self, cam, shape):
         """Is a map tile visible in this view (and not under the side panels / chat)?"""
@@ -1214,14 +1505,19 @@ class Hunter:
             view, seen2 = self.look_spot()        # what's on screen now (e.g. more farms)
             if not view.camera:
                 break
-            extra.append((seen2, self._on_screen(view.camera[1:3], view.frame.shape)))
+            extra.append((seen2, self._cover(view)))
             done = list(new)
             new = [s for s in self._unknown(seen2) if not any(same_spot(s, d) for d in done)]
         return extra
 
     def _unknown(self, found):
         """Of these sightings, the ones whose owner isn't known yet (and worth checking)."""
-        known = [a for a in self.tracker.armies if a.owner]
+        # what the tracker keeps, AND what was already checked earlier this round: the
+        # tracker is only updated at the end of a round, so during the first sweep every
+        # stop re-checked farms read a stop or two before (3x each, ~4 s every time)
+        here = {id(f) for f in found}
+        known = [a for a in self.tracker.armies if a.owner] + \
+                [s for s in getattr(self, "_round_seen", []) if s.owner and id(s) not in here]
         new = []
         for s in found:
             if math.dist(s.tile, self.city) < 3.5:  # his city itself: never clicked on
@@ -1233,11 +1529,30 @@ class Hunter:
                 continue
             if s.kind == "scout":
                 continue
+            # match a known one the same way Tracker.match does, so we don't zoom in to
+            # re-check a farm the tracker already keeps: farms within 5 tiles (their
+            # zoomed-out estimate drifts with the camera), compared against the farm's
+            # exact X:Y when we have it. A tighter gate here re-checked the same point.
+            def _where(a):
+                if a.kind == "farm" and a.info and a.info.get("xy"):
+                    xy = tuple(a.info["xy"])
+                    return xy if math.dist(xy, s.tile) < math.dist(a.tile, s.tile) else a.tile
+                if isinstance(a, ArmySeen):            # seen this round: it's where it was
+                    return a.tile
+                return predict(a, time.time())
             k = min((a for a in known if a.kind == s.kind),
-                    key=lambda a: math.dist(predict(a, time.time()), s.tile), default=None)
-            near = 2.5 if s.kind == "farm" else 8      # farms: only the very same spot
-            if k and math.dist(predict(k, time.time()), s.tile) < near:
+                    key=lambda a: math.dist(_where(a), s.tile), default=None)
+            near = 5.0 if s.kind == "farm" else 8
+            if k and math.dist(_where(k), s.tile) <= near:
                 s.owner = k.owner
+                if s.kind == "farm" and k.info and not s.info:
+                    s.info = dict(k.info)
+                continue
+            # tried twice already this round without an answer: not again (it isn't going
+            # to read better a minute later, and each try is a zoom in and out)
+            tries = sum(1 for kind, t in getattr(self, "_round_tried", [])
+                        if kind == s.kind and math.dist(t, s.tile) <= (5.0 if s.kind == "farm" else 4.0))
+            if tries >= 2:
                 continue
             new.append(s)
         return new
@@ -1246,9 +1561,26 @@ class Hunter:
         now = time.time()
         self.warned = False
         self.toasts = []
+        self._round_seen, self._round_tried = [], []
         self.dangers = set()
         self.timing = {"move": 0.0, "look": 0.0, "check": 0.0}
+        if self.game.recover_connection():
+            pass                                   # (sets `reconnected`: handled just below)
+        if getattr(self.game, "reconnected", False):
+            # back after a lost connection: the game may have reset the view - put the zoom
+            # right and start again from his city
+            self.game.reconnected = False
+            self._progress(0, 1, "Reconnected: setting the zoom and going back to his city")
+            if (self.game.zoom_cfg or {}).get("gap"):
+                self.game.reanchor()
+            self.game.goto(int(self.city[0]), int(self.city[1]))
         if self.method == "zoomed_out":
+            if self._rounds == 0 and (self.game.zoom_cfg or {}).get("gap"):
+                # starting: never trust the zoom the game was left at (one notch too far out
+                # still looks like the simplified map, but level numbers and armies are gone)
+                self._progress(0, 1, "Setting the searching zoom")
+                if not self.game.reanchor():
+                    log.warning("hunt: couldn't set the searching zoom from the close zoom")
             if self.game._at != "sweep":
                 self._progress(0, 1, "Getting to the searching zoom")
                 self.zoom_out()
@@ -1258,6 +1590,24 @@ class Hunter:
                 self._progress(0, 1, "Going to his city")
                 self.game.goto(int(self.city[0]), int(self.city[1]))
                 self._scale_checked = now
+            if getattr(self.game, "gap_changed", False) and self.axes_out and self.game._at == "sweep":
+                # the searching zoom moved a notch (level numbers vanished early): the map
+                # scale learned for the old one would put every position a few tiles off
+                self.game.gap_changed = False
+                old = float(np.linalg.norm(np.array(self.axes_out, float)[:, 0]))
+                s1, s2 = self.game.measure_scale(0.6), self.game.measure_scale(0.6)
+                if s1 and s2 and old and abs(math.log(s1 / s2)) <= 0.08:
+                    f = (s1 + s2) / 2 / old
+                    self.axes_out = (np.array(self.axes_out, float) * f).round(6).tolist()
+                    self.axes = self.axes_out
+                    if self._axes_cal:
+                        self._axes_cal = (np.array(self._axes_cal, float) * f).round(6).tolist()
+                    self._scale_samples = []
+                    z = self.game.zoom_cfg or {}
+                    if z.get("close_ratio"):
+                        z["close_ratio"] = round(float(z["close_ratio"]) / f, 4)   # same close scale
+                    log.info("hunt: searching zoom changed; map scale adjusted by %.2fx", f)
+                    self._scale_checked = now
             # every few minutes: is the zoom still right? (measured, corrected by a notch)
             if self.axes and now - self._scale_checked > 300:
                 self._scale_checked = now
@@ -1325,6 +1675,12 @@ class Hunter:
             if f.get("alert_home") and after in ("going home", "at his city") and before != after:
                 alerts.append(Alert(f"home-{aid}-{now}", f"His army #{aid} is heading home",
                                     f"Was {before}, now {after}.", cooldown=False))
+        since = getattr(self.game, "disconnected_since", None)
+        if since and now - since > 120:
+            alerts.append(Alert("game-disconnected", "THE GAME LOST ITS CONNECTION",
+                                "It's showing 'Network disconnected' and pressing CONFIRM hasn't "
+                                "brought it back for 2 minutes. Nothing is being watched.",
+                                urgent=True))
         if "attacked" in self.dangers:
             alerts.append(Alert("danger-attacked", "YOU'RE UNDER ATTACK",
                                 "The red sword is showing in the game: an attack is coming at you.",

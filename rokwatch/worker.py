@@ -7,6 +7,7 @@ it, so every game action goes through this worker's command queue.
 from __future__ import annotations
 
 import logging
+import math
 import queue
 import threading
 import time
@@ -332,23 +333,64 @@ class Worker:
         from .patrol import learn_axes
         game = self._game()
         self._set("busy", "Setting up the zoom by itself...")
+        old = dict(((self._cfg().get("hunt") or {}).get("zoom")) or {})
         cfg, msg = game.auto_calibrate(progress=lambda m: setattr(self.status, "doing", m))
         if not cfg:
-            self._set("ready", "Zoom not set up: " + msg)
+            # its own check is strict (the numbers must come back exactly); one more go
+            log.info("zoom setup: %s - trying once more", msg)
+            cfg, msg = game.auto_calibrate(progress=lambda m: setattr(self.status, "doing", m))
+        if not cfg:
+            if old.get("gap"):
+                game.zoom_cfg = old
+            self._set("ready", "Zoom not set up: " + msg + (" Your previous zoom setup is kept."
+                                                              if old.get("gap") else ""))
             return
-        self.status.doing = "Learning the map directions at the searching zoom (two small drags)"
+        game.zoom_cfg = cfg
+        # Settle the searching zoom FIRST - from the 3D view's edge out by the gap, checking
+        # the level numbers are still there (one back in if they've gone) - and only then
+        # measure, at exactly the zoom the hunt will use. (It used to measure at the
+        # calibration's zoom and then the check moved one notch in: the saved map scale
+        # was then ~20% off, which put every farm and army a few tiles out.)
+        self.status.doing = "Checking the searching zoom from the close zoom"
+        if not game.reanchor():
+            if old.get("gap"):
+                game.zoom_cfg = old
+            self._set("ready", "Zoom not set up: couldn't step out from the close zoom cleanly."
+                      + (" Your previous zoom setup is kept." if old.get("gap") else ""))
+            return
+        msg = (f"Close zoom = last 3D step; searching zoom = {cfg['gap']} step(s) further out "
+               f"(last one with level numbers).")
+        self.status.doing = "Learning the map directions at the searching zoom (long drags)"
         m = learn_axes(game)
         if m is None:
+            if old.get("gap"):
+                game.zoom_cfg = old
             self._set("ready", "Couldn't learn the map directions (is the coordinate readout visible?). "
                                "Nothing was saved.")
             return
         search_scale = float(np.linalg.norm(np.array(m, float)[:, 0]))
+        old_axes = (self._cfg().get("patrol") or {}).get("axes")
+        old_close = None              # the old close-zoom scale in tiles per pixel (absolute)
+        if old.get("close_ratio") and old_axes:
+            old_close = float(old["close_ratio"]) * float(np.linalg.norm(np.array(old_axes, float)[:, 0]))
         self.status.doing = "Measuring the close zoom"
-        game.zoom_cfg = cfg
+        ratio = None
         if game.to_close():
-            sc = game.measure_scale()
-            if sc:
-                cfg["close_ratio"] = round(sc / search_scale, 4)
+            # two readings that agree; the close zoom is nearer in, so fewer tiles per pixel
+            # (a ratio of 1.62 slipped through once and every farm tap then missed)
+            for _ in range(2):
+                s1, s2 = game.measure_scale(0.6), game.measure_scale(0.6)
+                if s1 and s2 and abs(math.log(s1 / s2)) <= 0.08:
+                    r = (s1 + s2) / 2 / search_scale
+                    if 0.25 <= r <= 0.95:
+                        ratio = round(r, 4)
+                        break
+                    log.info("zoom setup: close-zoom scale %.2fx doesn't make sense; measuring again", r)
+        if ratio is not None:
+            cfg["close_ratio"] = ratio
+        elif old_close and 0.25 <= old_close / search_scale <= 0.95:
+            cfg["close_ratio"] = round(old_close / search_scale, 4)
+            log.info("zoom setup: kept the previous close-zoom scale (%.5f tiles/px)", old_close)
         game.to_sweep()
         config.save_fields({"hunt.zoom": cfg, "patrol.axes": m}, self.cfg_path)
         self._set("ready", "Zoom set up. " + msg)
@@ -467,24 +509,45 @@ class Worker:
         self.stop_patrol.clear()
         self.status.round = 0
         self._set("patrolling", f"Hunting {hunter.name} around {hunter.city[0]},{hunter.city[1]}")
+        failing_since, told = None, False
         while not self.stop_patrol.is_set() and (max_rounds is None or self.status.round < max_rounds):
             try:
                 for a in hunter.round(stop=self.stop_patrol.is_set):
                     self._alert(notifier, a)
+                if told:
+                    from .watcher import Alert
+                    self._alert(notifier, Alert("bot-back", "Watching again",
+                                                "The game is back and the bot is watching him again.",
+                                                cooldown=False))
+                failing_since, told = None, False
             except Stopped:
                 raise
             except Exception as e:                 # one bad round mustn't stop the watching
                 log.warning("Round failed (%s); recovering and carrying on", e, exc_info=True)
                 self.status.doing = f"Recovering: {e}"[:120]
-                try:
-                    game.close_popups()
-                    game._at = None
-                    hunter.zoom_out()
-                except Stopped:
-                    raise
-                except Exception:
-                    log.debug("recovery failed", exc_info=True)
-                time.sleep(1)
+                failing_since = failing_since or time.time()
+                gone = "Couldn't find a window" in str(e)
+                if not told and time.time() - failing_since > 60:
+                    # nobody may be at the PC: don't just keep retrying in silence
+                    from .watcher import Alert
+                    told = True
+                    self._alert(notifier, Alert(
+                        "bot-stuck", "THE GAME HAS CLOSED" if gone else "THE BOT CAN'T WATCH THE GAME",
+                        ("The Rise of Kingdoms window is gone (it crashed or was closed). Nothing is "
+                         "being watched. Open the game again: the bot carries on by itself."
+                         if gone else f"Every round has failed for a minute: {e}"[:300]),
+                        urgent=True, cooldown=False))
+                if not gone:
+                    try:
+                        game.close_popups()
+                        game._at = None
+                        hunter.zoom_out()
+                    except Stopped:
+                        raise
+                    except Exception:
+                        log.debug("recovery failed", exc_info=True)
+                # failing again and again: try every few seconds, not flat out
+                time.sleep(1 if time.time() - failing_since < 10 else 5)
             self.status.round += 1
             self._maybe_sample()
             self.status.armies = hunter.tracker.summary()

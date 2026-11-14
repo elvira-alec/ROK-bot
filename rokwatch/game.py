@@ -110,6 +110,7 @@ class Game:
         from .trace import TRACE
         t_start = time.time()
         TRACE.event("goto", x=x, y=y)
+        self.forget_pan()
         for attempt in range(tries):
             self.check_stop()
             f = self.frame()
@@ -255,6 +256,7 @@ class Game:
         self.check_stop()
         from .trace import TRACE
         TRACE.event("notch", out=out)
+        self.forget_pan()
         H, W = self._size or self.frame().shape[:2]
         self._size = (H, W)
         before = self._small()
@@ -339,10 +341,15 @@ class Game:
         """n notches out, but never past the last zoom where resource points still show
         their level numbers: if the numbers vanish after a notch, one back in and stop
         (and remember the shorter distance for next time)."""
-        prev = screen.count_level_tags(self.frame())
+        # counted on a settled picture: right after a notch the icons (and their numbers)
+        # haven't been drawn yet, which read as "the numbers vanished" and moved the zoom
+        prev = screen.count_level_tags(self.fresh_frame(0.6))
         for i in range(n):
             self._notch(out=True)
-            cur = screen.count_level_tags(self.frame())
+            cur = screen.count_level_tags(self.fresh_frame(0.6))
+            if prev >= 3 and cur <= 1:
+                time.sleep(0.3)                          # one more look before acting on it
+                cur = screen.count_level_tags(self.fresh_frame(0.6))
             if prev >= 3 and cur <= 1:
                 self._notch(out=False)
                 z = self.zoom_cfg
@@ -353,6 +360,8 @@ class Game:
                                  "is now %d steps out from the close zoom", n - i, new_gap)
                         z["gap"] = new_gap
                         z["t_in"] = min(int(z.get("t_in") or new_gap), new_gap)
+                        # the map scale learned for the old searching zoom no longer fits
+                        self.gap_changed = True
                 return
             prev = cur
 
@@ -443,11 +452,25 @@ class Game:
         if not a1 or not a2 or abs(math.log(a1 / a2)) > 0.06:
             return None                                   # readings disagree: leave it
         ratio = (a1 + a2) / 2 / search_scale
-        if ratio > 1.06:                                  # too far out: one in
-            self._notch(out=False)
-        elif ratio < 0.94:                                # too far in: one out
-            self._notch(out=True)
+        if 0.94 <= ratio <= 1.06:
+            return ratio
+        if (self.zoom_cfg or {}).get("gap"):
+            # off: don't nudge a notch on a scale reading (that drifted it out past where
+            # the level numbers and armies show) - go back to the 3D view's edge, which
+            # can't be mistaken, and step out exactly your number of notches again
+            log.info("zoom: searching zoom is off (%.2fx); setting it again from the close zoom", ratio)
+            self.reanchor()
+        elif ratio > 1.06:                                # no zoom setup to anchor on:
+            self._notch(out=False)                        # one notch in
+        else:
+            self._notch(out=True)                         # one notch out
         return ratio
+
+    def reanchor(self) -> bool:
+        """Put the searching zoom right whatever zoom the game is at now: in to where the
+        3D view starts (unmistakable), then out your number of notches."""
+        self._at = None
+        return self.to_close() and self.to_sweep()
 
     def zoom_reference(self):
         """Picture of your searching zoom, to find it again when measuring."""
@@ -463,12 +486,14 @@ class Game:
         r = cv2.matchTemplate(cur, crop, cv2.TM_CCOEFF_NORMED)
         return float(r.max())
 
-    def measure_scale(self):
+    def measure_scale(self, frac=0.4):
         """Map tiles per screen pixel right now: drag the map sideways a known amount,
-        read how far the camera moved, drag it back."""
+        read how far the camera moved, drag it back. The readout is whole tiles, so a
+        longer drag (frac of the width) is more precise."""
         H, W = self._size or self.frame().shape[:2]
         self._size = (H, W)
-        dx = int(0.4 * W)
+        self.forget_pan()
+        dx = int(frac * W)
         c0 = self.camera_fast()
         self.b.drag(W // 2 + dx // 2, H // 2, W // 2 - dx // 2, H // 2)
         time.sleep(0.25)
@@ -549,7 +574,7 @@ class Game:
         self._fresh = None
         v = View(f, [], c[:3] if c else None, True)
         if c:
-            self._cam = (c[1], c[2])
+            self._cam = self._last_read = (c[1], c[2])
         try:
             self.b.last_view = v
         except AttributeError:
@@ -576,7 +601,7 @@ class Game:
         """(kingdom, x, y) from this picture's coordinate readout (thread-safe: no clicks)."""
         c = screen.camera_coords(frame) or screen.camera_coords(frame, screen.read_text(frame))
         if c:
-            self._cam = (c[1], c[2])
+            self._cam = self._last_read = (c[1], c[2])
         return c[:3] if c else None
 
     def camera_fast(self, full=True):
@@ -587,6 +612,7 @@ class Game:
         if not c and full:                         # quick read failed: read the whole screen
             c = screen.camera_coords(f, screen.read_text(f))
         self._cam = (c[1], c[2]) if c else None
+        self._last_read = self._cam
         self._fresh = (time.time(), f, c)
         return self._cam
 
@@ -615,13 +641,23 @@ class Game:
             return self.goto(x, y)
         n = max(1, int(np.ceil(far)))
         step = p / n
+        # for measuring the map scale from real moves: the drags since the last real camera
+        # reading (Hunter.look_spot pairs them with the next reading)
+        if getattr(self, "_pan_from", None) is None and cam == getattr(self, "_last_read", None):
+            self._pan_from, self._pan_px = tuple(cam), np.zeros(2)
         for _ in range(n):
             self.check_stop()
             cx, cy = W // 2 - int(step[0]) // 2, H // 2 - int(step[1]) // 2
             self.b.drag(cx, cy, cx + int(step[0]), cy + int(step[1]))
+            if getattr(self, "_pan_from", None) is not None:
+                self._pan_px = self._pan_px + (int(step[0]), int(step[1]))
         moved = -(A @ (step * n))
         self._cam = (cam[0] + moved[0], cam[1] + moved[1])   # where it should be now
         return True
+
+    def forget_pan(self):
+        """Something other than pan_to moved the map: no scale sample from this move."""
+        self._pan_from = None
 
     # ------------------------------------------------------------- stopping
     @property
@@ -696,6 +732,44 @@ class Game:
                     (ly.box[0] + ly.box[2] + gap, ly.center[1]))
         return None
 
+    def recover_connection(self, timeout=90.0) -> bool:
+        """The game lost its connection ('NETWORK DISCONNECTED ... click CONFIRM to
+        reconnect'): press CONFIRM and wait for the map to come back (pressing again every
+        20 s if the dialog stays). True once the map is back; sets `reconnected` so the
+        hunt puts the zoom right and goes back to his city. Does nothing (False) when no
+        such dialog is showing - quick: a colour check first, text only if that matches."""
+        f = self.frame()
+        if not screen.modal_dialog(f):
+            return False
+        btn = screen.find_reconnect_button(f)
+        if not btn:
+            return False
+        log.warning("The game lost its connection; pressing CONFIRM to reconnect")
+        self.forget_pan()
+        from .trace import TRACE
+        TRACE.event("reconnect", button=list(btn))
+        end, pressed = time.time() + timeout, 0.0
+        while time.time() < end:
+            self.check_stop()
+            f = self.frame()
+            if not screen.modal_dialog(f):
+                if screen.camera_coords(f):
+                    log.info("Reconnected to the game")
+                    self._at = None
+                    self._cam = None
+                    self.reconnected = True
+                    self.disconnected_since = None
+                    return True
+            elif time.time() - pressed > 20:
+                b = screen.find_reconnect_button(f) or btn
+                self.b.click(int(b[0]), int(b[1]))
+                pressed = time.time()
+            time.sleep(1.0)
+        if not getattr(self, "disconnected_since", None):
+            self.disconnected_since = time.time()
+        log.warning("Couldn't reconnect to the game within %.0f s", timeout)
+        return False
+
     def close_popups(self, tries=3) -> bool:
         """Close whatever is open on top of the map. An info box (tapped resource point,
         army...) is closed with a short drag of the map on its far side - Esc doesn't
@@ -704,6 +778,11 @@ class Game:
         for _ in range(tries):
             f = self.frame()
             H, W = f.shape[:2]
+            if screen.modal_dialog(f):
+                # a game dialog (lost connection...): Esc doesn't close it
+                if self.recover_connection():
+                    continue
+                return False
             box = screen.find_info_box(f)
             if box:
                 bx, by, bw, bh = box
@@ -713,6 +792,7 @@ class Game:
                 y = int(min(max(by + bh / 2, 0.25 * H), 0.75 * H))
                 # long enough that the game can't take it for a press on whatever is
                 # under the mouse (a short drag + hold opened his city's menu)
+                self.forget_pan()
                 self.b.drag(x, y, x, y + int(0.12 * H))
                 end = time.time() + 0.5                # gone as soon as it's gone
                 while time.time() < end and screen.find_info_box(self.frame()):

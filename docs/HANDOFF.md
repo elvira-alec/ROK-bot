@@ -610,3 +610,167 @@ python -m pytest tests/test_real_screens.py tests/test_gatherers.py tests/test_z
   asked whether Claude on their PC could control the game directly. Yes: run the bot from
   source and drive it, take frames and tune the detectors live.
 - They've just been given "Your troops" (v1.15). Watch for their feedback on it.
+
+### 2026-11-13: live run from the user's PC (v1.15) - confirmed faults + fix plan
+
+Claude drove the installed app (`C:\Alec\ROK BOT\RoKWatcher`) over the local panel API
+(`127.0.0.1:8765`, local requests need no key), turned on the debug trace, ran the hunt,
+and read `debug_trace/<run>/trace.jsonl` + frames. The user watched live and corroborated.
+Two good traces: `20261113-173258` (track rounds) and `20261113-194408` (sweep + track).
+Mechanisms are confirmed with timestamps and frames; the user's three complaints are all real.
+
+**Confirmed faults (most important first):**
+
+1. **Goes past moving armies (A).** The sweep is a blind drag grid; an `army`+march-line
+   seen mid-pan is not pursued. Trace 194408 t=41.1 `look found=('army','line')` -> t=41.4
+   drag -> t=42.3 gone (frame 000103 shows the army + dotted line on the right). User: "it
+   just went past an army."
+2. **Can't identify a moving / hostile army (B).** By the time it zooms in (~1.5 s) the army
+   has moved out from under the stale tile->tap projection; the close read is empty ->
+   "unclear". Trace 194408 t=55.9 hostile -> t=59.1 `owner null, read=[]` (frame 000136 is an
+   empty watchtower where it tapped). This is the biggest driver of persistent `owner=None`.
+3. **Zoom in / out / back in on the SAME point (C).** Two sources, both confirmed:
+   - `_unknown` matched farms within **2.5** tiles while `Tracker.match` uses **5.0** + the
+     farm's exact `info["xy"]`. A farm whose zoomed-out estimate drifts 2.5-5 tiles looked
+     "new" and was re-checked. **FIXED** 2026-11-13: `_unknown` now mirrors `match`
+     (`tests/test_dedup.py`; fails on the old gate, passes on the new).
+   - `_check_new_here` re-looks and re-identifies (`again=2`); a farm whose box read returns
+     `None` stays unknown and is tapped again (up to `checks<3`). Trace 173258 t=51.8->66:
+     two full close cycles (~15 s) on one neighbour farm; first read null (OCR grabbed his
+     top-of-screen label + the box -> conflicting coords), second landed "other". STILL OPEN.
+4. **Poor lock-on (D).** 2-3 armies stay `owner=None` every round; `missed` flaps round to
+   round (194408 R2-R6). Mostly a consequence of B.
+
+**New constraint from the user (2026-11-13):** at the close zoom the bot must NOT confuse
+his army with the **NPC armies** around the area - some have names and look like troop
+clusters, "but they're usually not red". `find_troop_clusters` already requires red (good),
+but the `_check_owner` fallback (hunter.py ~797-814) reads ANY floating name near the middle
+via `find_player` / `_other_army_label_near`, not gated on a red cluster - an NPC name can
+leak in there. Gate that fallback on a red cluster near the middle before concluding an owner.
+
+**Fix plan (remaining), with code locations:**
+
+- **B/D - lock onto a moving army before reading it.** In `identify` / `_check_owner`
+  (hunter.py 722-818): for a moving army, don't tap a stale projected tile. After
+  `zoom_close`, re-detect the red troop cluster nearest the predicted spot in the close frame
+  and read the label over *that* (use `screen.find_troop_clusters` + `read_army_label`), or
+  read the owner at the sweep zoom from the march line's home end without zooming at all.
+  Re-centre on `predict(a, now)` right before the close read.
+- **A - don't pan past armies.** In `sweep` / `_check_new_here` (1048-1105, 1200-1220): when a
+  look finds an `army`+line whose ends are NOT at his city, investigate it before moving to
+  the next grid point (it's the thing that matters most). Record every army-on-a-line even
+  when skipping the zoom.
+- **C (second source) - stop re-tapping a farm whose box didn't read.** In `_check_new_here`:
+  remember tiles already attempted this sweep-point and don't re-queue them in the `again`
+  re-look; and fix the null-read cause (restrict the farm box read to the selected info box,
+  not his name label bleeding in from elsewhere on screen - see `_read_box_contents` /
+  `read_gatherer`).
+- **NPC gate** - as above, gate the `_check_owner` label fallback on a red cluster.
+
+**To validate the remaining fixes live** you must run from SOURCE (the installed exe can't be
+hot-patched): stop `RoKWatcher.exe` (frees port 8765 and the mouse), copy the user's
+`config.yaml` + `setup.yaml` + `calibration.png` from `C:\Alec\ROK BOT\RoKWatcher` into the
+clone, then `python -m rokwatch --panel` and drive it the same way. Each live cycle: trace on,
+hunt ~170 s, stop, read the new `debug_trace`. Needs fresh full-res fixtures for the
+moving-army and NPC cases (use the army recorder / snapshots, not the downscaled trace frames).
+
+### 2026-11-14: fixes found with the debug recordings (live on the user's PC)
+
+Method: run the source panel (`python -m rokwatch --panel` in the clone, user's setup.yaml
+copied in), drive it over `127.0.0.1:8765` (`/api/trace`, `/api/hunt`, `/api/auto_zoom`,
+`/api/stop`), then `python tools/analyze_trace.py debug_trace/<run>` and look at the frames.
+`tools/capture_sweep.py OUTDIR` saves full-size searching-zoom pictures (debug frames are
+downscaled to 960 px wide, too small for the plate test). Also mine `his_armies.csv` /
+`his_activity.csv` (split by session: army ids restart at 1 every hunt).
+
+Fixed (each with a test that fails on the old code):
+
+1. **"His troops moved" when they hadn't (false alerts)** - `tests/test_false_moves.py`. Three
+   causes in `Tracker`, all seen in the user's logs:
+   - greedy pairing swapped the ids of two farms side by side (175,366 / 180,365): `match()`
+     now pairs all sightings and armies at once, closest pairs first;
+   - a farm's position is the median of its recent sightings (or its exact X:Y), not the latest
+     wobbly estimate; two tracked farms with the same exact X:Y are merged; his farm isn't
+     "gone" (= "He stopped gathering") while an unchecked farm sits within 7 tiles of it;
+   - an army on someone else's march line was "marching" for minutes (179,360): moving only
+     counts if it actually moves - on a line 60 s+ without leaving 1.6 tiles = not marching
+     (`_line_but_still`; one frame can't tell: armies sit anywhere along their own line, so
+     "army at the line's end" is NOT a valid rule - checked on the fixtures);
+   - direction flipped going home <-> marching out every round near his city (0.5-tile rule vs
+     +-2 tile wobble), logging false "recalled"/"sent out" (= "he's online"): now decided by the
+     trend over its sightings (>= 2.5 tiles) and kept until clear evidence the other way.
+2. **Map scale (patrol.axes) was 20-150% wrong** - root cause of farm "wobble", close-zoom taps
+   on empty ground and sweep gaps. `learn_axes` dragged 300 px (camera moved 1-4 whole tiles):
+   now half the screen, going and coming back, twice. And `_do_auto_zoom` learned the axes at
+   the calibration's zoom, then the tag check moved the searching zoom a notch in (gap 2 -> 1)
+   - the saved scale belonged to another zoom. Now: settle the zoom first (`reanchor`), then
+   measure there. Verified live: new axes are within ~8% of a least-squares fit over 82 real
+   pans (`analyze_trace.py` prints that fit; ratio should be ~1.00).
+3. **Zoomed too far out**: `keep_scale` (every 5 min) nudged a notch on a drag measurement,
+   never checking level numbers; and a hunt accepted whatever simplified-map zoom the game was
+   left at. Now `Game.reanchor()` (in to the 3D edge, out by `gap`) at hunt start and when the
+   scale looks off. `_out_keeping_tags` counts tags on a settled frame (they hadn't drawn yet
+   = "numbers vanished") and flags `gap_changed` so the hunter rescales its axes.
+4. **Calibration**: retries once; close_ratio needs two agreeing readings and 0.25-0.95 (else
+   the old close scale is kept, as an absolute value).
+5. **Fake armies (NPCs) at the searching zoom**: at night white resource icons passed as army
+   diamonds, red barbarian icons as hostile armies - 8 of 9 "army" checks were nothing.
+   Resource points, cities and barbarians have a level plate right under the icon (dy
+   0.020-0.026 H, dx +-0.010 H); armies/scouts never do. `screen.has_level_tag_below`, applied
+   in `find_map_icons`. `tests/test_npc_filter.py` (live frame `real_screens/night/spot00`).
+   Keep the window tight: an army passing just above a resource point has its plate ~0.04 H
+   below and must still count (`test_scouts_and_armies_never_swapped` caught a wider window).
+6. **NPCs / cities at the close zoom**: red barbarian troops and red-roofed cities came out as
+   "troop clusters". `screen.cluster_is_npc` (level plate under the cluster) and
+   `player_troop_clusters`, used by `army_owner_at_close`. On all 19 close fixtures his armies
+   are always kept; everything dropped is a city, a city's red carpet or a barbarian.
+7. **Moving army not in the middle when read**: `Hunter._centre_on_troops` drags the player
+   cluster nearest the army's predicted spot to the middle before reading (logged as
+   `close_read` in the recording).
+8. **Same resource point checked 2-3x in one sweep** (4 s each): the "already known" check only
+   looked at the tracker, which is empty until the round ends. Now also what was checked earlier
+   this round (`_round_seen`), and a spot that failed twice this round isn't retried.
+   Earlier: `_unknown`'s farm match aligned with `match()` (5 tiles + exact X:Y), `test_dedup.py`.
+9. **Close-zoom farm taps missed** ("couldn't open the resource point"): `pan_to`'s 4-tile slack
+   is ~600 px at the close zoom - now 1 tile there; the badge nearest the farm's projected spot
+   is tapped; a box whose X:Y is >6 tiles from the farm meant is a neighbour's (not recorded).
+   Live: farm reads went from 2/10 to 11/12.
+10. **Camera misread** ('174' read as '17') sent it to check a "farm" at 19,358: a reading >10
+    tiles from where the last drag/jump left it is re-read twice; the position two readings
+    agree on wins, else that look is skipped.
+11. `requirements.txt`: `onnxruntime==1.29.0` only installs on Python 3.11+ (the CI builds on
+    3.12 - the shipped exe keeps 1.29.0); a marker adds 1.19.2 for Python 3.10 source installs.
+12. **Looks taken before the icons were drawn = false "He stopped gathering"** (the user saw
+    it bounce between his city and one farm, ignoring the other: that farm had been dropped).
+    Right after a jump/drag the ground draws first, icons a moment later. `look_spot` waits up
+    to 2 s for `screen.icons_drawn` (>= 3 level marks; works at night via `level_marks`, which
+    finds a plate merged with the icon above it - NOT used for the zoom check or the NPC test,
+    it over-counts bare icons). A look without icons drawn covers nothing (`Hunter._cover`).
+    Two misses of something that stays put must be >= 5 s apart (`Army.missed_at`).
+13. **Farms revisited every 30 s** in track mode (`hunt.farm_look_seconds`), not every round:
+    a typed jump there and back every 2.7 s for something that can't move.
+14. **Night false armies**: `find_map_icons`' second pass ("dark ring, light inside") took a
+    white resource icon for an army at night; an all-white interior is now rejected (no real
+    army in the fixtures comes through that pass). `tests/real_screens/night2/`.
+15. **Lost connection**: 'NETWORK DISCONNECTED - click CONFIRM' (laptop on a phone hotspot,
+    happened 3x). `screen.modal_dialog` (blue panel + dimmed map, no OCR) and
+    `find_reconnect_button` (OCR must mention the network - never presses another CONFIRM);
+    `Game.recover_connection` presses it and waits; checked on every look (the dimmed
+    coordinates still read, so it used to "look" at nothing for minutes), in `close_popups`
+    and each round; then zoom re-anchored + back to his city; urgent alert after 2 min.
+    Verified live: reconnected in 4 s. `tests/test_reconnect.py`.
+16. **Game window gone** (crash or closed): the hunt loop alerts "THE GAME HAS CLOSED" after a
+    minute of failed rounds, retries every 5 s, and says "Watching again" when it's back.
+17. **Map scale learned while hunting** (`Hunter._learn_scale`): the zoom doesn't land on the
+    same scale every time (+-10-15% between runs). `pan_to` notes its drags since the last
+    real camera reading, `look_spot` pairs them with the next reading; every 8 moves a robust
+    fit, sanity-checked (0.75-1.33x of the set-up), moved half way. Close-zoom scale stays
+    tied to the set-up (`_axes_cal`). Live: settled at 1.02-1.05x / 1.08-1.13x.
+18. Someone else's farm needs two misses to drop too (it was re-checked 4x in one run).
+
+Live result after 12-18 (7 min, his 4 farms out): every farm tracked the whole run (~250
+sightings each), 0 false alerts, 7-8 owner checks all answered first time, sweep ~40-80 s,
+track rounds ~0.8 s. Dev tools: `tools/analyze_trace.py`, `tools/capture_sweep.py`.
+
+Installed app note: its setup.yaml has `close_with_page: true`, so it quits a few minutes
+after no panel page is open - it was NOT watching overnight. Worth telling the user.

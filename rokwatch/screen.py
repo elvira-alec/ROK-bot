@@ -577,9 +577,55 @@ def find_search_bar(frame: np.ndarray, texts: list[Text]) -> SearchBar | None:
 
 # ---------------------------------------------------------------- zoom level
 
-def count_level_tags(frame: np.ndarray) -> int:
-    """Small light tags with a dark number under resource points / cities / barbarians.
-    Lots of them = the zoom level you want; none = zoomed out too far."""
+def modal_dialog(frame: np.ndarray) -> bool:
+    """A game dialog over a dimmed map (e.g. NETWORK DISCONNECTED): a big blue panel in
+    the middle and everything around it darkened. Quick (no text reading). Measured: the
+    dialog 0.98 blue / surroundings brightness 25; normal maps (day, night, water) at
+    most 0.25 / at least 115."""
+    H, W = frame.shape[:2]
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    c = hsv[int(0.40 * H):int(0.66 * H), int(0.36 * W):int(0.64 * W)]
+    blue = ((c[..., 0] >= 95) & (c[..., 0] <= 115) & (c[..., 1] > 120) & (c[..., 2] > 80)).mean()
+    if blue < 0.6:
+        return False
+    out = np.ones(hsv.shape[:2], bool)
+    out[int(0.30 * H):int(0.72 * H), int(0.32 * W):int(0.68 * W)] = False
+    return float(np.median(hsv[..., 2][out])) < 80
+
+
+RECONNECT_RX = re.compile(r"network|disconnect|reconnect|connection|conexi|desconect|reconect|red\b", re.I)
+CONFIRM_RX = re.compile(r"^(confirm|confirmar|ok|aceptar|reconnect|reconectar|retry|reintentar)$", re.I)
+
+
+def find_reconnect_button(frame: np.ndarray):
+    """(x, y) of the CONFIRM button on a network-disconnected dialog, else None. Only a
+    dialog that talks about the network / reconnecting counts: a random CONFIRM (teleport,
+    spend gems...) must never be pressed."""
+    if not modal_dialog(frame):
+        return None
+    H, W = frame.shape[:2]
+    reg = (int(0.30 * W), int(0.28 * H), int(0.40 * W), int(0.46 * H))
+    texts = read_text(frame, reg)
+    words = " ".join(t.text for t in texts)
+    if not RECONNECT_RX.search(words):
+        return None
+    btn = [t for t in texts if CONFIRM_RX.match(re.sub(r"[^A-Za-z]", "", t.text))]
+    if btn:
+        return btn[-1].center
+    # the button's text unread: the bright cyan button under the message
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    y0, y1, x0, x1 = int(0.54 * H), int(0.68 * H), int(0.40 * W), int(0.60 * W)
+    m = ((hsv[y0:y1, x0:x1, 0] >= 82) & (hsv[y0:y1, x0:x1, 0] <= 100) &
+         (hsv[y0:y1, x0:x1, 1] > 130) & (hsv[y0:y1, x0:x1, 2] > 200))
+    if m.mean() < 0.1:
+        return None
+    ys, xs = np.nonzero(m)
+    return int(x0 + xs.mean()), int(y0 + ys.mean())
+
+
+def level_tags(frame: np.ndarray, hud=True) -> list:
+    """Centres of the small light plates with a dark number under resource points,
+    cities and barbarians (their level). Player armies and scouts never have one."""
     H, W = frame.shape[:2]
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     light = cv2.inRange(hsv, np.array((0, 0, 165), np.uint8), np.array((180, 60, 245), np.uint8))
@@ -587,19 +633,80 @@ def count_level_tags(frame: np.ndarray) -> int:
     # close the digit holes so a tag is one blob
     blob = cv2.morphologyEx(light, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
     n, _, stats, _ = cv2.connectedComponentsWithStats(blob)
-    count = 0
+    out = []
     for i in range(1, n):
         x, y, w, h, a = stats[i]
         if not (0.008 * H <= h <= 0.03 * H and 0.016 * H <= w <= 0.05 * H):
             continue
         if not (1.1 <= w / h <= 3.2) or a < 0.5 * w * h:
             continue
-        if not (0.05 * W < x < 0.88 * W and 0.08 * H < y < 0.86 * H):
+        if hud and not (0.05 * W < x < 0.88 * W and 0.08 * H < y < 0.86 * H):
             continue  # skip the HUD around the edges
         inner = dark[y:y + h, x:x + w]
         if 0.06 <= inner.mean() / 255 <= 0.5:
-            count += 1
-    return count
+            out.append((x + w / 2, y + h / 2))
+    return out
+
+
+def level_marks(frame: np.ndarray) -> list:
+    """Level plates found the way that also works at night - where a plate touches the
+    white icon above it (one blob) and its digits are tinted lighter. Only for telling
+    whether the map's icons have been drawn: it also takes the bottom of a bare icon for a
+    plate, so NOT for the zoom check (count_level_tags) or the NPC test."""
+    H, W = frame.shape[:2]
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    V = hsv[..., 2]
+    light = cv2.inRange(hsv, np.array((0, 0, 165), np.uint8), np.array((180, 60, 245), np.uint8))
+    blob = cv2.morphologyEx(light, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+    n, lab, stats, _ = cv2.connectedComponentsWithStats(blob)
+    out = []
+    sh = max(4, int(0.02 * H))
+    for i in range(1, n):
+        x, y, w, h, a = stats[i]
+        cands = [(x, y, w, h)]
+        if 0.03 * H < h <= 0.075 * H and w <= 0.07 * H:
+            sub = lab[y + h - sh:y + h, x:x + w] == i         # its bottom slice
+            cols = np.nonzero(sub.any(axis=0))[0]
+            if len(cols):
+                cands.append((x + int(cols.min()), y + h - sh, int(cols.max() - cols.min() + 1), sh))
+        for cx, cy, cw, ch in cands:
+            if not (0.008 * H <= ch <= 0.03 * H and 0.016 * H <= cw <= 0.05 * H):
+                continue
+            if not (1.1 <= cw / ch <= 3.2) or (lab[cy:cy + ch, cx:cx + cw] == i).mean() < 0.5:
+                continue
+            if not (0.05 * W < cx < 0.88 * W and 0.08 * H < cy < 0.86 * H):
+                continue
+            part = V[cy:cy + ch, cx:cx + cw].astype(int)
+            dark = ((part <= 95) | (part < np.percentile(part, 80) - 75)).mean()
+            if 0.06 <= dark <= 0.5:
+                out.append((cx + cw / 2, cy + ch / 2))
+                break
+    return out
+
+
+def icons_drawn(frame: np.ndarray) -> bool:
+    """Have the map's icons been drawn yet? Right after a jump the ground shows first and
+    the icons a moment later. Measured: bare map 0-1 marks, drawn 4-17 (day and night)."""
+    return len(level_marks(frame)) >= 3
+
+
+def count_level_tags(frame: np.ndarray) -> int:
+    """Small light tags with a dark number under resource points / cities / barbarians.
+    Lots of them = the zoom level you want; none = zoomed out too far."""
+    return len(level_tags(frame))
+
+
+def has_level_tag_below(frame: np.ndarray, point, tags=None, reach=0.032) -> bool:
+    """Is there a level plate just under this icon? Then it's a resource point, a city or
+    a barbarian (NPC) - not a player's army or scout (those never show a level). Night
+    colours made white resource icons pass for army diamonds, and red barbarian icons
+    for hostile armies: every one cost a zoom in for nothing."""
+    H = frame.shape[0]
+    tags = level_tags(frame, hud=False) if tags is None else tags
+    # measured on the real map: an icon's own plate sits 0.020-0.026 H under its centre and
+    # within 0.010 H sideways. Tight on purpose: an army passing just above a resource
+    # point has that point's plate ~0.04 H below it, and must still count.
+    return any(abs(tx - point[0]) <= 0.013 * H and 0.012 * H < ty - point[1] <= reach * H for tx, ty in tags)
 
 
 _globe = None
@@ -833,6 +940,26 @@ def find_troop_clusters(frame: np.ndarray):
     return sorted(out, key=lambda b: math.dist((b[0] + b[2] / 2, b[1] + b[3] / 2), mid))
 
 
+def cluster_is_npc(frame: np.ndarray, box, tags=None) -> bool:
+    """A red 'troop cluster' with a level plate just under it is a barbarian (NPC) or a
+    red-roofed city, never a player's army (those have their name above, no plate). Checked
+    on the user's recordings: his armies never had one; red barbarians and cities did."""
+    H = frame.shape[0]
+    x, y, w, h = box
+    tags = level_tags(frame, hud=False) if tags is None else tags
+    return any(x - 0.03 * H <= tx <= x + w + 0.03 * H and y + 0.5 * h <= ty <= y + h + 0.06 * H
+               for tx, ty in tags)
+
+
+def player_troop_clusters(frame: np.ndarray):
+    """find_troop_clusters without the barbarians / cities (see cluster_is_npc)."""
+    boxes = find_troop_clusters(frame)
+    if not boxes:
+        return boxes
+    tags = level_tags(frame, hud=False)
+    return [b for b in boxes if not cluster_is_npc(frame, b, tags)]
+
+
 def read_army_label(frame: np.ndarray, box) -> list[Text]:
     """The owner's name over a troop cluster: small white letters just above it, read
     enlarged 3x (too small for a normal read)."""
@@ -873,7 +1000,7 @@ def army_owner_at_close(frame: np.ndarray, name: str, reach=0.4):
     his name; 'other' only on a clear read of a name that has nothing of his in it."""
     H, W = frame.shape[:2]
     read, other = [], False
-    for box in find_troop_clusters(frame)[:2]:
+    for box in player_troop_clusters(frame)[:2]:      # not barbarians (NPCs) or cities
         if math.dist((box[0] + box[2] / 2, box[1] + box[3] / 2), (W / 2, H / 2)) > reach * H:
             break
         texts = read_army_label(frame, box)
@@ -1020,6 +1147,10 @@ def find_map_icons(frame: np.ndarray):
         inner = hsv[cy - h // 5:cy + h // 5, cx - w // 5:cx + w // 5]
         if inner.size == 0 or np.median(inner[..., 2]) < 140 or np.median(inner[..., 1]) > 60:
             continue
+        if np.median(inner[..., 1]) < 12 and np.median(inner[..., 2]) > 210:
+            continue                          # white all over: a resource icon (at night its
+                                              # tinted outline passes for the dark ring), not
+                                              # a lavender / mauve army diamond
         if ((inner[..., 2] > 235) & (inner[..., 1] < 30)).mean() < 0.08:
             continue                          # needs a white symbol inside
         if all(np.hypot(cx - f[0][0], cy - f[0][1]) > 0.5 * max(w, h) for f in found):
@@ -1047,6 +1178,10 @@ def find_map_icons(frame: np.ndarray):
                     k = "army"
             out.append((c, k))
         found = out
+    if found:
+        # a level plate under it: a resource point, city or barbarian (NPC), not a march
+        tags = level_tags(frame, hud=False)
+        found = [(c, k) for c, k in found if not has_level_tag_below(frame, c, tags)]
     return found
 
 

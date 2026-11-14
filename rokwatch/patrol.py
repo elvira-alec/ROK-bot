@@ -381,26 +381,51 @@ class Patrol:
         return alerts
 
 
-def learn_axes(game: Game, px=300) -> list | None:
+def learn_axes(game: Game, frac=0.5, reps=2, px=None) -> list | None:
     """Work out how screen pixels map to map tiles by dragging the map a known
-    amount and reading the coordinates. Returns a 2x2 matrix (tiles per pixel)."""
+    amount and reading the coordinates. Returns a 2x2 matrix (tiles per pixel).
+
+    The camera readout is in whole tiles, so the drag has to be long: a 300 px drag moved
+    it only 1-4 tiles, and rounding made the result 20%-150% off (every map position the
+    bot works out, every sweep step and every close-up tap depends on this). Half the
+    screen each way, measured going and coming back, twice: about 3% now."""
     v0 = game.look()
     if not v0.camera:
         return None
     H, W = v0.frame.shape[:2]
+
+    def cam():
+        game.wait(0.6)
+        c = game.camera_fast() if hasattr(game, "camera_fast") else None
+        if c is None:
+            v = game.look()
+            c = v.camera[1:3] if v.camera else None
+        return np.array(c, float) if c is not None else None
+
     cols = []
-    for dx, dy in ((px, 0), (0, px)):
-        start = game.look().camera
-        # dragging the map right moves the camera left, so drag the opposite way
-        game.b.drag(W // 2 + dx // 2, H // 2 + dy // 2, W // 2 - dx // 2, H // 2 - dy // 2)
-        game.wait(1.0)
-        end = game.look().camera
-        game.b.drag(W // 2 - dx // 2, H // 2 - dy // 2, W // 2 + dx // 2, H // 2 + dy // 2)
-        game.wait(1.0)
-        if not (start and end):
+    fixed = px                                      # a fixed drag in pixels (old callers)
+    for dx, dy in (((fixed or int(frac * W)), 0), (0, (fixed or int(frac * H)))):
+        px = max(dx, dy)
+        samples = []
+        for _ in range(reps):
+            c0 = cam()
+            # dragging the map right moves the camera left, so drag the opposite way
+            game.b.drag(W // 2 + dx // 2, H // 2 + dy // 2, W // 2 - dx // 2, H // 2 - dy // 2)
+            c1 = cam()
+            game.b.drag(W // 2 - dx // 2, H // 2 - dy // 2, W // 2 + dx // 2, H // 2 + dy // 2)
+            c2 = cam()
+            if c0 is None or c1 is None or c2 is None:
+                continue
+            go, back = c1 - c0, c1 - c2
+            # a misread digit or a drag that didn't take: going and coming back disagree
+            if np.linalg.norm(go - back) > max(1.5, 0.15 * np.linalg.norm(go)) or np.linalg.norm(go) < 2:
+                log.info("learn_axes: readings didn't add up (%s -> %s -> %s); ignored", c0, c1, c2)
+                continue
+            samples += [go / px, back / px]
+        if not samples:
             return None
-        cols.append([(end[1] - start[1]) / px, (end[2] - start[2]) / px])
+        cols.append(np.mean(samples, axis=0).tolist())
     m = np.array(cols).T  # columns: tiles per pixel for screen x, screen y
-    if abs(np.linalg.det(m)) < 1e-6:
+    if abs(np.linalg.det(m)) < 1e-9:
         return None
-    return m.round(5).tolist()
+    return m.round(6).tolist()
