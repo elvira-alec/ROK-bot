@@ -150,6 +150,32 @@ def view_level(frame: np.ndarray) -> str:
     return "far" if has_world_button(frame) > 0.8 else "patrol"
 
 
+def city_view(frame: np.ndarray) -> bool:
+    """Inside a city ("Viewing the city of [P83L]JONH WICK."): zooming in over a city
+    with the wheel enters it, and the wheel never leaves it again - only the map button at
+    the bottom right does. No coordinate readout there, and a round blue "Share" button at
+    the bottom left (0.29 of that corner blue vs <= 0.10 on the map). Quick colour check
+    first; then the banner text, or failing that no top-left text at all."""
+    H, W = frame.shape[:2]
+    r = frame[int(0.885 * H):int(0.975 * H), int(0.008 * W):int(0.052 * W)]
+    if r.size == 0:
+        return False
+    hsv = cv2.cvtColor(r, cv2.COLOR_BGR2HSV)
+    blue = ((hsv[..., 0] > 95) & (hsv[..., 0] < 125) & (hsv[..., 1] > 120) & (hsv[..., 2] > 120)).mean()
+    if blue < 0.2:
+        return False
+    texts = read_text(frame, (int(0.15 * W), int(0.14 * H), int(0.7 * W), int(0.11 * H)), strip=True)
+    if find_text(texts, r"viewing|city|ciudad|viendo"):
+        return True
+    return not top_texts(frame)
+
+
+def city_view_exit(frame: np.ndarray):
+    """Where the map button is in a city view (bottom right)."""
+    H, W = frame.shape[:2]
+    return int(W * 0.961), int(H * 0.948)
+
+
 def find_info_box(frame: np.ndarray):
     """The light info box the game opens when you tap something on the map (e.g. a
     resource point: name, reserves, gatherer, Scout / Attack). Opens to the left or

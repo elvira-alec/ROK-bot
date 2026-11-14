@@ -301,6 +301,9 @@ class Game:
         while self.level() != "close":              # in, one at a time, until the 3D view
             if j >= max(gap, 4) + 6:
                 return False
+            if self.leave_city_view():              # went into a city: back out, carry on
+                j += 1
+                continue
             self._notch(out=False)
             j += 1
         if gap and t_in:
@@ -416,13 +419,24 @@ class Game:
         H, W = self.frame().shape[:2]
         self._size = (H, W)
         say("Zooming all the way in")
+        self.leave_city_view()
         prev = self._small()
+        moved = 0
         for _ in range(12):                              # in, in bursts, until it stops changing
             for _ in range(6):
                 self.check_stop()
                 self.b.wheel(W // 2, H // 2, -100)
                 time.sleep(0.04)
             cur = self._settled()
+            if self.leave_city_view():
+                # zooming in over a city goes inside it (his city is where the hunt ends):
+                # move off the city and zoom in again
+                if moved >= 3:
+                    return None, "Kept zooming into a city; move the map off cities and try again."
+                moved += 1
+                self.b.drag(int(W * 0.8), int(H * 0.5), int(W * 0.35), int(H * 0.5))
+                prev = self._small()
+                continue
             if self._changed(cur, prev) < 0.01:
                 break
             prev = cur
@@ -787,6 +801,31 @@ class Game:
                     (ly.box[0] + ly.box[2] + gap, ly.center[1]))
         return None
 
+    def leave_city_view(self, frame=None) -> bool:
+        """Zooming in over a city enters it ("Viewing the city of ..."), and the wheel never
+        leaves it: press the map button (bottom right). True if it was inside a city."""
+        f = self.frame() if frame is None else frame
+        if not screen.city_view(f):
+            return False
+        log.info("Inside a city view (zoomed in over a city); back to the map")
+        from .trace import TRACE
+        TRACE.event("city_view")
+        self.forget_pan()
+        for _ in range(3):
+            self.check_stop()
+            x, y = screen.city_view_exit(f)
+            self.b.click(x, y)
+            end = time.time() + 4.0
+            while time.time() < end:
+                time.sleep(0.4)
+                f = self.frame()
+                if not screen.city_view(f) and screen.camera_coords(f):
+                    self._at = None
+                    self._cam = None
+                    return True
+        log.warning("Couldn't leave the city view")
+        return True
+
     def recover_connection(self, timeout=90.0) -> bool:
         """The game lost its connection ('NETWORK DISCONNECTED ... click CONFIRM to
         reconnect'): press CONFIRM and wait for the map to come back (pressing again every
@@ -794,6 +833,9 @@ class Game:
         hunt puts the zoom right and goes back to his city. Does nothing (False) when no
         such dialog is showing - quick: a colour check first, text only if that matches."""
         f = self.frame()
+        if self.leave_city_view(f):
+            self.reconnected = True                # the hunt then puts the zoom right
+            return True
         if not screen.modal_dialog(f):
             return False
         btn = screen.find_reconnect_button(f)

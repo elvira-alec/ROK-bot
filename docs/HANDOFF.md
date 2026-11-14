@@ -837,6 +837,14 @@ Fixed (each with a test that fails on the old code):
     - tracing saves full-size crops of every army/scout/hostile found (`debug_trace/<run>/crops`).
     - live: with him offline and nothing out, a 5-min round gave 0 found in 474 looks, all 720
       frames re-checked clean (no phantoms).
+28. **v1.21: zooming in over a city goes INSIDE it** ("Viewing the city of [P83L]JONH WICK",
+    no coordinate readout, blue Share button bottom left). The wheel never leaves that view,
+    so the zoom setup (which zooms all the way in, and the hunt ends at his city) got stuck:
+    "couldn't step out from the close zoom cleanly". `screen.city_view` (corner colour check,
+    then the banner text) + `Game.leave_city_view` (map button, bottom right). Used by
+    auto_calibrate (leave, drag off the city, zoom in again), `to_close`, and every round via
+    `recover_connection` (then the zoom is re-set and it goes back to his city).
+    Test: `tests/test_city_view.py`, fixtures `tests/real_screens/city_view/`.
 
 Live result after 12-18 (7 min, his 4 farms out): every farm tracked the whole run (~250
 sightings each), 0 false alerts, 7-8 owner checks all answered first time, sweep ~40-80 s,
