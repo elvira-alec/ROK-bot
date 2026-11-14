@@ -595,6 +595,18 @@ python -m pytest tests/test_real_screens.py tests/test_gatherers.py tests/test_z
   (needs `gh auth login`).
 - The installed app's updater picks the new release up by itself (check interval in the
   panel), or via More > Updates > Check now.
+- **From the user's PC, fully automatic - NO popups (the user insists).** Git Credential
+  Manager has two GitHub accounts stored (IronAR, elvira-alec) and asked which one every time.
+  The repo's own git config pins `credential.https://github.com.username = elvira-alec`, and
+  everything runs with `GCM_INTERACTIVE=never GIT_TERMINAL_PROMPT=0` (fails quietly rather than
+  prompting). The stored token has `repo` + `workflow` scopes. Steps:
+  1. `GCM_INTERACTIVE=never GIT_TERMINAL_PROMPT=0 git push origin main`
+  2. `python tools/gh.py publish 1.N` (cancels the plain push builds, starts the publish)
+  3. `python tools/gh.py wait-release 1.N` ; `python tools/gh.py runs` / `log <run id>` to check
+  Don't cancel a run the user started (the permission check blocks it anyway).
+- **Watch the `tests` workflow too** (Linux, Python 3.12, NumPy 2): this PC runs Python 3.10 /
+  NumPy 1.26, so NumPy-2-only breakage doesn't show locally. v1.16 shipped one (`np.cross` on
+  2-D vectors raises in NumPy 2) - fixed in v1.17. `python tools/gh.py log <run id>` shows it.
 - **Publish every change unless the user says not to.** When they say "push, don't build",
   just push.
 
