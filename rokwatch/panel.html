@@ -246,11 +246,14 @@
     <h2><span class="step">4</span> Watch</h2>
     <div class="row" style="margin-top:0">
       <button class="go" id="b-hunt" onclick="post('hunt')" style="font-size:16px;padding:12px 20px"><svg class="i"><use href="#i-play"/></svg> Watch &amp; track him</button>
+      <button id="b-guard" onclick="post('guard')" style="font-size:16px;padding:12px 20px"><svg class="i"><use href="#i-play"/></svg> Guard my troops only</button>
       <button class="danger" id="b-stop" onclick="post('stop')" style="font-size:16px;padding:12px 20px"><svg class="i"><use href="#i-stop"/></svg> Stop</button>
     </div>
     <p class="hint">Searches around his city for his armies (farming or marching), checks each new one is his,
       then keeps following them. When none are out it watches his city. Alerts you when one heads for your city
-      or your troops, and when you're scouted (red eye) or attacked (red swords).</p>
+      or your troops, and when you're scouted (red eye) or attacked (red swords).
+      <b>Guard my troops only</b> needs no target: every minute it looks around your gathering troops and
+      your city, alerts you when an army marches at them, and follows that army home to tell you whose it is.</p>
     <label class="toggle"><input type="checkbox" id="auto_recall"> Recall my troops automatically when a march heads for them <span class="hint">(clicks in the game: higher ban risk)</span></label>
     <label for="recall_scope">Which troops to recall</label>
     <select id="recall_scope">
@@ -711,7 +714,7 @@ async function refresh() {
   lastMsg = st.message;
   const running = st.phase === 'patrolling';
   $('b-start').disabled = running || st.phase === 'stopped' || st.phase === 'opening';
-  $('b-hunt').disabled = $('b-start').disabled;
+  $('b-hunt').disabled = $('b-guard').disabled = $('b-start').disabled;
   $('b-stop').disabled = !running;
   facts($('progress'), [['Rounds done', st.round], ['Last place checked', st.last_site || '-']]);
   $('alerts').innerHTML = st.alerts.length ? st.alerts.map(a =>

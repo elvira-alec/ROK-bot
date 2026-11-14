@@ -704,7 +704,7 @@ class Hunter:
         h = cfg.get("hunt", {})
         self.game = game
         self.name = h.get("player_name", "")
-        self.city = tuple(h.get("city", (0, 0)))
+        self.city = tuple(h.get("city") or (0, 0))
         self.radius = float(h.get("radius", 25))
         # "zoomed_out": sweep the simplified map (wide view, grey diamonds), zoom in only to
         # read who a diamond belongs to. "close": sweep at the close zoom reading names.
@@ -741,6 +741,21 @@ class Hunter:
         self._guard_at = 0.0
         self._guard_alerts = []
         self._crossing = {}                       # (id, id) of his army and another passing close
+        # "Guard my troops": no target - only your troops and city, and whoever comes at them.
+        # Also what the watch falls back to when his city has gone from its spot (he moved).
+        self.guard_only = bool(h.get("guard_only"))
+        if self.guard_only:
+            self.guard_every = min(self.guard_every or 60, 60)
+            self.refresh_spots = min(self.refresh_spots, 300)
+            if not self.city or tuple(self.city) == (0, 0):
+                self.city = tuple(my_sites[0][1]) if my_sites else (0, 0)
+                self.tracker.city = self.city
+        self.city_moved = False
+        self._city_check_at = 0.0
+        self._city_missing = 0
+        self._city_missing_since = None
+        self.attackers: list = []                 # armies that came at you, followed home
+        self._attacker_id = 1000
         self.log_path = Path(log_path)
         self.debug_dir = debug_dir
         self.auto_recall = bool(cfg.get("patrol", {}).get("auto_recall", False))
@@ -776,7 +791,7 @@ class Hunter:
 
     def ready(self):
         problems = []
-        if not self.name:
+        if not self.name and not self.guard_only:
             problems.append("enter his name first (step 2 in the panel)")
         if not self.axes:
             problems.append("set up the zoom first (step 3 in the panel)")
@@ -1512,10 +1527,22 @@ class Hunter:
 
     update_my_spots = update_my_troops            # (old name)
 
+    def _guard_points(self):
+        """(label, (x, y), key) of what the guard looks at: your gathering troops (their spot
+        is exact and they stay put) and, in guard mode, your own places (your city)."""
+        pts = [(f"YOUR TROOP {t['index'] + 1}", (t["x"], t["y"]), f"troop-{t['index'] + 1}")
+               for t in sorted(self.my_troops.values(), key=lambda t: t["index"])
+               if t.get("state") == "gathering" and "x" in t]
+        if self.guard_only:
+            pts += [(name.upper() if name.lower().startswith("your") else f"YOUR {name.upper()}"
+                     .replace("YOUR MY ", "YOUR "), tuple(pos), f"site-{name}")
+                    for name, pos in self.fixed_sites]
+        return pts
+
     def _guard_due(self, now):
         if not self.guard_every or self.mode == "sweep":
             return False
-        if not any(t.get("state") == "gathering" and "x" in t for t in self.my_troops.values()):
+        if not self._guard_points():
             return False
         return now - self._guard_at >= self.guard_every
 
@@ -1540,14 +1567,11 @@ class Hunter:
         an army marching at one of them that slipped past the watch around his city.
         Alerts whoever it is (the user's choice: fastest); says 'his' when that's known."""
         alerts = []
-        troops = [t for t in sorted(self.my_troops.values(), key=lambda t: t["index"])
-                  if t.get("state") == "gathering" and "x" in t]
-        for i, t in enumerate(troops):
+        pts = self._guard_points()
+        for i, (label, pos, key) in enumerate(pts):
             if stop and stop():
                 break
-            pos = (t["x"], t["y"])
-            n = t["index"] + 1
-            self._progress(i, len(troops), f"Looking around your troop {n} ({pos[0]},{pos[1]})")
+            self._progress(i, len(pts), f"Looking around {label.lower()} ({pos[0]},{pos[1]})")
             t0 = time.time()
             ok = self.game.pan_to(*pos, self.axes)
             self.timing["move"] += time.time() - t0
@@ -1560,27 +1584,196 @@ class Hunter:
                 how = self._coming_at(s, pos)
                 if not how:
                     continue
-                his = (any(self.tracker.at_home(e) for e in (s.ends or ()))
-                       or any(a.owner == "him" and a.kind != "farm" and math.dist(a.tile, s.tile) <= 4
-                              for a in self.tracker.armies))
+                his = bool(self.name) and not self.guard_only and (
+                    any(self.tracker.at_home(e) for e in (s.ends or ()))
+                    or any(a.owner == "him" and a.kind != "farm" and math.dist(a.tile, s.tile) <= 4
+                           for a in self.tracker.armies))
                 who = "HIS ARMY" if his else ("A SCOUT" if s.kind == "scout" else "AN ARMY")
                 d = math.dist(s.tile, pos)
                 what = "is marching against" if how == "hostile" else "is marching at"
-                title = f"{who} {what.upper()} YOUR TROOP {n}"
-                msg = (f"At {s.tile[0]:.0f},{s.tile[1]:.0f}, about {d:.0f} tiles from your troop {n} "
-                       f"gathering at {pos[0]},{pos[1]}." + (" It's his." if his else ""))
+                title = f"{who} {what.upper()} {label}"
+                where = label.lower()
+                msg = (f"At {s.tile[0]:.0f},{s.tile[1]:.0f}, about {d:.0f} tiles from {where} "
+                       f"at {pos[0]},{pos[1]}." + (" It's his." if his else "")
+                       + ("" if s.kind == "scout" else " Following it to see where it goes home."))
                 log.warning("hunt: %s - %s", title, msg)
                 from .trace import TRACE
-                TRACE.event("guard", troop=n, pos=list(pos), how=how, his=his,
+                TRACE.event("guard", at=label, pos=list(pos), how=how, his=his,
                             tile=[round(s.tile[0], 1), round(s.tile[1], 1)])
-                alerts.append(Alert(f"guard-{n}", title, msg, urgent=True))
-                if self.auto_recall and s.kind != "scout" and f"guard-recall-{n}" not in self._recalled:
-                    self._recalled.add(f"guard-recall-{n}")
+                alerts.append(Alert(f"guard-{key}", title, msg, urgent=True))
+                if s.kind != "scout":
+                    self._add_attacker(s, pos, label)
+                if (self.auto_recall and s.kind != "scout" and key.startswith("troop")
+                        and f"guard-recall-{key}" not in self._recalled):
+                    self._recalled.add(f"guard-recall-{key}")
                     report = self.game.recall_all([pos])
-                    alerts.append(Alert(f"recall-guard-{n}-{time.time()}", "Auto-recall", "; ".join(report),
+                    alerts.append(Alert(f"recall-guard-{key}-{time.time()}", "Auto-recall", "; ".join(report),
                                         urgent=True, cooldown=False))
-                break                              # one alert per troop per look
+                break                              # one alert per spot per look
         return alerts
+
+    # ---------------------------------------------------------- attackers: follow them home
+
+    FOLLOW_FOR = 30 * 60          # give up on an attacker after this long
+
+    def _add_attacker(self, s, target, label):
+        if any(math.dist(a.tile, s.tile) <= 4 for a in self.attackers):
+            return
+        self._attacker_id += 1
+        now = time.time()
+        a = Army(self._attacker_id, tuple(s.tile), now, now, moving=bool(s.moving), ends=s.ends,
+                 kind="army", history=[(now, tuple(s.tile))])
+        a.info = {"target": tuple(target), "target_label": label, "since": now, "phase": "coming"}
+        self.attackers.append(a)
+
+    def _update_attacker(self, a, seen, now):
+        """Match this look's sightings to the attacker (nearest within reach of where it
+        should be). Returns the sighting or None."""
+        where = predict(a, now)
+        reach = 4.0 + 3.0 * min(5.0, (now - a.last_seen) / 60)
+        cand = [s for s in seen if s.kind in ("army", "hostile") and math.dist(s.tile, where) <= reach]
+        if not cand:
+            return None
+        s = min(cand, key=lambda s: math.dist(s.tile, where))
+        a.tile, a.last_seen, a.moving, a.missed = tuple(s.tile), now, bool(s.moving), 0
+        if s.ends:
+            a.ends = s.ends
+            a.dest = max(s.ends, key=lambda e: math.dist(e, s.tile))     # the line ahead of it
+        a.history = (a.history + [(now, tuple(s.tile))])[-20:]
+        tgt = a.info["target"]
+        if a.info["phase"] == "coming" and a.moving and a.dest and math.dist(a.dest, tgt) > 4 \
+                and math.dist(a.tile, tgt) < math.dist(a.dest, tgt):
+            a.info["phase"] = "home"                  # turned round: on its way home now
+            log.info("hunt: the attacker #%d is heading away (toward %.0f,%.0f)", a.id, *a.dest)
+        return s
+
+    def follow_attackers(self, stop=None) -> list[Alert]:
+        """Each attacker: look where it should be now. Once it's heading away from you,
+        keep following; when it disappears (gone into its city) or stops, the end of its
+        last march line is its home: read the city's name there."""
+        alerts = []
+        now = time.time()
+        for a in list(self.attackers):
+            if stop and stop():
+                break
+            if now - a.info["since"] > self.FOLLOW_FOR:
+                log.info("hunt: stopped following attacker #%d (30 min)", a.id)
+                self.attackers.remove(a)
+                continue
+            where = predict(a, now)
+            self._progress(0, 1, f"Following the army that came at {a.info['target_label'].lower()} "
+                                 f"({where[0]:.0f},{where[1]:.0f})")
+            t0 = time.time()
+            ok = self.game.pan_to(int(round(where[0])), int(round(where[1])), self.axes)
+            self.timing["move"] += time.time() - t0
+            if not ok:
+                continue
+            view, seen = self.look_spot()
+            if not view.camera:
+                continue
+            got = self._update_attacker(a, seen, time.time())
+            if got is not None and (a.moving or a.info["phase"] == "coming"):
+                continue
+            if got is None:
+                a.missed += 1
+                if a.missed < 2:
+                    continue
+            if a.info["phase"] != "home":
+                if got is None and a.missed >= 4:
+                    log.info("hunt: lost the attacker #%d", a.id)
+                    self.attackers.remove(a)
+                continue
+            # home: it went into its city (gone) or stopped at the end of its line
+            home = a.dest or a.tile
+            self.attackers.remove(a)
+            name, xy = self._read_base(home)
+            where_s = f"{xy[0]},{xy[1]}" if xy else f"about {home[0]:.0f},{home[1]:.0f}"
+            title = f"THE ATTACKER WENT HOME TO {name}" if name else "THE ATTACKER WENT HOME"
+            msg = (f"The army that came at {a.info['target_label'].lower()} went home to "
+                   + (f"{name}'s city at {where_s}." if name else f"a city at {where_s} (couldn't read the name).")
+                   + " You can make them a target in 'Who to watch'.")
+            log.warning("hunt: %s - %s", title, msg)
+            from .trace import TRACE
+            TRACE.event("attacker_home", id=a.id, home=[round(home[0], 1), round(home[1], 1)], name=name)
+            self.attacker_bases = (getattr(self, "attacker_bases", []) + [
+                {"name": name, "x": round(home[0]), "y": round(home[1]),
+                 "time": datetime.now().strftime("%H:%M")}])[-10:]
+            alerts.append(Alert(f"attacker-home-{a.id}", title, msg, urgent=False, cooldown=False))
+        return alerts
+
+    def _read_base(self, tile):
+        """The name on the city nearest this spot (searching zoom: cities show their owner's
+        name on a plate under them). Returns (name or None, None)."""
+        if not self.game.pan_to(int(round(tile[0])), int(round(tile[1])), self.axes, close_enough=1.0):
+            return None, None
+        view, _ = self.look_spot()
+        if not view.camera:
+            return None, None
+        px = to_screen(view.camera[1:3], self.axes, tile, view.frame.shape)
+        if not px:
+            return None, None
+        texts = [t for t in self._label_texts(view.frame, px, half_w=0.2, up=0.1, down=0.14)
+                 if len(re.sub(r"[^A-Za-z]", "", t.text)) >= 3]
+        if not texts:
+            return None, None
+        best = min(texts, key=lambda t: math.dist(t.center, (px[0], px[1] + 0.04 * view.frame.shape[0])))
+        return best.text.strip(), None
+
+    # ---------------------------------------------------------- is his city still there?
+
+    def _label_texts(self, frame, px, half_w=0.16, up=0.06, down=0.12):
+        """Text read in a box around a screen point (names sit on a plate under cities)."""
+        H, W = frame.shape[:2]
+        x0, x1 = max(0, int(px[0] - half_w * H)), min(W, int(px[0] + half_w * H))
+        y0, y1 = max(0, int(px[1] - up * H)), min(H, int(px[1] + down * H))
+        if x1 - x0 < 10 or y1 - y0 < 10:
+            return []
+        return screen.read_text(frame, (x0, y0, x1 - x0, y1 - y0))
+
+    def city_present(self, frame, px, name) -> bool:
+        return any(screen.name_score(t.text, name) >= 0.7 for t in self._label_texts(frame, px))
+
+    CITY_CHECK_EVERY = 120
+
+    def _check_his_city(self, now) -> list[Alert]:
+        """Every 2 min: is his name still on the city at his spot? Missing 3 times in a row
+        (6+ min, the map drawn each time) = he moved his city (teleported). Then the watch
+        guards your troops instead, until you give it his new X:Y."""
+        if (self.guard_only or self.method != "zoomed_out" or not self.name
+                or now - self._city_check_at < self.CITY_CHECK_EVERY):
+            return []
+        self._city_check_at = now
+        if not self.game.pan_to(*self.city, self.axes):
+            return []
+        view, _ = self.look_spot()
+        if not view.camera or not getattr(view, "icons_loaded", True):
+            return []
+        H, W = view.frame.shape[:2]
+        px = to_screen(view.camera[1:3], self.axes, self.city, view.frame.shape)
+        if not px or not (0.2 * W < px[0] < 0.8 * W and 0.2 * H < px[1] < 0.72 * H):
+            return []
+        if self.city_present(view.frame, px, self.name):
+            self._city_missing, self._city_missing_since = 0, None
+            return []
+        self._city_missing += 1
+        self._city_missing_since = self._city_missing_since or now
+        log.info("hunt: his name isn't on a city at %d,%d (%d time(s))", self.city[0], self.city[1],
+                 self._city_missing)
+        if self._city_missing < 3:
+            return []
+        self.city_moved, self.guard_only = True, True
+        self.guard_every = min(self.guard_every or 60, 60)
+        self.tracker.armies = []
+        mins = (now - self._city_missing_since) / 60
+        try:
+            self.activity.action("moved_city", "moved his city", *self.city, now=now)
+        except Exception:
+            pass
+        log.warning("hunt: his city is gone from %d,%d: he moved it", *self.city)
+        return [Alert("his-city-moved", "HE MOVED HIS CITY",
+                      f"His city isn't at {self.city[0]},{self.city[1]} any more (checked 3 times over "
+                      f"{mins:.0f} min). The bot now guards your troops. Put his new X:Y in "
+                      f"'Who to watch' to watch him again.", urgent=True, cooldown=False)]
 
     def _check_crossings(self):
         """His marching army and another one passing within 3 tiles: the tracker can swap
@@ -1957,13 +2150,15 @@ class Hunter:
                 if r and not 0.94 <= r <= 1.06:
                     log.info("hunt: zoom was off (%.2fx the searching zoom); set again from the close zoom", r)
         self._rounds += 1
-        self.mode = self.plan(now)
+        self.mode = "guard" if self.guard_only else self.plan(now)
         from .trace import TRACE
         TRACE.event("round", mode=self.mode, n=self._rounds,
                     armies=[{"id": a.id, "kind": a.kind, "owner": a.owner, "tile": [round(a.tile[0]), round(a.tile[1])],
                              "moving": a.moving, "missed": a.missed} for a in self.tracker.armies])
         covered = None
-        if self.mode == "sweep":
+        if self.mode == "guard":
+            sightings, covered, visited = [], [], 0      # no target: only your troops (below)
+        elif self.mode == "sweep":
             sightings, visited, covered, finished = self.sweep(stop)
             if finished:
                 self._last_full = now
@@ -1979,10 +2174,25 @@ class Hunter:
             self._progress(0, 1, "Checking your troops (tapping each in the troop list)")
             self.update_my_troops()
         self._guard_alerts = []
+        busy = False
         if self.method == "zoomed_out" and self._guard_due(now):
             self._guard_at = now
             self._guard_alerts = self.guard_my_troops(stop)
-        if self.method == "zoomed_out":
+            busy = True
+        if self.method == "zoomed_out" and self.attackers:
+            self._guard_alerts += self.follow_attackers(stop)
+            busy = True
+        if self.method == "zoomed_out" and self.mode != "sweep":
+            self._guard_alerts += self._check_his_city(now)
+        if self.mode == "guard" and not busy:
+            # nothing to look at this round: keep an eye on the game's red eye / swords
+            # (they show on any screen) without hammering the game
+            self._dangers_frame(self.game.frame())
+            if not (stop and stop()):
+                time.sleep(2.0)
+        if self.mode == "guard":
+            events = []
+        elif self.method == "zoomed_out":
             self.tracker.match(sightings, now, covered)
             self._check_crossings()
             self._confirm_farms_gone()
@@ -2012,7 +2222,7 @@ class Hunter:
             # is worth knowing, and scouts are too quick to zoom in on)
             events = [e for e in self.tracker.events(self.is_his)
                       if e[0] not in ("scout_at", "scout_any")]   # scouting: only the game's red alert
-        else:
+        elif self.method != "zoomed_out":
             events = self.tracker.update(sightings, now)
         self._log()
         changes = []

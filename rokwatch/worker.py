@@ -497,14 +497,22 @@ class Worker:
                cooldown=False)
         self._set(self.status.phase, "Test alert sent. Check your phone.")
 
-    def _do_hunt(self, max_rounds=None):
+    def _do_guard(self, max_rounds=None):
+        """'Guard my troops': no target - watch your troops and city, alert on anything
+        marching at them and follow it home."""
+        return self._do_hunt(max_rounds, guard=True)
+
+    def _do_hunt(self, max_rounds=None, guard=False):
         from .commands import sites_from
         from .hunter import Hunter
         cfg = self._cfg()
         game = self._game()
+        if guard:
+            cfg = dict(cfg)
+            cfg["hunt"] = {**(cfg.get("hunt") or {}), "guard_only": True, "city": None}
         h = cfg.get("hunt", {})
         sites = sites_from(cfg)
-        if not h.get("city"):
+        if not h.get("city") and not guard:
             enemy = next((s for s in sites if s.kind == "enemy"), None)
             if enemy:
                 cfg.setdefault("hunt", {})["city"] = [enemy.x, enemy.y]
@@ -518,7 +526,8 @@ class Worker:
 
         def prog(done, total, doing):
             self.status.progress = [done, total]
-            mode = {"sweep": "Searching", "track": "Tracking", "base": "Watching his city"}.get(hunter.mode, "")
+            mode = {"sweep": "Searching", "track": "Tracking", "base": "Watching his city",
+                    "guard": "Guarding"}.get(hunter.mode, "")
             self.status.doing = (mode + ": " if mode and not doing.startswith(mode) else "") + doing
             self.status.armies = hunter.tracker.summary()
             self.status.radar = hunter.tracker.map_info()
@@ -529,7 +538,8 @@ class Worker:
         notifier = Notifier.from_config(cfg.get("notify", {}))
         self.stop_patrol.clear()
         self.status.round = 0
-        self._set("patrolling", f"Hunting {hunter.name} around {hunter.city[0]},{hunter.city[1]}")
+        self._set("patrolling", "Guarding your troops and city" if guard else
+                  f"Hunting {hunter.name} around {hunter.city[0]},{hunter.city[1]}")
         _keep_awake(True)          # the PC mustn't go to sleep while it's watching (10 min idle)
         failing_since, told = None, False
         try:

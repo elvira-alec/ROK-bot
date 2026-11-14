@@ -504,7 +504,7 @@ def make_handler(panel: Panel, port_holder=None):
             cmds = {"/api/open": "open", "/api/close": "close", "/api/start": "start",
                     "/api/stop": "stop", "/api/look": "look", "/api/axes": "axes",
                     "/api/recall": "recall", "/api/test_alert": "test_alert",
-                    "/api/hunt": "hunt"}
+                    "/api/hunt": "hunt", "/api/guard": "guard"}
             if path == "/api/army":
                 try:
                     aid = int(data["id"])

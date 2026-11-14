@@ -860,6 +860,21 @@ Fixed (each with a test that fails on the old code):
     - **4 troops:** the list packs tighter (0.074 H apart); the spacing filter's 0.08 H floor
       put troops 3 and 4 a badge too low ("other"). Floor now 0.06 H.
       Tests: `tests/test_guard_troops.py`, `tests/test_troops4.py` (PC + phone pictures).
+31. **v1.24: he moved his city (2026-11-14, 22:35); "Guard my troops only".**
+    - `_check_his_city`: every 2 min (not during a sweep) one look at his spot and a text read
+      of the name plate under where his city should be (`city_present`, name_score >= 0.7).
+      Missing 3 times in a row -> alert "HE MOVED HIS CITY", and the watch turns into guard
+      mode (`city_moved`, `guard_only`). Fixture: `tests/real_screens/moved/` (his empty spot,
+      plus another city whose plate must read).
+    - Guard mode (`/api/guard`, panel button "Guard my troops only", `hunt.guard_only`): no
+      target needed; every 60 s a look at each gathering troop and your own places (your
+      city); troop list read every 5 min; the red eye / swords checked between looks.
+    - Attackers (`_add_attacker`, `follow_attackers`, `_read_base`), both modes: an army the
+      guard saw marching at you is followed (predicted along its line). When it turns away
+      (its line now ends away from your spot) it's "going home"; when it then disappears two
+      looks running (gone into its city), the far end of its last line is its home: the name
+      plate there is read and alerted ("THE ATTACKER WENT HOME TO [name]"). 30 min limit.
+      Not yet seen live.
 
 Live result after 12-18 (7 min, his 4 farms out): every farm tracked the whole run (~250
 sightings each), 0 false alerts, 7-8 owner checks all answered first time, sweep ~40-80 s,
