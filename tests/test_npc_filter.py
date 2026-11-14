@@ -81,3 +81,21 @@ def test_icons_drawn(name, drawn):
     f = cv2.imread(str(DIR / name))
     assert f is not None, name
     assert screen.icons_drawn(f) is drawn
+
+
+def test_resource_icon_under_his_gathering_badge_is_not_an_army(monkeypatch):
+    """2026-11-14 night: each of his farms came with a fake 'army' diamond under it - the
+    resource point's own white icon (live: farm badge at 919,501, 'army' at 920,522).
+    The 2 'rhombuses' the user saw on the panel map; 20 close-ups for nothing."""
+    import numpy as np
+    from rokwatch.hunter import Hunter
+    H = 1042
+    monkeypatch.setattr(screen, "find_march_lines", lambda f: [])
+    monkeypatch.setattr(screen, "find_gather_badges", lambda f: [(919, 465)])
+    monkeypatch.setattr(screen, "find_map_icons",
+                        lambda f: [((920, 522), "army"), ((1400, 300), "army"), ((921, 520), "scout")])
+    found = Hunter.detect(np.zeros((H, 1852, 3), np.uint8))
+    kinds = [(k, tuple(int(v) for v in d)) for d, k, _ in found]
+    assert ("army", (1400, 300)) in kinds              # a real one elsewhere stays
+    assert not [k for k, p in kinds if k in ("army", "scout") and abs(p[0] - 920) < 5]
+    assert [k for k, _ in kinds].count("farm") == 1

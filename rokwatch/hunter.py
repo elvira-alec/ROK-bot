@@ -177,6 +177,7 @@ class Army:
     unsure: bool = False           # seen only near the screen edge without a line so far
     line_since: float | None = None  # seen on a march line in every look since this time
     missed_at: float | None = None   # when the last miss was counted
+    other_since: float | None = None # when it was found to be someone else's (re-checked later)
 
 
 class Tracker:
@@ -296,8 +297,10 @@ class Tracker:
         def limit(a, s):
             if getattr(s, "kind", "army") == "farm":
                 # farms don't move; the zoomed-out estimate drifts a few tiles with where the
-                # camera is, so allow that (two farms seen together still pair up correctly)
-                return 5.0
+                # camera is, so allow that (two farms seen together still pair up correctly).
+                # Once its exact X:Y is read, tighter: resource points by his base are only 3-6
+                # tiles apart, and his new farm must not be taken for a neighbour's one
+                return 3.0 if (a.info or {}).get("xy") else 5.0
             if a.moving:
                 # the longer since it was seen, the further it may be off the prediction
                 return self.match_dist + 0.5 * (_speed(a) or DEFAULT_SPEED) * (now - a.last_seen) / 60
@@ -347,6 +350,8 @@ class Tracker:
             a.kind = getattr(s, "kind", "army")
             if a.owner is None and getattr(s, "owner", None):
                 a.owner = s.owner
+            if a.owner == "other" and a.other_since is None:
+                a.other_since = now
             a.checks = max(a.checks, getattr(s, "checks", 0))
             if getattr(s, "info", None):
                 a.info = {**(a.info or {}), **s.info}
@@ -366,22 +371,6 @@ class Tracker:
                 # someone else's march line runs past it; it isn't going anywhere
                 a.moving, a.direction, a.dest, a.ends = False, None, None, None
             current.append(a)
-        # the same farm tracked twice (seen again before its box was read): one id
-        merged = []
-        for a in current:
-            xy = (a.info or {}).get("xy") if a.kind == "farm" else None
-            dup = next((b for b in merged if xy and b.kind == "farm" and (b.info or {}).get("xy")
-                        and math.dist(xy, b.info["xy"]) <= 1.0), None)
-            if dup is None:
-                merged.append(a)
-                continue
-            keep, drop = (dup, a) if dup.id < a.id else (a, dup)
-            keep.owner = keep.owner or drop.owner
-            keep.info = {**(drop.info or {}), **(keep.info or {})}
-            keep.checks = max(keep.checks, drop.checks)
-            keep.tile = tuple(keep.info["xy"])
-            merged[merged.index(dup)] = keep
-        current = merged
         if covered is not None:
             def looked_at(a):
                 p = predict(a, now)
@@ -421,6 +410,33 @@ class Tracker:
                 a.missed += 1
                 (gone if a.missed >= 2 else current).append(a)
             self.gone = gone
+        # the same farm tracked twice (seen again before its box was read, or its estimate
+        # drifted): one id, the older one. Done last, so a farm about to be counted "gone"
+        # whose twin (same exact X:Y) is still here isn't: that was a false "He stopped
+        # gathering" for a farm that never left.
+        for g in list(self.gone):
+            xy = (g.info or {}).get("xy") if g.kind == "farm" else None
+            if xy and any(c.kind == "farm" and (c.info or {}).get("xy")
+                          and math.dist(xy, c.info["xy"]) <= 1.0 for c in current):
+                self.gone.remove(g)
+                current.append(g)
+        merged = []
+        for a in current:
+            xy = (a.info or {}).get("xy") if a.kind == "farm" else None
+            dup = next((b for b in merged if xy and b.kind == "farm" and (b.info or {}).get("xy")
+                        and math.dist(xy, b.info["xy"]) <= 1.0), None)
+            if dup is None:
+                merged.append(a)
+                continue
+            keep, drop = (dup, a) if dup.id < a.id else (a, dup)
+            keep.owner = keep.owner or drop.owner
+            keep.info = {**(drop.info or {}), **(keep.info or {})}
+            keep.checks = max(keep.checks, drop.checks)
+            keep.tile = tuple(keep.info["xy"])
+            keep.last_seen = max(keep.last_seen, drop.last_seen)
+            keep.missed, keep.missed_at = min(keep.missed, drop.missed), None
+            merged[merged.index(dup)] = keep
+        current = merged
         self.armies = current
 
     def events(self, include=None) -> list[tuple[str, str, dict]]:
@@ -696,6 +712,9 @@ class Hunter:
         self._scale_new = 0
         self.checks_per_sweep = int(h.get("checks_per_sweep", 3))
         self.farm_every = float(h.get("farm_look_seconds", 30))   # how often his farms are looked at
+        # someone else's farm near his city is checked again after this long: the gatherer
+        # changes (he may take that resource point over) and a wrong read gets corrected
+        self.recheck_other = float(h.get("recheck_other_minutes", 10)) * 60
         self.my_sites = my_sites
         self.tracker = Tracker(self.city, list(my_sites), h.get("near_city", 6),
                                h.get("match_distance", 12), h.get("near_site", 8),
@@ -796,7 +815,14 @@ class Hunter:
             end = min(math.dist(d, ln.p1), math.dist(d, ln.p2))
             return side < 0.025 * H and end < 0.12 * H
 
+        badges = screen.find_gather_badges(frame)
         for d, kind in screen.find_map_icons(frame):
+            if kind in ("army", "scout") and any(abs(d[0] - bx) < 0.025 * H and 0 < d[1] - by < 0.09 * H
+                                                 for bx, by in badges):
+                # right under a gathering badge: that resource point's own icon (white, at night
+                # it passed for a diamond) - not a march. Each of his farms came with a fake
+                # "army" under it, shown on the panel map and zoomed in on for nothing.
+                continue
             line = min(lines, key=lambda ln: ln.distance_to(d), default=None)
             moving = bool(line and on_line(line, d))
             # the game only draws march lines near the middle of the view: an army near the
@@ -804,7 +830,7 @@ class Hunter:
             edge = not (0.22 * W < d[0] < 0.78 * W and 0.22 * H < d[1] < 0.78 * H)
             out.append((d, kind, line if moving else ("edge" if edge else None)))
         # someone not in your alliance gathering: red pickaxe badge over a resource point
-        for bx, by in screen.find_gather_badges(frame):
+        for bx, by in badges:
             out.append(((bx, by + 0.035 * H), "farm", None))
         return out
 
@@ -945,6 +971,22 @@ class Hunter:
         base = self._axes_cal or self.axes_out
         return (np.array(base, float) * float(r)).tolist() if r and base else None
 
+    def _first_scale(self):
+        """Before the first sweep: measure the map scale (two long drags that must agree) and
+        use it if the saved one is off - the first sweep is where whose farm is whose gets
+        worked out, and a 30% wrong scale put farms a few tiles off (his were taken for the
+        neighbour's next to them). Refined from real moves after that (_learn_scale)."""
+        if not self.axes_out:
+            return
+        ss = float(np.linalg.norm(np.array(self.axes_out, float)[:, 0]))
+        s1, s2 = self.game.measure_scale(0.6), self.game.measure_scale(0.6)
+        if not (s1 and s2 and ss) or abs(math.log(s1 / s2)) > 0.08:
+            return
+        f = (s1 + s2) / 2 / ss
+        if 0.6 <= f <= 1.6 and abs(f - 1) > 0.06:
+            self.axes_out = self.axes = (np.array(self.axes_out, float) * f).round(6).tolist()
+            log.info("hunt: map scale measured at the start: %.2fx the saved one; using that", f)
+
     def _learn_scale(self, drag_px, dcam):
         """One real move at the searching zoom: the map was dragged drag_px pixels and the
         camera readout moved dcam tiles. The game's zoom doesn't land on exactly the same
@@ -971,7 +1013,7 @@ class Hunter:
         miss = float(np.median(np.linalg.norm(X[ok] @ A - Y[ok], axis=1)))
         fit, cal = A.T, np.array(self._axes_cal, float)
         rx, ry = fit[0, 0] / cal[0, 0], fit[1, 1] / cal[1, 1]
-        if miss > 1.0 or not (0.75 <= rx <= 1.33 and 0.75 <= ry <= 1.33):
+        if miss > 1.0 or not (0.6 <= rx <= 1.6 and 0.6 <= ry <= 1.6):
             log.info("hunt: map scale from moves doesn't look right (x %.2f, y %.2f of the set-up, "
                      "miss %.1f tiles); kept", rx, ry, miss)
             return
@@ -1010,7 +1052,7 @@ class Hunter:
             votes, read = [], []
             for attempt in range(2):
                 f = self.game.frame()
-                who, txt = screen.army_owner_at_close(f, self.name)
+                who, txt = screen.army_owner_at_close(f, self.name, his_city=self._his_city_on_screen(f))
                 read += txt
                 if who == "him":
                     a.owner = "him"
@@ -1026,8 +1068,12 @@ class Hunter:
             v = self.game.look_middle()
             H, W = v.frame.shape[:2]
             centre = (W / 2, H / 2)
+            city_px = self._his_city_on_screen(v.frame)
+            # his name where his city is = his city's label (read partly, 'NHWICK', it passed
+            # for an army label: someone else's army walking past his city came out "his")
             near = [lb for lb in screen.find_player(v.frame, v.texts, self.name)
-                    if lb.kind == "army" and math.dist(lb.pos, centre) < 0.4 * H]
+                    if lb.kind == "army" and math.dist(lb.pos, centre) < 0.4 * H
+                    and not (city_px and math.dist(lb.pos, city_px) < 0.15 * H)]
             self.seen_text.setdefault(getattr(a, "id", 0), [])
             self.seen_text[getattr(a, "id", 0)] = list(self.seen_text[getattr(a, "id", 0)]) + [
                 (t.text, screen.label_kind(v.frame, t), round(math.dist(t.center, centre) / H, 2))
@@ -1043,6 +1089,18 @@ class Hunter:
                  a.tile[0], a.tile[1], a.owner or "unclear")
         TRACE.event("owner", kind=a.kind, tile=[round(a.tile[0], 1), round(a.tile[1], 1)], owner=a.owner,
                     read=self.seen_text.get(getattr(a, "id", 0)))
+
+    def _his_city_on_screen(self, frame):
+        """(x, y) of his city on this close-zoom picture, or None (off screen / unknown)."""
+        ac = self._axes_close() or self.axes_close
+        cam = self.game.read_camera(frame) if ac else None
+        if not cam:
+            return None
+        p = to_screen(cam[1:3], ac, self.city, frame.shape)
+        H, W = frame.shape[:2]
+        if p and -0.2 * H < p[0] < W + 0.2 * H and -0.2 * H < p[1] < H + 0.2 * H:
+            return p
+        return None
 
     def _centre_on_troops(self, a, ac):
         """At the close zoom: put the army we're checking in the middle. Takes the player
@@ -1543,7 +1601,10 @@ class Hunter:
                 return predict(a, time.time())
             k = min((a for a in known if a.kind == s.kind),
                     key=lambda a: math.dist(_where(a), s.tile), default=None)
-            near = 5.0 if s.kind == "farm" else 8
+            # farms: ONLY the very same spot (handoff rule: his farms were hidden as 'other'
+            # by copying a neighbour's owner). A 5-tile gate here did exactly that again - his
+            # two croplands at 179,386 / 180,390 took the owner of [SRTR]TAAK's farm at 180,382.
+            near = 2.5 if s.kind == "farm" else 8
             if k and math.dist(_where(k), s.tile) <= near:
                 s.owner = k.owner
                 if s.kind == "farm" and k.info and not s.info:
@@ -1591,6 +1652,7 @@ class Hunter:
                 self._progress(0, 1, "Going to his city")
                 self.game.goto(int(self.city[0]), int(self.city[1]))
                 self._scale_checked = now
+                self._first_scale()
             if getattr(self.game, "gap_changed", False) and self.axes_out and self.game._at == "sweep":
                 # the searching zoom moved a notch (level numbers vanished early): the map
                 # scale learned for the old one would put every position a few tiles off
@@ -1648,6 +1710,11 @@ class Hunter:
             elif lost:
                 log.info("hunt: lost track of %d of his armies; searching the area again", len(lost))
                 self._need_sweep = True
+            for a in self.tracker.armies:
+                if (a.kind == "farm" and a.owner == "other" and a.other_since
+                        and now - a.other_since > self.recheck_other
+                        and math.dist(a.tile, self.city) <= self.radius + 5):
+                    a.owner, a.checks, a.other_since = None, 0, None
             if self.mode == "sweep" or any(a.owner is None for a in self.tracker.armies):
                 self.identify(self.tracker.armies)
             # his armies; plus any scout not known to be someone else's (heading for you

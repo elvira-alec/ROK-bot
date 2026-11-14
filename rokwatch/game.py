@@ -486,6 +486,23 @@ class Game:
         r = cv2.matchTemplate(cur, crop, cv2.TM_CCOEFF_NORMED)
         return float(r.max())
 
+    def camera_settled(self, timeout=2.5):
+        """The camera readout once the map has stopped gliding after a drag (two equal readings
+        in a row): read too soon, a long drag counted short and the map scale came out ~25% low."""
+        end, last = time.time() + timeout, None
+        time.sleep(0.35)
+        while True:
+            try:
+                c = self.camera_fast(full=False) or self.camera_fast()
+            except TypeError:                         # (a stand-in without the argument)
+                c = self.camera_fast()
+            if c is not None and c == last:
+                return c
+            if time.time() > end:
+                return c
+            last = c
+            time.sleep(0.3)
+
     def measure_scale(self, frac=0.4):
         """Map tiles per screen pixel right now: drag the map sideways a known amount,
         read how far the camera moved, drag it back. The readout is whole tiles, so a
@@ -494,13 +511,11 @@ class Game:
         self._size = (H, W)
         self.forget_pan()
         dx = int(frac * W)
-        c0 = self.camera_fast()
+        c0 = self.camera_settled()
         self.b.drag(W // 2 + dx // 2, H // 2, W // 2 - dx // 2, H // 2)
-        time.sleep(0.25)
-        c1 = self.camera_fast()
+        c1 = self.camera_settled()
         self.b.drag(W // 2 - dx // 2, H // 2, W // 2 + dx // 2, H // 2)
-        time.sleep(0.25)
-        c2 = self.camera_fast()
+        c2 = self.camera_settled()
         # only trust it if the readings make sense: real coordinates, a sensible move,
         # and the drag back landed where it started (a misread digit fails this)
         if not (c0 and c1 and c2):

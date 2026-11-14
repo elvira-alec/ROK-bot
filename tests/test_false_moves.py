@@ -248,3 +248,18 @@ def test_someone_elses_farm_is_not_dropped_on_one_miss():
     tr.armies[0].owner = "other"
     tr.match([], t + 15, covered=[lambda p: True])
     assert tr.armies and tr.armies[0].owner == "other"
+
+
+def test_his_farm_seen_again_under_a_new_id_is_not_gone():
+    """His farm's estimate drifted, it came up as a new farm, got checked (same exact X:Y)
+    while the old id missed twice: the old id was 'gone' = a false 'He stopped gathering'."""
+    tr = Tracker(CITY, SITES)
+    tr.update([farm(170, 390, 0)], 0)
+    old = tr.armies[0]
+    old.owner, old.info = "him", {"xy": [171, 391]}
+    tr.match([farm(174.5, 392, 60)], 60)                 # 3.6 off its exact spot: a new id
+    new = [a for a in tr.armies if a is not old][0]
+    new.owner, new.info = "him", {"xy": [171, 391]}      # its box: the same resource point
+    tr.match([farm(174.5, 392, 75)], 75)
+    assert [e for e in tr.events() if e[0] == "farm_left"] == []
+    assert len(tr.armies) == 1 and tr.armies[0].id == old.id

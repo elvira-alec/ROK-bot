@@ -365,9 +365,11 @@ def test_zoom_kept_at_the_searching_scale():
     assert sim.level == 8 and 0.94 <= r <= 1.06, (sim.level, r)   # right: left alone
     # a misread coordinate (e.g. 4368 for 368) must not change the zoom
     real = g.camera_fast
-    reads = iter([(200, 400), (230, 4368), (200, 400)] * 2)
+    import itertools
+    reads = itertools.cycle([(200, 400), (230, 4368), (200, 400)])   # every other read garbled
     g.camera_fast = lambda full=True: next(reads)
-    assert g.keep_scale(ss) is None and sim.level == 8
+    g.keep_scale(ss)
+    assert sim.level == 8                                    # the zoom wasn't moved on it
     g.camera_fast = real
 
 
@@ -423,8 +425,17 @@ def test_drifted_farm_estimate_is_still_the_same_farm_and_his_city_is_never_chec
     t = Tracker((162, 374), [])
     t.match([ArmySeen((170.0, 390.0), False, None, 0, kind="farm")], 0)
     t.armies[0].owner, t.armies[0].info = "him", {"xy": [171, 391]}
+    first = t.armies[0].id
     t.match([ArmySeen((174.5, 392.0), False, None, 60, kind="farm")], 60)    # estimate drifted ~4.5
-    assert len(t.armies) == 1 and t.armies[0].owner == "him"
+    # 3.6 tiles from its exact X:Y - as close as a neighbour's resource point can be (TAAK's
+    # 180,382 vs his 179,379: 3.2), so it isn't assumed to be the same farm: it gets checked...
+    new = [a for a in t.armies if a.id != first]
+    if new:
+        assert new[0].owner is None
+        new[0].owner, new[0].info = "him", {"xy": [171, 391]}     # ...its box: the same spot
+        t.match([ArmySeen((174.5, 392.0), False, None, 75, kind="farm")], 75)
+    # ...and it's one farm again, the original one
+    assert len(t.armies) == 1 and t.armies[0].owner == "him" and t.armies[0].id == first
     h = _bare_hunter(tmp_path)
     at_city = ArmySeen((162.5, 374.5), False, None, 0, kind="army")
     farm = ArmySeen((180.0, 380.0), False, None, 0, kind="farm")

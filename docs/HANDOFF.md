@@ -779,6 +779,24 @@ Fixed (each with a test that fails on the old code):
     fit, sanity-checked (0.75-1.33x of the set-up), moved half way. Close-zoom scale stays
     tied to the set-up (`_axes_cal`). Live: settled at 1.02-1.05x / 1.08-1.13x.
 18. Someone else's farm needs two misses to drop too (it was re-checked 4x in one run).
+19. **v1.18 - his farms hidden as someone else's again (user: "missing 2 of his gathering
+    spots").** I had widened `_unknown`'s farm match to 5 tiles; his croplands at 179,386 /
+    180,390 took the owner of [SRTR]TAAK's farm at 180,382 without a check. Back to 2.5 tiles
+    from the exact X:Y (the old rule!). `Tracker.match` pairs a farm with a known exact X:Y only
+    within 3 tiles (resource points here are 3.2+ apart); a drifted estimate gets checked and
+    is merged back by its exact X:Y (merge now runs last and rescues a "gone" twin - that was a
+    false "He stopped gathering"). Someone else's farm near his city is re-checked every 10 min
+    (`hunt.recheck_other_minutes`). `tests/test_dedup.py`.
+20. **The "rhombuses" on the panel map**: the white resource icon right under each of his
+    gathering badges came out as an "army" at night (20 empty close-ups in one run). An
+    army/scout directly under a gathering badge is dropped in `Hunter.detect`.
+21. **Someone else's army walking past his city read as his** (false "HIS ARMY IS MOVING CLOSE
+    TO YOU"): with no troop cluster found, the label fallback read his CITY's name partly
+    ('NHWICK') as an army label. Names at his city's spot on screen are ignored
+    (`_his_city_on_screen`, also passed to `army_owner_at_close`).
+22. Calibration and the scale check read the camera only once the map stopped gliding
+    (`Game.camera_settled`; read too soon, the scale came out ~25% low), and the hunt measures
+    the scale before its first sweep (`_first_scale`) - the sweep decides whose farm is whose.
 
 Live result after 12-18 (7 min, his 4 farms out): every farm tracked the whole run (~250
 sightings each), 0 false alerts, 7-8 owner checks all answered first time, sweep ~40-80 s,

@@ -994,16 +994,20 @@ def _name_part_similarity(text: str, name: str) -> float:
     return max(SequenceMatcher(None, t[i:i + L], bare).ratio() for i in range(max(1, len(t) - L + 1)))
 
 
-def army_owner_at_close(frame: np.ndarray, name: str, reach=0.4):
+def army_owner_at_close(frame: np.ndarray, name: str, reach=0.4, his_city=None):
     """Whose is the army near the middle (close view)? ('him' | 'other' | None, texts
     read). The two troop clusters nearest the middle are read. 'him' on a clear read of
-    his name; 'other' only on a clear read of a name that has nothing of his in it."""
+    his name; 'other' only on a clear read of a name that has nothing of his in it.
+    his_city: where his city is on screen - his name there is his city's, not an army's
+    (an army walking past his city was read as his)."""
     H, W = frame.shape[:2]
     read, other = [], False
     for box in player_troop_clusters(frame)[:2]:      # not barbarians (NPCs) or cities
         if math.dist((box[0] + box[2] / 2, box[1] + box[3] / 2), (W / 2, H / 2)) > reach * H:
             break
         texts = read_army_label(frame, box)
+        if his_city is not None:
+            texts = [t for t in texts if math.dist(t.center, his_city) > 0.15 * H]
         read += [t.text for t in texts]
         for t in texts:
             if name_score(t.text, name) >= 0.75:

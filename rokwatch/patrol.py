@@ -395,6 +395,9 @@ def learn_axes(game: Game, frac=0.5, reps=2, px=None) -> list | None:
     H, W = v0.frame.shape[:2]
 
     def cam():
+        if hasattr(game, "camera_settled"):         # once the map has stopped gliding
+            c = game.camera_settled()
+            return np.array(c, float) if c is not None else None
         game.wait(0.6)
         c = game.camera_fast() if hasattr(game, "camera_fast") else None
         if c is None:
