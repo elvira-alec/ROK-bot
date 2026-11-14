@@ -801,28 +801,44 @@ class Game:
                     (ly.box[0] + ly.box[2] + gap, ly.center[1]))
         return None
 
-    def leave_city_view(self, frame=None) -> bool:
+    def leave_city_view(self, frame=None, home=False) -> bool:
         """Zooming in over a city enters it ("Viewing the city of ..."), and the wheel never
-        leaves it: press the map button (bottom right). True if it was inside a city."""
+        leaves it: press the map button (bottom right). True if it was inside a city.
+        home=True: also your own city (where the game starts after a restart or a lost
+        connection) - that check reads the top strip, so it's only done when the camera
+        readout is missing anyway."""
         f = self.frame() if frame is None else frame
-        if not screen.city_view(f):
+        if screen.city_view(f):
+            log.info("Inside a city view (zoomed in over a city); back to the map")
+        elif home and screen.home_view(f):
+            log.info("In your city (the game starts there); back to the map")
+        else:
             return False
-        log.info("Inside a city view (zoomed in over a city); back to the map")
         from .trace import TRACE
         TRACE.event("city_view")
         self.forget_pan()
+        # The button flips between city and map: press it again only if the picture didn't
+        # change at all (the press didn't take). A readout read badly on the map ('X:211'
+        # without its Y) made it press again and land back in the city.
         for _ in range(3):
             self.check_stop()
+            before = self._small()
             x, y = screen.city_view_exit(f)
             self.b.click(x, y)
-            end = time.time() + 4.0
+            end = time.time() + 6.0
+            moved = False
             while time.time() < end:
                 time.sleep(0.4)
                 f = self.frame()
+                moved = moved or self._changed(self._small(), before) > 0.3
                 if not screen.city_view(f) and screen.camera_coords(f):
                     self._at = None
                     self._cam = None
                     return True
+            if moved and not screen.city_view(f):
+                self._at = None                    # changed scene: on the map (readout unread)
+                self._cam = None
+                return True
         log.warning("Couldn't leave the city view")
         return True
 
@@ -838,6 +854,13 @@ class Game:
             return True
         if not screen.modal_dialog(f):
             return False
+        if screen.logged_in_elsewhere(f):
+            # the account was opened on another device (the user's phone): the PC game
+            # closes by itself; nothing to press - the worker tells the user why
+            if not getattr(self, "kicked", False):
+                log.warning("The game says you're logged in on another device; it will close")
+            self.kicked = True
+            return False
         btn = screen.find_reconnect_button(f)
         if not btn:
             return False
@@ -850,7 +873,8 @@ class Game:
             self.check_stop()
             f = self.frame()
             if not screen.modal_dialog(f):
-                if screen.camera_coords(f):
+                # back - on the map, or in your city (a reconnect can drop you there)
+                if screen.camera_coords(f) or self.leave_city_view(f, home=True):
                     log.info("Reconnected to the game")
                     self._at = None
                     self._cam = None

@@ -497,6 +497,17 @@ class Worker:
                cooldown=False)
         self._set(self.status.phase, "Test alert sent. Check your phone.")
 
+    def _save_targets(self, new):
+        """Attackers found by following them home: added to the saved targets (name + city),
+        newest after the one being watched; the target being watched isn't changed."""
+        cfg = self._cfg()
+        targets = [t for t in (cfg.get("targets") or []) if isinstance(t, dict) and t.get("name")]
+        for t in new:
+            targets = [o for o in targets if o["name"] != t["name"]]
+            targets.insert(1 if targets else 0, dict(t))
+            log.info("Saved %s at %s,%s as a target", t["name"], t["x"], t["y"])
+        config.save_fields({"targets": targets[:20]}, self.cfg_path)
+
     def _do_guard(self, max_rounds=None):
         """'Guard my troops': no target - watch your troops and city, alert on anything
         marching at them and follow it home."""
@@ -547,8 +558,12 @@ class Worker:
                 try:
                     for a in hunter.round(stop=self.stop_patrol.is_set):
                         self._alert(notifier, a)
+                    if getattr(hunter, "new_targets", None):
+                        self._save_targets(hunter.new_targets)
+                        hunter.new_targets = []
                     if told:
                         from .watcher import Alert
+                        game.kicked = False
                         self._alert(notifier, Alert("bot-back", "Watching again",
                                                     "The game is back and the bot is watching him again.",
                                                     cooldown=False))
@@ -560,6 +575,17 @@ class Worker:
                     self.status.doing = f"Recovering: {e}"[:120]
                     failing_since = failing_since or time.time()
                     gone = "Couldn't find a window" in str(e)
+                    kicked = gone and getattr(game, "kicked", False)
+                    if not told and kicked:
+                        # opened on the phone: say so at once (waiting a minute helps nobody)
+                        from .watcher import Alert
+                        told = True
+                        self._alert(notifier, Alert(
+                            "bot-stuck", "THE GAME CLOSED: YOU LOGGED IN ON ANOTHER DEVICE",
+                            "The game said 'You are already logged in on another device' (your phone) "
+                            "and closed on the PC. Nothing is being watched. When you're done on the "
+                            "phone, start the game on the PC again: the bot carries on by itself.",
+                            urgent=True, cooldown=False))
                     if not told and time.time() - failing_since > 60:
                         # nobody may be at the PC: don't just keep retrying in silence
                         from .watcher import Alert

@@ -997,6 +997,12 @@ class Hunter:
         except AttributeError:
             pass
         if not cam:
+            # no readout: inside a city (yours after a restart, or one zoomed into)?
+            try:
+                if self.game.leave_city_view(frame, home=True):
+                    self.game.reconnected = True      # the round then sets the zoom again
+            except Exception:
+                log.debug("leave city view failed", exc_info=True)
             return view, []
         pf = getattr(self.game, "_pan_from", None)
         if pf is not None and self.game._at == "sweep":
@@ -1691,10 +1697,14 @@ class Hunter:
             title = f"THE ATTACKER WENT HOME TO {name}" if name else "THE ATTACKER WENT HOME"
             msg = (f"The army that came at {a.info['target_label'].lower()} went home to "
                    + (f"{name}'s city at {where_s}." if name else f"a city at {where_s} (couldn't read the name).")
-                   + " You can make them a target in 'Who to watch'.")
+                   + (" Saved as a target: pick them in 'Who to watch'." if name else ""))
             log.warning("hunt: %s - %s", title, msg)
             from .trace import TRACE
             TRACE.event("attacker_home", id=a.id, home=[round(home[0], 1), round(home[1], 1)], name=name)
+            if name:
+                # saved as a target (name + city), ready to pick in 'Who to watch'
+                self.new_targets = getattr(self, "new_targets", []) + [
+                    {"name": name, "x": int(round(home[0])), "y": int(round(home[1]))}]
             self.attacker_bases = (getattr(self, "attacker_bases", []) + [
                 {"name": name, "x": round(home[0]), "y": round(home[1]),
                  "time": datetime.now().strftime("%H:%M")}])[-10:]
@@ -2095,6 +2105,8 @@ class Hunter:
         self.timing = {"move": 0.0, "look": 0.0, "check": 0.0}
         if self.game.recover_connection():
             pass                                   # (sets `reconnected`: handled just below)
+        if self._rounds == 0:
+            self.game.leave_city_view(home=True)   # started while the game shows your city
         if getattr(self.game, "reconnected", False):
             # back after a lost connection: the game may have reset the view - put the zoom
             # right and start again from his city

@@ -111,6 +111,20 @@ def camera_coords(frame: np.ndarray, texts: list[Text] | None = None):
         c = parse_coords(t.text)
         if c:
             return (*c, t)
+    # read in two pieces ('#4183 X:211' and ':422', the 'Y' lost): join a piece that ends
+    # with the X number to the number just right of it on the same line
+    for t in texts:
+        m = re.search(r"X[:：;.\-]?(\d{1,4})$", t.text.replace(" ", ""), re.I)
+        if t.box[1] > h * 0.1 or not m:
+            continue
+        right = [u for u in texts if u is not t and abs(u.center[1] - t.center[1]) < 0.012 * h
+                 and 0 <= u.box[0] - (t.box[0] + t.box[2]) < 0.03 * h]
+        for u in sorted(right, key=lambda u: u.box[0]):
+            n = re.fullmatch(r"Y?[:：;.\-]?(\d{1,4})", u.text.replace(" ", ""), re.I)
+            if n:
+                c = parse_coords(f"{t.text.replace(' ', '')}Y:{n.group(1)}")
+                if c:
+                    return (*c, t)
     return None
 
 
@@ -168,6 +182,14 @@ def city_view(frame: np.ndarray) -> bool:
     if find_text(texts, r"viewing|city|ciudad|viendo"):
         return True
     return not top_texts(frame)
+
+
+def home_view(frame: np.ndarray, texts=None) -> bool:
+    """Inside your own city (the game starts there after a restart / reconnect): your
+    power and VIP show at the top left, but no '#4183 X: Y:' readout. The map button at
+    the bottom right (city_view_exit) goes back to the map."""
+    texts = top_texts(frame) if texts is None else texts
+    return bool(texts) and not camera_coords(frame, texts) and not is_simple_view(texts, frame)
 
 
 def city_view_exit(frame: np.ndarray):
@@ -621,6 +643,19 @@ def modal_dialog(frame: np.ndarray) -> bool:
 
 RECONNECT_RX = re.compile(r"network|disconnect|reconnect|connection|conexi|desconect|reconect|red\b", re.I)
 CONFIRM_RX = re.compile(r"^(confirm|confirmar|ok|aceptar|reconnect|reconectar|retry|reintentar)$", re.I)
+
+
+ELSEWHERE_RX = re.compile(r"another\s*device|otro\s*dispositivo|logged\s*in\s*on|sesi[oó]n\s*en", re.I)
+
+
+def logged_in_elsewhere(frame: np.ndarray) -> bool:
+    """'TIP: You are already logged in on another device.' (the user opened the game on
+    their phone): the game on the PC closes after this. Never press its CONFIRM."""
+    if not modal_dialog(frame):
+        return False
+    H, W = frame.shape[:2]
+    texts = read_text(frame, (int(0.30 * W), int(0.28 * H), int(0.40 * W), int(0.46 * H)))
+    return bool(ELSEWHERE_RX.search(" ".join(t.text for t in texts)))
 
 
 def find_reconnect_button(frame: np.ndarray):

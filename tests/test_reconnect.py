@@ -110,3 +110,16 @@ def test_nothing_happens_without_a_dialog():
     w.fixed_at = 0.1          # already the map
     g = Game(w, settle=0)
     assert g.recover_connection(timeout=5) is False and w.clicks == []
+
+
+def test_logged_in_on_another_device_is_never_pressed():
+    # live 2026-11-14: the user opened the game on their phone; the PC game showed this
+    # and closed. The bot must recognise it (to tell the user why) and never press CONFIRM.
+    import cv2
+    from pathlib import Path
+    from rokwatch import screen
+    d = Path(__file__).parent / "real_screens" / "disconnect"
+    f = cv2.imread(str(d / "logged_in_elsewhere.jpg"))
+    assert screen.logged_in_elsewhere(f) and screen.find_reconnect_button(f) is None
+    net = cv2.imread(str(d / "network_disconnected_960.jpg"))
+    assert not screen.logged_in_elsewhere(net)

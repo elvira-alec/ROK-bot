@@ -177,6 +177,22 @@ def test_attacker_followed_home_and_base_read(monkeypatch):
     al = h.follow_attackers()
     assert len(al) == 1 and "[XYZ]Bully" in al[0].title and "240,390" in al[0].message
     assert h.attackers == [] and h.attacker_bases[-1]["name"] == "[XYZ]Bully"
+    assert h.new_targets == [{"name": "[XYZ]Bully", "x": 240, "y": 390}]
+    assert "Saved as a target" in al[0].message
+
+
+def test_attacker_saved_as_target_keeps_the_watched_one_first(tmp_path):
+    from rokwatch import config
+    from rokwatch.worker import Worker
+    p = tmp_path / "config.yaml"
+    p.write_text("{}\n")
+    config.save_fields({"targets": [{"name": "[P83L]JONH WICK", "x": 162, "y": 374}]}, str(p))
+    w = Worker.__new__(Worker)
+    w.cfg_path = str(p)
+    w._save_targets([{"name": "[XYZ]Bully", "x": 240, "y": 390}])
+    w._save_targets([{"name": "[XYZ]Bully", "x": 241, "y": 391}])       # found again: updated
+    t = config.load(str(p))["targets"]
+    assert [x["name"] for x in t] == ["[P83L]JONH WICK", "[XYZ]Bully"] and t[1]["x"] == 241
 
 
 def test_attacker_still_coming_keeps_being_followed():

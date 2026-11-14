@@ -875,6 +875,22 @@ Fixed (each with a test that fails on the old code):
       looks running (gone into its city), the far end of its last line is its home: the name
       plate there is read and alerted ("THE ATTACKER WENT HOME TO [name]"). 30 min limit.
       Not yet seen live.
+32. **v1.25 (live testing of guard mode, 2026-11-14 night):**
+    - attackers found that way are saved as targets (`new_targets` -> worker `_save_targets`,
+      inserted after the one being watched; the watched target isn't changed).
+    - the game restarts / reconnects into YOUR city (power + VIP, no X:Y readout):
+      `screen.home_view`, left with the map button (`leave_city_view(home=True)`): at the
+      first round, after a reconnect, and whenever a look has no readout. That button flips
+      city <-> map, so it's pressed again only if the picture didn't change at all.
+    - the X:Y readout can come in two pieces ('#4183 X:211' + ':422'): `camera_coords` joins
+      them (it took the map for the city and pressed back into it).
+    - "You are already logged in on another device" (the user on their phone) closes the PC
+      game: `screen.logged_in_elsewhere`, never pressed, `game.kicked` -> an immediate alert
+      saying why. The phone and the bot can't run at the same time.
+    - updater: the download retries (5 tries, 5-60 s apart) and a failure no longer opens
+      a popup that waits for a click (one sat over the game's CONFIRM and blocked the bot).
+    - live guard run: reconnect, out of the city, 4 troops read, a look at them + the city
+      every minute (troops within 4 tiles share a picture) - until the phone login.
 
 Live result after 12-18 (7 min, his 4 farms out): every farm tracked the whole run (~250
 sightings each), 0 false alerts, 7-8 owner checks all answered first time, sweep ~40-80 s,

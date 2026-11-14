@@ -79,7 +79,22 @@ def _ssl_context():
     return ctx
 
 
-def download(url, dest, progress):
+def download(url, dest, progress, tries=5, waits=(5, 15, 30, 60)):
+    """Download with retries: on the phone hotspot the connection drops now and then
+    ('getaddrinfo failed' mid-update, 2026-11-14) - wait a bit and start again."""
+    for attempt in range(tries):
+        try:
+            return _download_once(url, dest, progress)
+        except OSError as e:          # socket / DNS / timeout (URLError is an OSError too)
+            if attempt == tries - 1:
+                raise
+            w = waits[min(attempt, len(waits) - 1)]
+            log(f"download failed ({e}); trying again in {w} s")
+            progress(0, 0)
+            time.sleep(w)
+
+
+def _download_once(url, dest, progress):
     req = urllib.request.Request(url, headers={"User-Agent": "RoKWatcher-updater"})
     with urllib.request.urlopen(req, timeout=60, context=_ssl_context()) as r, open(dest, "wb") as f:
         total = int(r.headers.get("Content-Length") or 0)
@@ -178,7 +193,7 @@ def main():
         return
 
     import tkinter as tk
-    from tkinter import messagebox, ttk
+    from tkinter import ttk
     root = tk.Tk()
     root.title("RoK Watcher update")
     root.geometry("460x170")
@@ -194,7 +209,8 @@ def main():
                     bordercolor="#1e2739", lightcolor="#3aa0ff", darkcolor="#3aa0ff")
     tk.Label(root, text=f"Updating RoK Watcher to version {args.version}", bg="#0f1420", fg="#e8ecf4",
              font=("Segoe UI", 12, "bold")).pack(anchor="w", padx=20, pady=(18, 4))
-    status = tk.Label(root, text="Starting...", bg="#0f1420", fg="#95a1b8", font=("Segoe UI", 10))
+    status = tk.Label(root, text="Starting...", bg="#0f1420", fg="#95a1b8", font=("Segoe UI", 10),
+                      wraplength=420, justify="left")
     status.pack(anchor="w", padx=20)
     bar = ttk.Progressbar(root, style="bar.Horizontal.TProgressbar", length=420, mode="indeterminate")
     bar.pack(padx=20, pady=12)
@@ -215,11 +231,12 @@ def main():
                     root.destroy()
                     return
                 if isinstance(frac, tuple):
-                    messagebox.showerror("RoK Watcher update",
-                                         f"The update didn't work:\n\n{frac[1]}\n\nRoK Watcher starts again as "
-                                         f"it was. You can also download the new version from GitHub.\n\n"
-                                         f"Details: {LOG}")
-                    root.destroy()
+                    # no popup waiting for a click (one sat on top of the game's CONFIRM button
+                    # and blocked the bot): say it here and close by itself
+                    bar.stop()
+                    status.config(text=f"The update didn't work ({str(frac[1])[:70]}). "
+                                       "RoK Watcher starts again as it was.", fg="#ff8a80")
+                    root.after(8000, root.destroy)
                     return
                 if text:
                     status.config(text=text)
