@@ -648,7 +648,7 @@ def level_tags(frame: np.ndarray, hud=True) -> list:
     return out
 
 
-def level_marks(frame: np.ndarray) -> list:
+def level_marks(frame: np.ndarray, hud=True) -> list:
     """Level plates found the way that also works at night - where a plate touches the
     white icon above it (one blob) and its digits are tinted lighter. Only for telling
     whether the map's icons have been drawn: it also takes the bottom of a bare icon for a
@@ -660,21 +660,23 @@ def level_marks(frame: np.ndarray) -> list:
     blob = cv2.morphologyEx(light, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
     n, lab, stats, _ = cv2.connectedComponentsWithStats(blob)
     out = []
-    sh = max(4, int(0.02 * H))
+    sh = max(4, int(0.016 * H))          # a plate's height (a thicker slice took in the icon too)
     for i in range(1, n):
         x, y, w, h, a = stats[i]
-        cands = [(x, y, w, h)]
+        cands = [(x, y, w, h, 0.05)]
         if 0.03 * H < h <= 0.075 * H and w <= 0.07 * H:
             sub = lab[y + h - sh:y + h, x:x + w] == i         # its bottom slice
             cols = np.nonzero(sub.any(axis=0))[0]
             if len(cols):
-                cands.append((x + int(cols.min()), y + h - sh, int(cols.max() - cols.min() + 1), sh))
-        for cx, cy, cw, ch in cands:
-            if not (0.008 * H <= ch <= 0.03 * H and 0.016 * H <= cw <= 0.05 * H):
+                # the slice may still take in a bit of the icon beside the plate (a stone
+                # deposit's left rock: 0.051 H live), so a little wider is allowed here
+                cands.append((x + int(cols.min()), y + h - sh, int(cols.max() - cols.min() + 1), sh, 0.06))
+        for cx, cy, cw, ch, wmax in cands:
+            if not (0.008 * H <= ch <= 0.03 * H and 0.016 * H <= cw <= wmax * H):
                 continue
             if not (1.1 <= cw / ch <= 3.2) or (lab[cy:cy + ch, cx:cx + cw] == i).mean() < 0.5:
                 continue
-            if not (0.05 * W < cx < 0.88 * W and 0.08 * H < cy < 0.86 * H):
+            if hud and not (0.05 * W < cx < 0.88 * W and 0.08 * H < cy < 0.86 * H):
                 continue
             part = V[cy:cy + ch, cx:cx + cw].astype(int)
             dark = ((part <= 95) | (part < np.percentile(part, 80) - 75)).mean()
@@ -1191,8 +1193,8 @@ def find_map_icons(frame: np.ndarray):
         # test misses it - the white stone-deposit icon came out as an "army" and was zoomed in
         # on 3x. The night-capable marks: a resource icon's plate sits 0.021-0.026 H under it
         # (17/17 measured); a real army's only mark is its own symbol's bottom, 0.010-0.013 H.
-        marks = level_marks(frame)
-        found = [(c, k) for c, k in found
+        marks = level_marks(frame, hud=False)   # (an icon low on screen has its plate in the
+        found = [(c, k) for c, k in found        #  bottom band: live, a stone icon at 0.89 H)
                  if not any(abs(mx - c[0]) <= 0.010 * frame.shape[0]
                             and 0.016 * frame.shape[0] <= my - c[1] <= 0.034 * frame.shape[0]
                             for mx, my in marks)]
@@ -1434,7 +1436,10 @@ def find_gather_badges(frame: np.ndarray, colour="red") -> list:
     Same size at the sweeping and the close zoom. Returns [(x, y)] centres.
     (Notification badges on the menus are outside the map area checked here.)"""
     H, W = frame.shape[:2]
-    x0, x1, y0, y1 = int(0.1 * W), int(0.9 * W), int(0.1 * H), int(0.86 * H)
+    # not below 0.82 H: the bubble above the menu buttons (bottom right) has a red
+    # notification badge with a white number - live it passed for a farm badge on every look
+    # (always at the same screen spot: a "farm" at a different tile wherever the camera was)
+    x0, x1, y0, y1 = int(0.1 * W), int(0.9 * W), int(0.1 * H), int(0.82 * H)
     hsv = cv2.cvtColor(frame[y0:y1, x0:x1], cv2.COLOR_BGR2HSV)
     if colour == "red":
         mask = (cv2.inRange(hsv, np.array((0, 150, 120), np.uint8), np.array((8, 255, 255), np.uint8))

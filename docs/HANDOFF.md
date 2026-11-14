@@ -821,6 +821,22 @@ Fixed (each with a test that fails on the old code):
 26. Live testing: `tools/live_round.sh SECONDS` (traced hunt on the running panel + analysis,
     incl. FARM SPOTS: every badge seen vs checks). Rounds 4-6 on 2026-11-14 morning: every
     farm checked once, 0 fake armies, 0 false moves.
+27. **v1.20 (afternoon 2026-11-14):**
+    - zoom setup: `learn_axes` / `measure_scale` drag there AND back, 3 times, average each
+      pair; a pair where one way is >2.2x the other is thrown out (a drag that snagged);
+      median of >=2 agreeing within 15%. If the scale can't be learned, the old one is kept
+      and the zoom is still saved. Auto-zoom first recovers a lost connection.
+    - `to_sweep` checks the level numbers after zooming (`_numbers_check`): fewer than 4 =
+      one notch too far (view #3, bare icons), notch back in and lower the gap.
+    - a notification bubble ("2" at the bottom right) read as a farm badge: badges below
+      0.82 H are ignored; stationary armies/scouts below 0.86 H too (stone icons there).
+    - before "he pulled his farmer" the bot looks at the farm's exact X:Y (`_confirm_farms_gone`).
+    - a look taken at the close zoom (3D gold mine read as an army) is thrown away and the
+      zoom fixed (`look_spot`).
+    - the PC is kept awake while watching (`_keep_awake`, SetThreadExecutionState).
+    - tracing saves full-size crops of every army/scout/hostile found (`debug_trace/<run>/crops`).
+    - live: with him offline and nothing out, a 5-min round gave 0 found in 474 looks, all 720
+      frames re-checked clean (no phantoms).
 
 Live result after 12-18 (7 min, his 4 farms out): every farm tracked the whole run (~250
 sightings each), 0 false alerts, 7-8 owner checks all answered first time, sweep ~40-80 s,

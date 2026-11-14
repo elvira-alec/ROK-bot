@@ -835,6 +835,11 @@ class Hunter:
                 continue
             line = min(lines, key=lambda ln: ln.distance_to(d), default=None)
             moving = bool(line and on_line(line, d))
+            if kind in ("army", "scout") and not moving and d[1] > 0.86 * H:
+                # low on screen, by the menu buttons / chat, and not on a march line: can't be
+                # told from a resource icon there (its level plate is in the bottom band) - live,
+                # a stone-deposit icon at 0.89 H. The next stop sees that spot properly.
+                continue
             # the game only draws march lines near the middle of the view: an army near the
             # edge without a line may still be marching
             edge = not (0.22 * W < d[0] < 0.78 * W and 0.22 * H < d[1] < 0.78 * H)
@@ -924,8 +929,39 @@ class Hunter:
                 self.game._cam = agreed
         self.timing["look"] += time.time() - t0
         from .trace import TRACE
+        if found and self.method == "zoomed_out" and screen.view_level(frame) != "patrol":
+            # not at the searching zoom (still zoomed in after a check, or too far out): what's
+            # found here is in the wrong scale - a 3D gold mine came out as an "army" and was
+            # zoomed in on 3 times. Put the zoom right; this look counts for nothing.
+            log.info("hunt: a look at the wrong zoom; setting the searching zoom again")
+            from .game import View
+            self.game._at = None
+            try:
+                self.zoom_out()
+            except Exception:
+                pass
+            view = View(frame, [], None, True)
+            view.icons_loaded = False
+            return view, []
+        crops = []
+        if TRACE.on and TRACE.dir is not None:
+            # full-size picture of every army / scout found (the recording's frames are shrunk
+            # to 960 px - too small to tell a resource icon from an army diamond afterwards)
+            try:
+                import cv2
+                (TRACE.dir / "crops").mkdir(exist_ok=True)
+                Hf, Wf = frame.shape[:2]
+                for d, k, _l in found:
+                    if k in ("army", "scout", "hostile"):
+                        x, y = int(d[0]), int(d[1])
+                        name = f"{len(list((TRACE.dir / 'crops').glob('*.png'))):05d}_{k}_{x}_{y}.png"
+                        cv2.imwrite(str(TRACE.dir / "crops" / name),
+                                    frame[max(0, y - 90):min(Hf, y + 90), max(0, x - 90):min(Wf, x + 90)])
+                        crops.append(name)
+            except Exception:
+                pass
         if TRACE.on:
-            TRACE.event("look", camera=cam, seconds=round(time.time() - t0, 2),
+            TRACE.event("look", camera=cam, seconds=round(time.time() - t0, 2), crops=crops,
                         found=[{"px": [int(d[0]), int(d[1])], "kind": k, "line": l is not None and l != "edge",
                                 "edge": l == "edge"} for d, k, l in found])
         from .game import View
@@ -1249,6 +1285,42 @@ class Hunter:
                 best = (d, xy, o)
         return (best[1], best[2]) if best else None
 
+    def _confirm_farms_gone(self):
+        """Before saying one of his farms has ended: go and look at its exact spot. Only if
+        its gathering badge isn't there is it gone. (A run with the map scale off - the zoom
+        corrected mid-hunt - put the looks a few tiles wrong: two false 'He stopped
+        gathering' alerts for farms that were still there.)"""
+        for a in list(getattr(self.tracker, "gone", [])):
+            if a.kind != "farm" or a.owner != "him":
+                continue
+            xy = (a.info or {}).get("xy") or [round(a.tile[0]), round(a.tile[1])]
+            try:
+                there = self._badge_at(xy)
+            except Exception:
+                there = None
+            if there:
+                log.info("hunt: his farm at %s,%s is still there (looked again); not gone", xy[0], xy[1])
+                self.tracker.gone.remove(a)
+                a.missed, a.missed_at, a.last_seen = 0, None, time.time()
+                self.tracker.armies.append(a)
+
+    def _badge_at(self, xy):
+        """Is there a gathering badge on the resource point at xy? True / False, or None if
+        it couldn't look properly (then the farm is treated as gone, as before)."""
+        if self.game._at != "sweep":
+            self.zoom_out()
+        if not self.game.pan_to(int(xy[0]), int(xy[1]), self.axes, close_enough=1.0):
+            return None
+        view, _seen = self.look_spot()
+        if not view.camera or not getattr(view, "icons_loaded", False):
+            return None
+        H = view.frame.shape[0]
+        p = to_screen(view.camera[1:3], self.axes, xy, view.frame.shape)
+        if not p:
+            return None
+        # the farm's point is just under its badge (as in detect: badge + 0.035 H)
+        return any(math.dist((bx, by + 0.035 * H), p) < 0.15 * H for bx, by in screen.find_gather_badges(view.frame))
+
     def _known_farm_xys(self, a):
         """{(x, y): the farm} for every farm whose box has been read (but `a`)."""
         out = {}
@@ -1469,7 +1541,7 @@ class Hunter:
             # a player name: letters in it, not chat ("x: y"), not coordinates or numbers.
             # OCR often garbles the [TAG] brackets, so they aren't required.
             if (len(re.sub(r"[^A-Za-z]", "", txt)) >= 4 and ":" not in txt and "#" not in txt
-                    and math.dist(t.center, centre) < 0.3 * H
+                    and math.dist(t.center, centre) < 0.36 * H
                     and screen.label_kind(view.frame, t) == "army"):
                 return True
         return False
@@ -1773,6 +1845,7 @@ class Hunter:
                         z["close_ratio"] = round(float(z["close_ratio"]) / f, 4)   # same close scale
                     log.info("hunt: searching zoom changed; map scale adjusted by %.2fx", f)
                     self._scale_checked = now
+                    self._need_sweep = True      # positions seen at the old zoom: search again
             # every few minutes: is the zoom still right? (measured, corrected by a notch)
             if self.axes and now - self._scale_checked > 300:
                 self._scale_checked = now
@@ -1807,6 +1880,7 @@ class Hunter:
             self.update_my_troops()
         if self.method == "zoomed_out":
             self.tracker.match(sightings, now, covered)
+            self._confirm_farms_gone()
             lost = [a for a in getattr(self.tracker, "gone", [])
                     if a.owner == "him" and a.kind == "army" and a.moving and a.direction != "home"
                     and not self.tracker.at_home(a.tile)]

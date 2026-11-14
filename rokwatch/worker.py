@@ -23,6 +23,18 @@ from .notify import Notifier
 log = logging.getLogger("rokwatch")
 
 
+def _keep_awake(on: bool):
+    """Windows: keep the system and the screen awake while watching (what video players do);
+    nothing changes in the power settings. Released when the watching stops."""
+    try:
+        import ctypes
+        ES_CONTINUOUS, ES_SYSTEM_REQUIRED, ES_DISPLAY_REQUIRED = 0x80000000, 0x00000001, 0x00000002
+        flags = ES_CONTINUOUS | (ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED if on else 0)
+        ctypes.windll.kernel32.SetThreadExecutionState(flags)
+    except Exception:
+        pass
+
+
 class MemoryLog(logging.Handler):
     """Keeps the last lines of the log for the control panel."""
 
@@ -333,6 +345,7 @@ class Worker:
         from .patrol import learn_axes
         game = self._game()
         self._set("busy", "Setting up the zoom by itself...")
+        game.recover_connection()                   # a "Network disconnected" dialog first
         old = dict(((self._cfg().get("hunt") or {}).get("zoom")) or {})
         cfg, msg = game.auto_calibrate(progress=lambda m: setattr(self.status, "doing", m))
         if not cfg:
@@ -362,12 +375,19 @@ class Worker:
                f"(last one with level numbers).")
         self.status.doing = "Learning the map directions at the searching zoom (long drags)"
         m = learn_axes(game)
+        old_axes_kept = False
         if m is None:
-            if old.get("gap"):
-                game.zoom_cfg = old
-            self._set("ready", "Couldn't learn the map directions (is the coordinate readout visible?). "
-                               "Nothing was saved.")
-            return
+            # the zoom itself is settled and right: keep that; the old map scale stays (the hunt
+            # measures the scale again at its start and from its own moves)
+            m = (self._cfg().get("patrol") or {}).get("axes")
+            if not m:
+                if old.get("gap"):
+                    game.zoom_cfg = old
+                self._set("ready", "Couldn't learn the map directions (is the coordinate readout visible?). "
+                                   "Nothing was saved.")
+                return
+            old_axes_kept = True
+            log.info("zoom setup: map scale not measured this time; the previous one is kept")
         search_scale = float(np.linalg.norm(np.array(m, float)[:, 0]))
         old_axes = (self._cfg().get("patrol") or {}).get("axes")
         old_close = None              # the old close-zoom scale in tiles per pixel (absolute)
@@ -393,7 +413,8 @@ class Worker:
             log.info("zoom setup: kept the previous close-zoom scale (%.5f tiles/px)", old_close)
         game.to_sweep()
         config.save_fields({"hunt.zoom": cfg, "patrol.axes": m}, self.cfg_path)
-        self._set("ready", "Zoom set up. " + msg)
+        self._set("ready", "Zoom set up. " + msg + (" (Map scale kept from before: it's measured "
+                                                     "again while hunting.)" if old_axes_kept else ""))
 
     def _do_remember_zoom(self, kind="sweep"):
         """Zoom setup, two presses. 'sweep': you've zoomed by hand to your searching zoom
@@ -509,55 +530,59 @@ class Worker:
         self.stop_patrol.clear()
         self.status.round = 0
         self._set("patrolling", f"Hunting {hunter.name} around {hunter.city[0]},{hunter.city[1]}")
+        _keep_awake(True)          # the PC mustn't go to sleep while it's watching (10 min idle)
         failing_since, told = None, False
-        while not self.stop_patrol.is_set() and (max_rounds is None or self.status.round < max_rounds):
-            try:
-                for a in hunter.round(stop=self.stop_patrol.is_set):
-                    self._alert(notifier, a)
-                if told:
-                    from .watcher import Alert
-                    self._alert(notifier, Alert("bot-back", "Watching again",
-                                                "The game is back and the bot is watching him again.",
-                                                cooldown=False))
-                failing_since, told = None, False
-            except Stopped:
-                raise
-            except Exception as e:                 # one bad round mustn't stop the watching
-                log.warning("Round failed (%s); recovering and carrying on", e, exc_info=True)
-                self.status.doing = f"Recovering: {e}"[:120]
-                failing_since = failing_since or time.time()
-                gone = "Couldn't find a window" in str(e)
-                if not told and time.time() - failing_since > 60:
-                    # nobody may be at the PC: don't just keep retrying in silence
-                    from .watcher import Alert
-                    told = True
-                    self._alert(notifier, Alert(
-                        "bot-stuck", "THE GAME HAS CLOSED" if gone else "THE BOT CAN'T WATCH THE GAME",
-                        ("The Rise of Kingdoms window is gone (it crashed or was closed). Nothing is "
-                         "being watched. Open the game again: the bot carries on by itself."
-                         if gone else f"Every round has failed for a minute: {e}"[:300]),
-                        urgent=True, cooldown=False))
-                if not gone:
-                    try:
-                        game.close_popups()
-                        game._at = None
-                        hunter.zoom_out()
-                    except Stopped:
-                        raise
-                    except Exception:
-                        log.debug("recovery failed", exc_info=True)
-                # failing again and again: try every few seconds, not flat out
-                time.sleep(1 if time.time() - failing_since < 10 else 5)
-            self.status.round += 1
-            self._maybe_sample()
-            self.status.armies = hunter.tracker.summary()
-            self.status.my_troops = hunter.my_troops_summary()
-            self.status.last_site = f"{len(self.status.armies)} of his armies tracked"
-            end = time.time() + float(h.get("pause_between_sweeps", 0))     # no idle between rounds
-            while time.time() < end and not self.stop_patrol.is_set():
-                if self._snap_wanted is not None:
-                    self._maybe_sample()
-                time.sleep(0.2)
+        try:
+            while not self.stop_patrol.is_set() and (max_rounds is None or self.status.round < max_rounds):
+                try:
+                    for a in hunter.round(stop=self.stop_patrol.is_set):
+                        self._alert(notifier, a)
+                    if told:
+                        from .watcher import Alert
+                        self._alert(notifier, Alert("bot-back", "Watching again",
+                                                    "The game is back and the bot is watching him again.",
+                                                    cooldown=False))
+                    failing_since, told = None, False
+                except Stopped:
+                    raise
+                except Exception as e:                 # one bad round mustn't stop the watching
+                    log.warning("Round failed (%s); recovering and carrying on", e, exc_info=True)
+                    self.status.doing = f"Recovering: {e}"[:120]
+                    failing_since = failing_since or time.time()
+                    gone = "Couldn't find a window" in str(e)
+                    if not told and time.time() - failing_since > 60:
+                        # nobody may be at the PC: don't just keep retrying in silence
+                        from .watcher import Alert
+                        told = True
+                        self._alert(notifier, Alert(
+                            "bot-stuck", "THE GAME HAS CLOSED" if gone else "THE BOT CAN'T WATCH THE GAME",
+                            ("The Rise of Kingdoms window is gone (it crashed or was closed). Nothing is "
+                             "being watched. Open the game again: the bot carries on by itself."
+                             if gone else f"Every round has failed for a minute: {e}"[:300]),
+                            urgent=True, cooldown=False))
+                    if not gone:
+                        try:
+                            game.close_popups()
+                            game._at = None
+                            hunter.zoom_out()
+                        except Stopped:
+                            raise
+                        except Exception:
+                            log.debug("recovery failed", exc_info=True)
+                    # failing again and again: try every few seconds, not flat out
+                    time.sleep(1 if time.time() - failing_since < 10 else 5)
+                self.status.round += 1
+                self._maybe_sample()
+                self.status.armies = hunter.tracker.summary()
+                self.status.my_troops = hunter.my_troops_summary()
+                self.status.last_site = f"{len(self.status.armies)} of his armies tracked"
+                end = time.time() + float(h.get("pause_between_sweeps", 0))     # no idle between rounds
+                while time.time() < end and not self.stop_patrol.is_set():
+                    if self._snap_wanted is not None:
+                        self._maybe_sample()
+                    time.sleep(0.2)
+        finally:
+            _keep_awake(False)
         self.stop_patrol.clear()
         his = hunter.tracker.summary()
         where = "; ".join(f"#{a['id']} at {a['x']},{a['y']} ({a['state']})" for a in his[:6])

@@ -334,8 +334,46 @@ class Game:
                 break
             self._notch(out=False)
         ok = self.level() == "patrol"
+        if ok and (self.zoom_cfg or {}).get("gap"):
+            ok = self._numbers_check()
         self._at = "sweep" if ok else None
         return ok
+
+    def _marks_settled(self):
+        """Level marks on the picture once the icons have drawn (they pop in after a notch)."""
+        f = self.fresh_frame(0.6)
+        n, end = len(screen.level_marks(f)), time.time() + 1.2
+        while n < 4 and time.time() < end:
+            time.sleep(0.15)
+            n = max(n, len(screen.level_marks(self.frame())))
+        return n
+
+    def _numbers_check(self) -> bool:
+        """At the searching zoom the resource points must show their level numbers (one notch
+        further out they're bare icons, no armies: the zoom you don't want). Counting notches
+        isn't enough - a wheel notch is sometimes lost or doubled (live: 'gap 2' was right one
+        time and one notch too far the next). If few numbers show: one notch in; if they
+        appear there (and it's still the simplified map), that's the zoom. Live frames: bare
+        icons 0-1 marks, numbers 4-17."""
+        n = self._marks_settled()
+        if n >= 4:
+            return True
+        self._notch(out=False)
+        if self.level() == "close":
+            self._notch(out=True)                # first simplified step: just a bare area
+            return self.level() == "patrol"
+        m = self._marks_settled()
+        if m >= 4 and m >= n + 3:
+            z = self.zoom_cfg
+            if z.get("gap", 1) > 1:
+                z["gap"] = int(z["gap"]) - 1
+                z["t_in"] = min(int(z.get("t_in") or z["gap"]), z["gap"])
+                self.gap_changed = True
+            log.info("Zoom: the level numbers were gone; one notch in (%d -> %d marks); searching "
+                     "zoom is now %d step(s) out from the close zoom", n, m, z["gap"])
+            return True
+        self._notch(out=True)                    # no difference: nothing with a number here
+        return self.level() == "patrol"
 
     def _out_keeping_tags(self, n):
         """n notches out, but never past the last zoom where resource points still show
@@ -522,11 +560,13 @@ class Game:
             return None
         if not all(0 <= v <= 1300 for v in (*c0, *c1, *c2)):
             return None
-        d = math.dist(c0, c1)
-        if d < 1 or d > 300 or math.dist(c0, c2) > max(2.0, 0.08 * d):
+        # going and coming back don't move the map exactly the same (+10 / -6 tiles): their
+        # average is the scale; a misread or a drag that didn't take is thrown out
+        go, back = math.dist(c0, c1), math.dist(c1, c2)
+        if min(go, back) < 1 or max(go, back) > 300 or max(go, back) > 2.2 * min(go, back):
             log.info("zoom: scale measurement didn't add up (%s -> %s -> %s); ignored", c0, c1, c2)
             return None
-        return d / dx
+        return (go + back) / 2 / dx
 
     def calibrate_close(self, search_scale, max_steps=25):
         """You're at your close zoom; search_scale = tiles per pixel at your searching

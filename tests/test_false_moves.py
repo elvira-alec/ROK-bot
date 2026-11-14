@@ -263,3 +263,28 @@ def test_his_farm_seen_again_under_a_new_id_is_not_gone():
     tr.match([farm(174.5, 392, 75)], 75)
     assert [e for e in tr.events() if e[0] == "farm_left"] == []
     assert len(tr.armies) == 1 and tr.armies[0].id == old.id
+
+
+def test_his_farm_still_there_when_looked_at_is_not_gone(tmp_path):
+    """Live round 8: the map scale was off after a mid-hunt zoom correction, the looks missed
+    two of his farms and he 'stopped gathering' - false. Now his farm is only gone if its
+    exact spot, looked at again, has no gathering badge."""
+    import numpy as np
+    from rokwatch.hunter import Hunter, Army
+
+    class G:
+        _at = "sweep"
+    h = Hunter(G(), {"hunt": {"player_name": "x", "city": list(CITY)},
+                     "patrol": {"axes": [[0.0076, 0], [0, -0.0106]]}}, SITES, str(tmp_path / "h.csv"))
+    f = Army(3, (154, 369), 0, 0, kind="farm", owner="him")
+    f.info = {"xy": [153, 370]}
+    h.tracker.gone = [f]
+    h._badge_at = lambda xy: True
+    h._confirm_farms_gone()
+    assert h.tracker.gone == [] and f in h.tracker.armies
+    assert [e for e in h.tracker.events() if e[0] == "farm_left"] == []
+    g = Army(4, (179, 366), 0, 0, kind="farm", owner="him")
+    h.tracker.gone = [g]
+    h._badge_at = lambda xy: False                   # really gone: still reported
+    h._confirm_farms_gone()
+    assert [e[0] for e in h.tracker.events()].count("farm_left") == 1

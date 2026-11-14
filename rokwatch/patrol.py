@@ -381,7 +381,7 @@ class Patrol:
         return alerts
 
 
-def learn_axes(game: Game, frac=0.5, reps=2, px=None) -> list | None:
+def learn_axes(game: Game, frac=0.5, reps=3, px=None) -> list | None:
     """Work out how screen pixels map to map tiles by dragging the map a known
     amount and reading the coordinates. Returns a 2x2 matrix (tiles per pixel).
 
@@ -420,14 +420,26 @@ def learn_axes(game: Game, frac=0.5, reps=2, px=None) -> list | None:
             if c0 is None or c1 is None or c2 is None:
                 continue
             go, back = c1 - c0, c1 - c2
-            # a misread digit or a drag that didn't take: going and coming back disagree
-            if np.linalg.norm(go - back) > max(1.5, 0.15 * np.linalg.norm(go)) or np.linalg.norm(go) < 2:
+            # A drag doesn't move the map exactly the same each way (live: +10 tiles, then -6
+            # back; next time +6, -10) - but going and coming back average out (8 and 8: the
+            # true scale). So: each there-and-back gives its average; only a misread digit or a
+            # drag that didn't take (one way far off the other) is thrown out.
+            ng, nb = np.linalg.norm(go), np.linalg.norm(back)
+            if min(ng, nb) < 2 or max(ng, nb) > 2.2 * min(ng, nb):
                 log.info("learn_axes: readings didn't add up (%s -> %s -> %s); ignored", c0, c1, c2)
                 continue
-            samples += [go / px, back / px]
+            samples.append((go + back) / 2 / px)
         if not samples:
             return None
-        cols.append(np.mean(samples, axis=0).tolist())
+        # the median of the there-and-backs; at least two must agree with it (one odd drag -
+        # it happens: 0.020 vs 0.014 tiles/px once - can't spoil it)
+        med = np.median(np.array(samples), axis=0)
+        good = [q for q in samples if np.linalg.norm(q - med) <= 0.15 * np.linalg.norm(med)]
+        if len(good) < min(2, len(samples)) or (len(samples) >= 2 and len(good) < 2):
+            log.info("learn_axes: the measurements disagree (%s); nothing learned",
+                     [np.round(q, 5).tolist() for q in samples])
+            return None
+        cols.append(np.mean(good, axis=0).tolist())
     m = np.array(cols).T  # columns: tiles per pixel for screen x, screen y
     if abs(np.linalg.det(m)) < 1e-9:
         return None

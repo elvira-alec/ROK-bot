@@ -145,3 +145,27 @@ def test_army_seen_on_one_picture_only_is_not_a_sighting(monkeypatch, tmp_path):
     _view, seen = h.look_spot()
     assert len(seen) == 1                                     # the one still there
     assert abs(seen[0].tile[0] - (179 + 0.0076 * (1300 - 926))) < 0.5
+
+
+def test_notification_bubble_is_not_a_farm_badge():
+    """Live 2026-11-14: the red '2' badge on the bubble above the bottom-right buttons was
+    taken for a farm's pickaxe badge on every look - a phantom farm, checked 8 times."""
+    f = cv2.imread(str(DIR / "unloaded" / "notification_bubble_960.jpg"))
+    f = cv2.resize(f, (1852, 1042), interpolation=cv2.INTER_CUBIC)
+    assert not [b for b in screen.find_gather_badges(f) if b[0] > 1500 and b[1] > 850]
+
+
+def test_stationary_icon_in_the_bottom_band_is_not_an_army(monkeypatch):
+    """Live 2026-11-14 night: a stone-deposit icon at 0.89 H came out as an army (its plate
+    is in the bottom band); a scout there on its march line still counts."""
+    import numpy as np
+    from rokwatch.hunter import Hunter
+    from rokwatch.screen import MarchLine
+    H = 1042
+    monkeypatch.setattr(screen, "find_gather_badges", lambda f: [])
+    monkeypatch.setattr(screen, "find_map_icons", lambda f: [((581, 925), "army"), ((908, 930), "scout")])
+    monkeypatch.setattr(screen, "find_march_lines",
+                        lambda f: [MarchLine((908, 930), (1300, 600), "white", 20, 12.0)])
+    found = Hunter.detect(np.zeros((H, 1852, 3), np.uint8))
+    kinds = [(k, tuple(int(v) for v in d)) for d, k, _ in found]
+    assert ("scout", (908, 930)) in kinds and ("army", (581, 925)) not in kinds
