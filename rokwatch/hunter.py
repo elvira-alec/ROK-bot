@@ -625,8 +625,11 @@ class Tracker:
         return (close[0], "close") if close else None
 
     def summary(self, include=None):
-        # his, plus ones not checked yet; ones checked without finding his name are left out
-        include = include or (lambda a: a.owner == "him" or (a.owner is None and a.checks < 3))
+        # his, plus ones not checked yet; ones checked without finding his name are left out.
+        # Scouts are never checked or followed (too quick): only shown when known to be his
+        # (march line from his city) - an unknown one would sit on the map as "checking".
+        include = include or (lambda a: a.owner == "him" or (a.owner is None and a.checks < 3
+                                                             and a.kind != "scout"))
 
         def state(a):
             if a.moving:
