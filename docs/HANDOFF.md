@@ -845,6 +845,21 @@ Fixed (each with a test that fails on the old code):
     auto_calibrate (leave, drag off the city, zoom in again), `to_close`, and every round via
     `recover_connection` (then the zoom is re-set and it goes back to his city).
     Test: `tests/test_city_view.py`, fixtures `tests/real_screens/city_view/`.
+29. **v1.22:** scouts are never checked or followed, so an unknown one isn't listed or mapped
+    any more (it sat there as "checking whose it is"). Only scouts known to be his show.
+30. **v1.23 (user's ideas, 2026-11-14 evening):**
+    - **Guarding your troops** (`guard_my_troops`, every `hunt.guard_my_troops_minutes`, default
+      2; not during a sweep): one look at each GATHERING troop at the searching zoom, no zoom
+      in. A non-green march line ending within 2.5 tiles of the troop, or a red diamond, alerts
+      at once whoever it is (the user chose speed over confirming); "HIS ARMY" when the line
+      comes from his city or a known army of his is right there. Auto-recall (if on) recalls
+      that troop, once. Live: 2 troops = ~3.5 s every 2 min.
+    - **Crossings** (`_check_crossings`): his moving army and another moving one within 3
+      tiles can be swapped by the tracker; once >5 tiles apart both are read again (zoom in).
+      Otherwise an army known to be his is never zoomed in on again.
+    - **4 troops:** the list packs tighter (0.074 H apart); the spacing filter's 0.08 H floor
+      put troops 3 and 4 a badge too low ("other"). Floor now 0.06 H.
+      Tests: `tests/test_guard_troops.py`, `tests/test_troops4.py` (PC + phone pictures).
 
 Live result after 12-18 (7 min, his 4 farms out): every farm tracked the whole run (~250
 sightings each), 0 false alerts, 7-8 owner checks all answered first time, sweep ~40-80 s,

@@ -887,7 +887,9 @@ def troop_panel(frame: np.ndarray, texts: list[Text]):
         y_first = near_first[0][1]
     # spacing: measured from badges that follow each other, else the usual one
     ys = [c[1] for c, _ in found if c[1] >= y_first - 2]
-    gaps = [b - a for a, b in zip(ys, ys[1:]) if 0.08 * h <= b - a <= 0.12 * h]
+    # (4 troops: the game packs the list tighter, 0.074 H apart - the old 0.08 floor threw
+    # those gaps away and placed troops 3 and 4 a badge too low, read as "other")
+    gaps = [b - a for a, b in zip(ys, ys[1:]) if 0.06 * h <= b - a <= 0.12 * h]
     step = float(np.median(gaps)) if gaps else _BADGE_STEP * h
     commanders = []
     for i in range(used):

@@ -736,6 +736,11 @@ class Hunter:
         self.my_troops = {}                       # troop list index -> what we know of it
         self.refresh_spots = float(h.get("track_my_gathering_minutes", 10)) * 60
         self._spots_at = 0.0
+        # a look at each of your gathering troops every few minutes (searching zoom only)
+        self.guard_every = float(h.get("guard_my_troops_minutes", 2)) * 60
+        self._guard_at = 0.0
+        self._guard_alerts = []
+        self._crossing = {}                       # (id, id) of his army and another passing close
         self.log_path = Path(log_path)
         self.debug_dir = debug_dir
         self.auto_recall = bool(cfg.get("patrol", {}).get("auto_recall", False))
@@ -1507,6 +1512,98 @@ class Hunter:
 
     update_my_spots = update_my_troops            # (old name)
 
+    def _guard_due(self, now):
+        if not self.guard_every or self.mode == "sweep":
+            return False
+        if not any(t.get("state") == "gathering" and "x" in t for t in self.my_troops.values()):
+            return False
+        return now - self._guard_at >= self.guard_every
+
+    GUARD_REACH = 2.5          # a march line ending this close to your troop is going for it
+
+    def _coming_at(self, s, pos):
+        """'aimed' when this sighting is marching at your troop at pos, 'hostile' for a
+        red diamond (the game marks armies marching against you red), else None.
+        Your own and your alliance's marches (green lines) never get here."""
+        if s.kind == "hostile":
+            return "hostile"
+        if s.kind not in ("army", "scout") or not s.moving or not s.ends:
+            return None
+        if math.dist(s.tile, pos) <= 1.0:
+            return None                            # already there: arriving gatherer / fighting
+        if any(math.dist(e, pos) <= self.GUARD_REACH for e in s.ends):
+            return "aimed"
+        return None
+
+    def guard_my_troops(self, stop=None) -> list[Alert]:
+        """One look at each of your gathering troops at the searching zoom (no zooming in):
+        an army marching at one of them that slipped past the watch around his city.
+        Alerts whoever it is (the user's choice: fastest); says 'his' when that's known."""
+        alerts = []
+        troops = [t for t in sorted(self.my_troops.values(), key=lambda t: t["index"])
+                  if t.get("state") == "gathering" and "x" in t]
+        for i, t in enumerate(troops):
+            if stop and stop():
+                break
+            pos = (t["x"], t["y"])
+            n = t["index"] + 1
+            self._progress(i, len(troops), f"Looking around your troop {n} ({pos[0]},{pos[1]})")
+            t0 = time.time()
+            ok = self.game.pan_to(*pos, self.axes)
+            self.timing["move"] += time.time() - t0
+            if not ok:
+                continue
+            view, seen = self.look_spot()
+            if not view.camera:
+                continue
+            for s in seen:
+                how = self._coming_at(s, pos)
+                if not how:
+                    continue
+                his = (any(self.tracker.at_home(e) for e in (s.ends or ()))
+                       or any(a.owner == "him" and a.kind != "farm" and math.dist(a.tile, s.tile) <= 4
+                              for a in self.tracker.armies))
+                who = "HIS ARMY" if his else ("A SCOUT" if s.kind == "scout" else "AN ARMY")
+                d = math.dist(s.tile, pos)
+                what = "is marching against" if how == "hostile" else "is marching at"
+                title = f"{who} {what.upper()} YOUR TROOP {n}"
+                msg = (f"At {s.tile[0]:.0f},{s.tile[1]:.0f}, about {d:.0f} tiles from your troop {n} "
+                       f"gathering at {pos[0]},{pos[1]}." + (" It's his." if his else ""))
+                log.warning("hunt: %s - %s", title, msg)
+                from .trace import TRACE
+                TRACE.event("guard", troop=n, pos=list(pos), how=how, his=his,
+                            tile=[round(s.tile[0], 1), round(s.tile[1], 1)])
+                alerts.append(Alert(f"guard-{n}", title, msg, urgent=True))
+                if self.auto_recall and s.kind != "scout" and f"guard-recall-{n}" not in self._recalled:
+                    self._recalled.add(f"guard-recall-{n}")
+                    report = self.game.recall_all([pos])
+                    alerts.append(Alert(f"recall-guard-{n}-{time.time()}", "Auto-recall", "; ".join(report),
+                                        urgent=True, cooldown=False))
+                break                              # one alert per troop per look
+        return alerts
+
+    def _check_crossings(self):
+        """His marching army and another one passing within 3 tiles: the tracker can swap
+        them, and 'his' would then follow the wrong one. Once they've moved apart again,
+        read both names again (zoom in). Otherwise a known army is never zoomed in on."""
+        by_id = {a.id: a for a in self.tracker.armies}
+        mv = [a for a in self.tracker.armies if a.moving and a.kind == "army"]
+        for a in mv:
+            for b in mv:
+                if (a.id < b.id and "him" in (a.owner, b.owner) and a.owner != b.owner
+                        and math.dist(a.tile, b.tile) <= 3.0):
+                    self._crossing[(a.id, b.id)] = True
+        for key in list(self._crossing):
+            a, b = by_id.get(key[0]), by_id.get(key[1])
+            if not a or not b:
+                del self._crossing[key]
+                continue
+            if math.dist(a.tile, b.tile) > 5.0:
+                del self._crossing[key]
+                log.info("hunt: armies #%d and #%d crossed; checking whose each is again", a.id, b.id)
+                for x in (a, b):
+                    x.owner, x.checks = None, 0
+
     def my_troops_summary(self):
         """For the panel: your troops, with speed for moving ones."""
         out = []
@@ -1881,8 +1978,13 @@ class Hunter:
             self._spots_at = now
             self._progress(0, 1, "Checking your troops (tapping each in the troop list)")
             self.update_my_troops()
+        self._guard_alerts = []
+        if self.method == "zoomed_out" and self._guard_due(now):
+            self._guard_at = now
+            self._guard_alerts = self.guard_my_troops(stop)
         if self.method == "zoomed_out":
             self.tracker.match(sightings, now, covered)
+            self._check_crossings()
             self._confirm_farms_gone()
             lost = [a for a in getattr(self.tracker, "gone", [])
                     if a.owner == "him" and a.kind == "army" and a.moving and a.direction != "home"
@@ -1920,7 +2022,7 @@ class Hunter:
                 self.activity.action("scouted_you" if "scouted" in self.dangers else "attacked_you", now=now)
         except Exception:
             log.debug("activity log failed", exc_info=True)
-        alerts = []
+        alerts = list(self._guard_alerts)
         for aid, before, after in changes:                 # alerts you asked for on one army
             f = self.focus.get(aid) or {}
             if f.get("alert_moves") and before and after and before != after:
