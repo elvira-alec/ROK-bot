@@ -34,6 +34,11 @@ def to_tile(camera, axes, point, frame_shape):
     return float(t[0]), float(t[1])
 
 
+def _strip_numbers(texts):
+    """The texts that look like names (not bare level numbers)."""
+    return [t for t in texts or [] if len(re.sub(r"[^A-Za-z]", "", str(t))) >= 3]
+
+
 def to_screen(camera, axes, tile, frame_shape):
     """Screen point of a map tile (the inverse of to_tile), or None."""
     h, w = frame_shape[:2]
@@ -125,6 +130,10 @@ def same_spot(a, b) -> bool:
     """Two sightings in one round of the same thing: close together (marching ones may
     have moved on a few tiles between the two looks)."""
     lim = 8.0 if (a.moving or b.moving or getattr(a, "unsure", False) or getattr(b, "unsure", False)) else 4.0
+    if a.kind == "farm" and b.kind == "farm":
+        # resource points by his base are 3-6 tiles apart: two of his farms 4 tiles apart were
+        # taken for one ("ignores the lower one"). The estimate is good to about a tile.
+        lim = 2.0
     return a.kind == b.kind and math.dist(a.tile, b.tile) <= lim
 
 
@@ -715,6 +724,7 @@ class Hunter:
         # someone else's farm near his city is checked again after this long: the gatherer
         # changes (he may take that resource point over) and a wrong read gets corrected
         self.recheck_other = float(h.get("recheck_other_minutes", 10)) * 60
+        self._farm_memory: dict = {}   # exact X:Y read from a box -> (owner, when)
         self.my_sites = my_sites
         self.tracker = Tracker(self.city, list(my_sites), h.get("near_city", 6),
                                h.get("match_distance", 12), h.get("near_site", 8),
@@ -882,6 +892,17 @@ class Hunter:
                     break
         job = self._pool.submit(self.game.read_camera, frame)
         found = self.detect(frame)
+        if any(k in ("army", "scout") and line is None for _, k, line in found):
+            # an army / scout not on a march line: confirm it on a second picture a moment later.
+            # Icons fade in after a move, and a half-drawn stone-deposit icon passed for an army
+            # for one picture - then it was zoomed in on 3 times. A real one is still there.
+            time.sleep(0.25)
+            again = screen.find_map_icons(self.game.frame())
+            H0 = frame.shape[0]
+            found = [(d, k, line) for d, k, line in found
+                     if k not in ("army", "scout") or line is not None
+                     or any(k2 in ("army", "scout", "hostile") and math.dist(d, d2) < 0.03 * H0
+                            for d2, k2 in again)]
         self._dangers_frame(frame)
         cam = job.result()
         if cam and expected and math.dist(cam[1:3], expected) > 10:
@@ -982,6 +1003,7 @@ class Hunter:
         s1, s2 = self.game.measure_scale(0.6), self.game.measure_scale(0.6)
         if not (s1 and s2 and ss) or abs(math.log(s1 / s2)) > 0.08:
             return
+        self._measure_ref = (s1 + s2) / 2       # what the zoom check compares with later
         f = (s1 + s2) / 2 / ss
         if 0.6 <= f <= 1.6 and abs(f - 1) > 0.06:
             self.axes_out = self.axes = (np.array(self.axes_out, float) * f).round(6).tolist()
@@ -1023,6 +1045,7 @@ class Hunter:
                  int(ok.sum()), fit[0, 0], fit[1, 1], rx, ry)
 
     def _check_owner(self, a, others=()):
+        empty_close = False
         a.checks += 1
         if not hasattr(self, "_round_tried"):
             self._round_tried = []
@@ -1063,6 +1086,7 @@ class Hunter:
             if a.owner is None and votes == ["other", "other"]:
                 a.owner = "other"
             self.seen_text[getattr(a, "id", 0)] = read
+            empty_close = a.owner is None and not _strip_numbers(read) and not getattr(self, "_last_clusters", True)
         for attempt in range(0 if a.kind == "farm" or a.owner else 2):
             # not settled by the troops' name: the old way, any army label near the middle
             v = self.game.look_middle()
@@ -1085,6 +1109,18 @@ class Hunter:
             if a.owner:
                 break
             time.sleep(0.2)
+        def _names(items):          # player-like names read (not bare level numbers like '18')
+            out = []
+            for t in items or []:
+                txt = t[0] if isinstance(t, (tuple, list)) else str(t)
+                if len(re.sub(r"[^A-Za-z]", "", txt)) >= 3:
+                    out.append(txt)
+            return out
+        if a.kind != "farm" and a.owner is None and empty_close                 and not _names(self.seen_text.get(getattr(a, "id", 0))):
+            # zoomed in right where it should be: no troops, no name at all - there's no army
+            # there (a momentary false sighting). Don't zoom in on it again.
+            a.checks = max(a.checks, 3)
+            log.info("hunt: nothing at %.0f,%.0f when zoomed in; not an army", a.tile[0], a.tile[1])
         log.info("hunt: %s at %.0f,%.0f is %s", "farm" if a.kind == "farm" else "army",
                  a.tile[0], a.tile[1], a.owner or "unclear")
         TRACE.event("owner", kind=a.kind, tile=[round(a.tile[0], 1), round(a.tile[1], 1)], owner=a.owner,
@@ -1115,6 +1151,7 @@ class Hunter:
         H, W = f.shape[:2]
         mid = (W / 2, H / 2)
         cents = [(b[0] + b[2] / 2, b[1] + b[3] / 2) for b in screen.player_troop_clusters(f)]
+        self._last_clusters = bool(cents)
         want, cam = mid, None
         if ac:
             cam = self.game.read_camera(f)
@@ -1177,15 +1214,60 @@ class Hunter:
                 # never tap blindly: near his base the middle of the screen is his city
                 time.sleep(0.15)
                 continue
-            bx, by = min(badges, key=lambda b: math.dist(b, want))
-            if self._read_farm_box(a, (bx, int(by + 0.02 * H))):   # the camp just under its badge
-                return
+            # nearest first; a box that turns out to be a farm we already know means we tapped
+            # its badge instead of this one (two of his farms side by side: the same one was
+            # read twice and the other never) - then the next badge
+            taken = self._known_farm_xys(a)
+            cands = sorted(badges, key=lambda b: math.dist(b, want))[:3]
+            for i, (bx, by) in enumerate(cands):
+                r = self._read_farm_box(a, (bx, int(by + 0.02 * H)), taken)  # the camp under its badge
+                others = [c for c in cands[i + 1:] if math.dist(c, want) < 0.3 * H]
+                if isinstance(r, tuple) and r[0] == "taken":
+                    if others:
+                        continue
+                    # no other badge it could be: it IS that known farm (seen again, its
+                    # estimate a bit off) - same owner, same spot; the tracker merges them
+                    self._same_as_known(a, r[1])
+                    return
+                if r == "far":                           # a resource point well away from it
+                    if others:
+                        continue
+                    return
+                if r:
+                    return
+                break
         log.info("hunt: couldn't open the resource point at %.0f,%.0f", a.tile[0], a.tile[1])
         self.game.close_popups()
 
-    def _read_farm_box(self, a, tap) -> bool:
+    def _remembered(self, tile):
+        """(xy, owner) of a resource point read from its box lately, within 2.5 tiles of tile."""
+        now = time.time()
+        best = None
+        for xy, (o, t) in self._farm_memory.items():
+            d = math.dist(xy, tile)
+            if d <= 2.5 and now - t < (1800 if o == "him" else self.recheck_other) and (best is None or d < best[0]):
+                best = (d, xy, o)
+        return (best[1], best[2]) if best else None
+
+    def _known_farm_xys(self, a):
+        """{(x, y): the farm} for every farm whose box has been read (but `a`)."""
+        out = {}
+        for o in list(self.tracker.armies) + list(getattr(self, "_round_seen", [])):
+            xy = (getattr(o, "info", None) or {}).get("xy")
+            if o is not a and o.kind == "farm" and xy and getattr(o, "owner", None):
+                out.setdefault(tuple(xy), o)
+        return out
+
+    def _same_as_known(self, a, hit):
+        o = hit[1]
+        a.owner = o.owner
+        a.info = {**(a.info or {}), "xy": list(hit[0])}
+        log.info("hunt: the farm at %.0f,%.0f is the one at %s,%s (already known: %s)",
+                 a.tile[0], a.tile[1], hit[0][0], hit[0][1], o.owner)
+
+    def _read_farm_box(self, a, tap, taken=None):
         """Tap at `tap`, read the resource point's box (owner, X:Y, what, reserves), close
-        it. False if no box opened."""
+        it. False if no box opened; ("taken", (xy, farm)) if it's a farm already known."""
         self.game.b.click(int(tap[0]), int(tap[1]))
         box = None
         for _ in range(16):                              # wait for the box (up to ~1 s)
@@ -1197,29 +1279,41 @@ class Hunter:
         if not box:
             return False
         try:
-            self._read_box_contents(a, box)
+            r = self._read_box_contents(a, box, taken) if taken else self._read_box_contents(a, box)
         finally:
             self.game.close_popups()                     # always closed (an open box blocks zooming)
-        return True
+        return r if r else True
 
-    def _read_box_contents(self, a, box):
+    def _read_box_contents(self, a, box, taken=None):
         time.sleep(0.12)                                 # let the text finish drawing
         f = self.game.frame()
         texts = screen.read_text(f, box)
         self.seen_text[getattr(a, "id", 0)] = [t.text for t in texts]
         mine = [t for t in texts if screen.name_score(t.text, self.name) >= 0.75]
         coords = next((screen.parse_coords(t.text) for t in texts if screen.parse_coords(t.text)), None)
+        if coords and taken:
+            hit = next(((xy, o) for xy, o in taken.items() if math.dist(xy, (coords[1], coords[2])) <= 1.0), None)
+            if hit:
+                log.info("hunt: tapped the resource point at %s,%s while checking %.0f,%.0f - that one is "
+                         "known already", coords[1], coords[2], a.tile[0], a.tile[1])
+                return "taken", hit
         if coords and math.dist((coords[1], coords[2]), a.tile) > 6:
             # the box is for another resource point (a neighbour's), not the one we meant:
             # its owner isn't this farm's owner
             log.info("hunt: tapped the resource point at %s,%s while checking %.0f,%.0f; not that one",
                      coords[1], coords[2], a.tile[0], a.tile[1])
-            return
+            return "far"
         details = self._farm_details(texts)
         if mine:
             a.owner = "him"
         elif any(self.GATHER_RX.search(t.text) for t in texts):
             a.owner = "other"                            # someone else is gathering there
+        if coords and a.owner:
+            # the exact spot for anyone's farm (a neighbour's too: it's how the same resource
+            # point is recognised later, and a re-tap of it is spotted), and remembered
+            xy = [int(coords[1]), int(coords[2])]
+            a.info = {**(a.info or {}), "xy": xy}
+            self._farm_memory[tuple(xy)] = (a.owner, time.time())
         if a.owner == "him":
             info = dict(a.info or {})
             info.update(details)
@@ -1610,6 +1704,14 @@ class Hunter:
                 if s.kind == "farm" and k.info and not s.info:
                     s.info = dict(k.info)
                 continue
+            # its box was read a little while ago (it dropped out of the tracker and came back):
+            # the same answer, no zooming in again - his farms for 30 min, someone else's for
+            # as long as their re-check interval
+            mem = self._remembered(s.tile) if s.kind == "farm" else None
+            if mem:
+                s.owner = mem[1]
+                s.info = {**(s.info or {}), "xy": list(mem[0])}
+                continue
             # tried twice already this round without an answer: not again (it isn't going
             # to read better a minute later, and each try is a zoom in and out)
             tries = sum(1 for kind, t in getattr(self, "_round_tried", [])
@@ -1674,10 +1776,13 @@ class Hunter:
             # every few minutes: is the zoom still right? (measured, corrected by a notch)
             if self.axes and now - self._scale_checked > 300:
                 self._scale_checked = now
-                ss = float(np.linalg.norm(np.array(self.axes, float)[:, 0]))
+                # compared with the same kind of measurement taken right after the zoom was set
+                # at the start (a drag measurement and the scale fitted from pans differ by
+                # ~10-15% at the right zoom: compared with each other it re-set the zoom for nothing)
+                ss = getattr(self, "_measure_ref", None) or float(np.linalg.norm(np.array(self.axes, float)[:, 0]))
                 r = self.game.keep_scale(ss)
-                if r and not 0.89 <= r <= 1.12:
-                    log.warning("hunt: zoom is off (%.2fx the searching zoom) and couldn't be fixed", r)
+                if r and not 0.94 <= r <= 1.06:
+                    log.info("hunt: zoom was off (%.2fx the searching zoom); set again from the close zoom", r)
         self._rounds += 1
         self.mode = self.plan(now)
         from .trace import TRACE
@@ -1710,6 +1815,13 @@ class Hunter:
             elif lost:
                 log.info("hunt: lost track of %d of his armies; searching the area again", len(lost))
                 self._need_sweep = True
+            for a in self.tracker.armies:
+                if a.kind == "farm" and a.owner is None:
+                    # the same farm seen twice before its box was read (two estimates 2+ tiles
+                    # apart): the other one was read meanwhile - no zooming in for this one
+                    mem = self._remembered(a.tile)
+                    if mem:
+                        a.owner, a.info = mem[1], {**(a.info or {}), "xy": list(mem[0])}
             for a in self.tracker.armies:
                 if (a.kind == "farm" and a.owner == "other" and a.other_since
                         and now - a.other_since > self.recheck_other

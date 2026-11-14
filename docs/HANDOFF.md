@@ -797,6 +797,30 @@ Fixed (each with a test that fails on the old code):
 22. Calibration and the scale check read the camera only once the map stopped gliding
     (`Game.camera_settled`; read too soon, the scale came out ~25% low), and the hunt measures
     the scale before its first sweep (`_first_scale`) - the sweep decides whose farm is whose.
+23. **v1.19 - "checks the same resource point twice and ignores the lower one"** (user, live):
+    - the sweep's `same_spot` merged two farms 4 tiles apart into one (the lower one never
+      checked): farms now merge only within 2 tiles;
+    - at the close zoom it could tap the neighbouring farm's badge (nearest to an estimate a
+      couple of tiles off): a box whose exact X:Y is a farm already read = wrong badge, tap the
+      next one (`_known_farm_xys`); no other badge = it IS that farm (`_same_as_known`);
+    - every farm's exact X:Y is stored now (only his were): `_farm_memory` (X:Y -> owner) means
+      a farm that dropped out and came back isn't zoomed in on again (his 30 min, others' until
+      their 10-min re-check), also applied to unknown farms just before the end-of-round checks.
+24. **More NPC / fake armies**, each measured on live frames before the rule was added:
+    - red barbarian axes / forts came out as "army": red share 0.49-0.65 vs 0.00 for every real
+      army / scout -> `screen._red_share` < 0.25 for army/scout;
+    - night: a stone-deposit icon's plate touches the icon; `level_marks` (night-capable)
+      plate at dy 0.016-0.034 H / dx +-0.010 H under it = resource icon (real armies' only mark:
+      their symbol's bottom at 0.010-0.013 H);
+    - momentary false sightings while icons fade in: a stationary army/scout must be on a
+      second picture 0.25 s later (`look_spot`); an empty close-up (no troops, no name) = not
+      an army, no more checks.
+25. The 5-min zoom check compared a drag measurement with the pan-fitted scale (they differ
+    ~10-15%): it now compares with a drag measurement taken right after the zoom was set
+    (`_measure_ref`).
+26. Live testing: `tools/live_round.sh SECONDS` (traced hunt on the running panel + analysis,
+    incl. FARM SPOTS: every badge seen vs checks). Rounds 4-6 on 2026-11-14 morning: every
+    farm checked once, 0 fake armies, 0 false moves.
 
 Live result after 12-18 (7 min, his 4 farms out): every farm tracked the whole run (~250
 sightings each), 0 false alerts, 7-8 owner checks all answered first time, sweep ~40-80 s,

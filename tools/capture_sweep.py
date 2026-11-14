@@ -22,6 +22,8 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     cfg = yaml.safe_load(open("setup.yaml", encoding="utf-8"))
     args = sys.argv[2:]
+    if "--at" in args:
+        args = args[:args.index("--at")]
     n = 5
     if "--spots" in args:
         i = args.index("--spots")
@@ -34,9 +36,18 @@ def main():
         print("reanchor:", g.reanchor())
         axes = cfg["patrol"]["axes"]
         pts = sweep_points((x, y), 12, axes, g.frame().shape)[:n]
+        if "--at" in sys.argv:                       # exact spots: --at x,y x,y ...
+            pts = [tuple(int(v) for v in q.split(",")) for q in sys.argv[sys.argv.index("--at") + 1:]]
         for i, (px, py) in enumerate(pts):
             g.pan_to(px, py, axes)
             f = g.fresh_frame(0.8)
+            import time as _t
+            end = _t.time() + 2.5                      # wait for the icons, as the hunt does
+            while not screen.icons_drawn(f) and _t.time() < end:
+                _t.sleep(0.1)
+                f = g.frame()
+            _t.sleep(0.2)
+            f = g.frame()
             cam = screen.camera_coords(f)
             found = [(k, [int(d[0]), int(d[1])]) for d, k in screen.find_map_icons(f)]
             badges = [[int(b[0]), int(b[1])] for b in screen.find_gather_badges(f)]

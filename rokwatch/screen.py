@@ -1186,7 +1186,31 @@ def find_map_icons(frame: np.ndarray):
         # a level plate under it: a resource point, city or barbarian (NPC), not a march
         tags = level_tags(frame, hud=False)
         found = [(c, k) for c, k in found if not has_level_tag_below(frame, c, tags)]
+    if found:
+        # at night a resource icon's plate touches the icon (one blob) and the plain plate
+        # test misses it - the white stone-deposit icon came out as an "army" and was zoomed in
+        # on 3x. The night-capable marks: a resource icon's plate sits 0.021-0.026 H under it
+        # (17/17 measured); a real army's only mark is its own symbol's bottom, 0.010-0.013 H.
+        marks = level_marks(frame)
+        found = [(c, k) for c, k in found
+                 if not any(abs(mx - c[0]) <= 0.010 * frame.shape[0]
+                            and 0.016 * frame.shape[0] <= my - c[1] <= 0.034 * frame.shape[0]
+                            for mx, my in marks)]
+        # mostly red: a barbarian's axe / fort (measured 0.49-0.65 red; player armies and
+        # scouts are grey-lavender: 0.00). Live, one came out as an "army" and was zoomed in on
+        # 5 times. Red hostile armies are their own kind ('hostile'), not touched here.
+        found = [(c, k) for c, k in found if k not in ("army", "scout") or _red_share(frame, c) < 0.25]
     return found
+
+
+def _red_share(frame, c, r=0.012):
+    H = frame.shape[0]
+    k, x, y = int(r * H), int(c[0]), int(c[1])
+    part = frame[max(0, y - k):y + k, max(0, x - k):x + k]
+    if part.size == 0:
+        return 0.0
+    hsv = cv2.cvtColor(part, cv2.COLOR_BGR2HSV)
+    return float((((hsv[..., 0] < 8) | (hsv[..., 0] > 170)) & (hsv[..., 1] > 120) & (hsv[..., 2] > 90)).mean())
 
 
 def _diamond_not_round(comp) -> bool:

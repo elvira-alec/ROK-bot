@@ -125,6 +125,35 @@ def main(argv=None):
     for r in cr:
         print(f"  close_read t={r['t']:.1f} {r.get('item')} moving={r.get('moving')} clusters={r.get('clusters')}")
 
+    # ---- farm coverage: every resource point with a badge seen vs what was checked
+    looks = [r for r in rows if r["kind"] == "look" and r.get("camera")]
+    spots = []
+    axes = None
+    try:
+        import yaml
+        axes = (yaml.safe_load(open(a.setup, encoding="utf-8")) or {}).get("patrol", {}).get("axes")
+    except Exception:
+        pass
+    if axes:
+        A = np.array(axes, float)
+        for r in looks:
+            cam = np.array(r["camera"][1:3], float)
+            for x in r.get("found", []):
+                if x["kind"] != "farm":
+                    continue
+                d = np.array(x["px"], float) - (926, 521)
+                t = cam + A @ d
+                if not any(math.dist(t, q) <= 2.5 for q in spots):
+                    spots.append(tuple(t))
+        checked = [tuple(r["tile"]) for r in owners if r.get("item") == "farm"]
+        print(f"\nFARM SPOTS SEEN (approx, saved scale): {len(spots)}")
+        for q in spots:
+            near = [c for c in checked if math.dist(c, q) <= 3.5]
+            box = [r for r in owners if r.get("item") == "farm" and math.dist(tuple(r["tile"]), q) <= 3.5]
+            xys = sorted({str(re.search(r"X:?(\d+)\s*Y:?(\d+)", " ".join(map(str, b.get("read") or []))).groups())
+                          for b in box if re.search(r"X:?(\d+)\s*Y:?(\d+)", " ".join(map(str, b.get("read") or [])))})
+            print(f"  ~{q[0]:.0f},{q[1]:.0f}: checked {len(near)}x  boxes {xys}  owners {[b.get('owner') for b in box]}")
+
     # ---- warnings
     pat = re.compile(r"couldn't|didn't|not that one|vanished|tapped|off \(|unclear|problem|lost track", re.I)
     warns = [r for r in rows if r["kind"] == "log" and pat.search(str(r.get("msg", "")))]

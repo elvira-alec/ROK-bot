@@ -99,3 +99,49 @@ def test_resource_icon_under_his_gathering_badge_is_not_an_army(monkeypatch):
     assert ("army", (1400, 300)) in kinds              # a real one elsewhere stays
     assert not [k for k, p in kinds if k in ("army", "scout") and abs(p[0] - 920) < 5]
     assert [k for k, _ in kinds].count("farm") == 1
+
+
+def test_barbarian_axes_are_not_armies_but_real_ones_are():
+    """Live 2026-11-14: a red barbarian axe ('21') came out as an army and was zoomed in on 5
+    times. Measured red share: barbarians 0.49-0.65, real armies / scouts 0.00."""
+    K = 1852 / 1200
+    for fn, pts in {"his_armies_near_night.png": [(1523, 552), (1070, 743)],
+                    "march_simple_view.png": [(1538, 621)], "my_armies_simple.png": [(933, 991)]}.items():
+        im = cv2.imread(str(DIR / fn))
+        assert all(screen._red_share(im, p) < 0.25 for p in pts), fn
+    im = cv2.imread(str(DIR / "night" / "spot00_162_374.png"))
+    for x, y in [(651, 122), (692, 84), (731, 212)]:          # barbarian axes on that frame
+        assert screen._red_share(im, (x * K, y * K)) >= 0.25
+
+
+def test_army_seen_on_one_picture_only_is_not_a_sighting(monkeypatch, tmp_path):
+    """Live round 5 (night): a half-drawn stone-deposit icon passed for an army on one picture
+    and was zoomed in on 3 times. A stationary army must still be there a moment later."""
+    import numpy as np
+    from rokwatch.hunter import Hunter
+
+    class G:
+        _cam = (179, 376)
+        zoom_cfg = {}
+
+        def fresh_frame(self, *a):
+            return np.zeros((1042, 1852, 3), np.uint8)
+        frame = fresh_frame
+
+        def read_camera(self, f):
+            return (4183, 179, 376)
+
+        def check_stop(self):
+            pass
+    h = Hunter(G(), {"hunt": {"player_name": "x", "city": [162, 374]},
+                     "patrol": {"axes": [[0.0076, 0], [0, -0.0106]]}}, [], str(tmp_path / "h.csv"))
+    monkeypatch.setattr(screen, "icons_drawn", lambda f: True)
+    monkeypatch.setattr(screen, "modal_dialog", lambda f: False)
+    monkeypatch.setattr(Hunter, "detect", staticmethod(lambda f: [((836, 750), "army", None),
+                                                                  ((1300, 300), "army", None)]))
+    monkeypatch.setattr(screen, "find_map_icons", lambda f: [((1302, 301), "army")])  # 2nd picture
+    import time as _t
+    monkeypatch.setattr(_t, "sleep", lambda s: None)
+    _view, seen = h.look_spot()
+    assert len(seen) == 1                                     # the one still there
+    assert abs(seen[0].tile[0] - (179 + 0.0076 * (1300 - 926))) < 0.5
