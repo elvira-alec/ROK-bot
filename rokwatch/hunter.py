@@ -390,7 +390,7 @@ class Tracker:
             gone = []
             for a in unmatched:
                 if looked_at(a):
-                    if not a.moving and now - (a.missed_at or 0) < 2.0:
+                    if not a.moving and now - (a.missed_at or 0) < 1.0:
                         current.append(a)    # looked again a moment later: same evidence
                         continue
                     a.missed += 1

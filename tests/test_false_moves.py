@@ -169,7 +169,7 @@ def test_two_looks_a_moment_apart_are_one_miss():
     f.owner = "him"
     everywhere = [lambda p: True]
     tr.match([], t + 10.0, covered=everywhere)
-    tr.match([], t + 11.5, covered=everywhere)
+    tr.match([], t + 10.7, covered=everywhere)
     assert not tr.gone and tr.armies and tr.armies[0].id == f.id
     tr.match([], t + 20.0, covered=everywhere)      # a real second look, later: now it's gone
     assert [g.id for g in tr.gone] == [f.id]
