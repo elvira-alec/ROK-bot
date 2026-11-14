@@ -791,7 +791,8 @@ class Hunter:
             n = float(np.hypot(*v))
             if n < 1:
                 return False
-            side = abs(float(np.cross(v, np.subtract(d, ln.p1)))) / n
+            w = np.subtract(d, ln.p1).astype(float)
+            side = abs(float(v[0] * w[1] - v[1] * w[0])) / n      # (np.cross: 3-D only in NumPy 2)
             end = min(math.dist(d, ln.p1), math.dist(d, ln.p2))
             return side < 0.025 * H and end < 0.12 * H
 
