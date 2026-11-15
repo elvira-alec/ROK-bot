@@ -1041,3 +1041,10 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
     - guard mode: the storage zoom (and help-bubble check) happens at the base look each round.
     - test_hunter::test_zoomed_out_ignores_other_players_marching failed twice only inside the
       22-min full run (PC under load), passes alone and within its file: timing-sensitive.
+46. **v1.42: guard threat = direction + closest approach (user).** The game draws the whole
+    route with the army somewhere on it, so direction comes from two looks (`_marches`, keyed
+    by the route's rounded ends; guard rounds ~10 s apart). Alert when the path from here on
+    passes within GUARD_PASS (3 tiles) of the troop/base ('close'), or the route ends at it and
+    the army is heading that way ('aimed'). Not: parallel / wide marches, an army leaving your
+    spot, a line the army isn't on (within 1.5 tiles: someone else's line crossing nearby),
+    scouts, caravans. A red diamond on a line ending at you alerts at once.

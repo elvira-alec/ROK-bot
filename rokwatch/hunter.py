@@ -40,6 +40,15 @@ def _strip_numbers(texts):
     return [t for t in texts or [] if len(re.sub(r"[^A-Za-z]", "", str(t))) >= 3]
 
 
+def _seg_dist(p, a, b):
+    """Distance from point p to the segment a-b (map tiles)."""
+    ax, ay = a
+    vx, vy = b[0] - ax, b[1] - ay
+    L2 = vx * vx + vy * vy
+    t = max(0.0, min(1.0, ((p[0] - ax) * vx + (p[1] - ay) * vy) / L2)) if L2 else 0.0
+    return math.dist(p, (ax + t * vx, ay + t * vy))
+
+
 def to_screen(camera, axes, tile, frame_shape):
     """Screen point of a map tile (the inverse of to_tile), or None."""
     h, w = frame_shape[:2]
@@ -1622,20 +1631,54 @@ class Hunter:
 
     GUARD_REACH = 2.5          # a march line ending this close to your troop is going for it
 
+    GUARD_PASS = 3.0           # an army whose path passes this close to your troop / base
+
     def _coming_at(self, s, pos):
-        """'aimed' when this sighting is marching at your troop at pos, 'hostile' for a
-        red diamond (the game marks armies marching against you red), else None.
-        Your own and your alliance's marches (green lines) never get here."""
-        # scouts never alert from here: scouting alerts only come from the game's red eye /
-        # red border (the user's rule - a 'scout marching at your troop' alert broke it)
+        """'aimed' / 'close' when this army is heading for your troop / base or its path will
+        pass close by it ('hostile' for a red one), else None. (The user, 2026-11-15: "see in
+        what direction it's moving and whether it's going to get close" - not just "a line ends
+        near you": parallel marches, ones passing wide, scouts, caravans don't count.)
+
+        The game draws the whole route (start to destination) with the army somewhere on it,
+        so one picture can't say which way it's going: the direction comes from where the same
+        march was at the previous look (guard rounds are ~10 s apart). Then: its path from here
+        on comes within GUARD_PASS of your spot -> 'close'. A line ending at your spot -> 'aimed'
+        at once, unless the movement shows it's going away from you. The army must actually be
+        on its line (a line merely passing near it is someone else's)."""
         if s.kind not in ("army", "hostile") or not s.moving or not s.ends:
-            return None                            # (a red diamond alone, off a line: no - one
-                                                   # 6 tiles off raised a false alarm)
+            return None
         if math.dist(s.tile, pos) <= 1.0:
             return None                            # already there: arriving gatherer / fighting
-        if any(math.dist(e, pos) <= self.GUARD_REACH for e in s.ends):
+        e1, e2 = s.ends
+        if _seg_dist(s.tile, e1, e2) > 1.5:
+            return None                            # not on "its" line: a stray line
+        now = time.time()
+        key = tuple(sorted(((round(e1[0]), round(e1[1])), (round(e2[0]), round(e2[1])))))
+        marches = self.__dict__.setdefault("_marches", {})
+        prev = marches.get(key)
+        if not prev or now - prev[1] > 0.5:        # (several spots checked on one picture)
+            marches[key] = (tuple(s.tile), now, prev[0] if prev and now - prev[1] < 90 else None)
+        for k in [k for k, v in marches.items() if now - v[1] > 300]:
+            del marches[k]
+        before = marches[key][2]
+        dest = None
+        if before is not None and math.dist(before, s.tile) >= 0.5:
+            vx, vy = s.tile[0] - before[0], s.tile[1] - before[1]
+            dest = max((e1, e2), key=lambda e: (e[0] - s.tile[0]) * vx + (e[1] - s.tile[1]) * vy)
+        end_here = min((e1, e2), key=lambda e: math.dist(e, pos))
+        if math.dist(end_here, pos) <= self.GUARD_REACH:
+            if dest is not None and dest is not end_here:
+                return None                        # it's leaving your spot, not coming
+            if dest is None and s.kind != "hostile":
+                return None                        # wait for the next look (~10 s): it may be
+                                                   # leaving after a visit. Red = the game says
+                                                   # it's against you: at once.
             return "hostile" if s.kind == "hostile" else "aimed"
-        return None
+        if dest is None:
+            return None                            # direction not known yet: next look
+        if _seg_dist(pos, s.tile, dest) > self.GUARD_PASS:
+            return None                            # passes wide / already past
+        return "hostile" if s.kind == "hostile" else "close"
 
     def guard_my_troops(self, stop=None) -> list[Alert]:
         """One look at each of your gathering troops at the searching zoom (no zooming in):
@@ -1716,7 +1759,7 @@ class Hunter:
                        for a in self.tracker.armies))
             who = "HIS ARMY" if his else ("A SCOUT" if s.kind == "scout" else "AN ARMY")
             d = math.dist(s.tile, pos)
-            what = "is marching against" if how == "hostile" else "is marching at"
+            what = {"hostile": "is marching against", "close": "will pass close to"}.get(how, "is marching at")
             title = f"{who} {what.upper()} {label}"
             where = label.lower()
             msg = (f"At {s.tile[0]:.0f},{s.tile[1]:.0f}, about {d:.0f} tiles from {where} "

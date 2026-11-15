@@ -59,12 +59,22 @@ def _hunter(looks, recall=False):
     return h, g
 
 
+
+def _prime(h, ends, before):
+    """The march was seen at `before` at the previous look (~10 s ago): its direction is
+    known (one picture can't tell which end of the route it's heading to)."""
+    import time as _t
+    key = tuple(sorted(((round(ends[0][0]), round(ends[0][1])), (round(ends[1][0]), round(ends[1][1])))))
+    h.__dict__.setdefault("_marches", {})[key] = (tuple(before), _t.time() - 10, None)
+
+
 def seen(tile, ends=None, kind="army"):
     return ArmySeen(tile, ends is not None, ends, time.time(), kind=kind)
 
 
 def test_army_marching_at_a_gathering_troop_alerts():
     h, g = _hunter({(200, 410): [seen((206, 404), ((212, 398), (200.8, 410.6)))]})
+    _prime(h, ((212, 398), (200.8, 410.6)), (208, 402))
     al = h.guard_my_troops()
     assert g.panned == [(200, 410), (220, 430)]          # gathering ones only, not the marching one
     assert len(al) == 1 and al[0].urgent and "YOUR TROOP 1" in al[0].title and "HIS" not in al[0].title
@@ -72,6 +82,7 @@ def test_army_marching_at_a_gathering_troop_alerts():
 
 def test_known_his_when_the_line_comes_from_his_city():
     h, _ = _hunter({(220, 430): [seen((200, 410), ((163, 375), (219, 429)))]})
+    _prime(h, ((163, 375), (219, 429)), (196, 406))
     al = h.guard_my_troops()
     assert len(al) == 1 and al[0].title.startswith("HIS ARMY") and "TROOP 3" in al[0].title
 
@@ -101,6 +112,7 @@ def test_scouts_never_alert_from_the_guard():
 def test_auto_recall_that_troop_once():
     import types
     h, g = _hunter({(200, 410): [seen((206, 404), ((212, 398), (200, 411)))]}, recall=True)
+    _prime(h, ((212, 398), (200, 411)), (208, 402))
     g.troops = lambda: (3, 4, [types.SimpleNamespace(index=i, state="gathering") for i in range(3)])
     g.recall = lambda slot: True
     al = h.guard_my_troops()
@@ -167,6 +179,7 @@ def _guard_hunter(looks):
 
 def test_guard_mode_needs_no_target_and_watches_the_city():
     h, g = _guard_hunter({(210, 422): [seen((216, 416), ((222, 410), (210.5, 421.5)))]})
+    _prime(h, ((222, 410), (210.5, 421.5)), (218, 414))
     assert h.ready() == [] and h.city == (210, 422) and h.guard_every == 1
     h.mode = "guard"
     al = h.guard_my_troops()
@@ -312,9 +325,46 @@ def test_recall_goes_to_the_threatened_troop():
     # nothing; now the threatened troop itself is selected and recalled
     import types
     h, g = _hunter({(200, 410): [seen((206, 404), ((212, 398), (200.8, 410.6)))]}, recall=True)
+    _prime(h, ((212, 398), (200.8, 410.6)), (208, 402))
     recalled = []
     slots = [types.SimpleNamespace(index=i, state="gathering") for i in range(3)]
     g.troops = lambda: (3, 4, slots)
     g.recall = lambda slot: recalled.append(slot.index) or True
     al = h.guard_my_troops()
     assert recalled == [0] and any(a.title == "Auto-recall" for a in al)
+
+
+def _two_looks(h, monkeypatch, first, second, pos):
+    """_coming_at on two looks ~10 s apart (the direction comes from the movement)."""
+    from rokwatch import hunter as hm
+    t = [1000.0]
+    monkeypatch.setattr(hm.time, "time", lambda: t[0])
+    r1 = h._coming_at(first, pos)
+    t[0] += 10
+    return r1, h._coming_at(second, pos)
+
+
+def test_march_passing_close_alerts_after_its_direction_is_known(monkeypatch):
+    # 'see in what direction it's moving and whether it's going to get close' (user)
+    h, _ = _hunter({})
+    ends = ((180, 400), (220, 420))                         # passes ~2 tiles from 200,412
+    r1, r2 = _two_looks(h, monkeypatch, seen((184, 402), ends), seen((188, 404), ends), (200, 412))
+    assert r1 is None and r2 == "close"
+
+
+def test_parallel_or_wide_march_does_not_alert(monkeypatch):
+    h, _ = _hunter({})
+    ends = ((180, 390), (220, 390))                         # parallel, 10 tiles off
+    assert _two_looks(h, monkeypatch, seen((184, 390), ends), seen((190, 390), ends), (200, 400)) == (None, None)
+
+
+def test_march_leaving_your_troop_does_not_alert(monkeypatch):
+    h, _ = _hunter({})
+    ends = ((200, 410), (230, 430))                         # its line starts at your troop
+    r1, r2 = _two_looks(h, monkeypatch, seen((206, 414), ends), seen((212, 418), ends), (200, 410))
+    assert r1 is None and r2 is None                        # first look waits; then: it's leaving
+
+
+def test_a_line_the_army_isnt_on_is_not_trusted():
+    h, _ = _hunter({})
+    assert h._coming_at(seen((195, 420), ((180, 400), (200, 411))), (200, 410)) is None
