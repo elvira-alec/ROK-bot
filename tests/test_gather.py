@@ -244,3 +244,55 @@ def test_caravan_is_not_an_army():
     from rokwatch import screen
     f = _cv2.imread(str(_Path(__file__).parent / "real_screens" / "caravan" / "caravan_on_canvas.png"))
     assert screen.find_map_icons(f) == []
+
+
+def test_scan_level_read_twice(monkeypatch):
+    """One picture read a level 3 wood as 2 (live 2026-11-15): a disagreement is settled by a
+    third picture; no majority -> unknown (still a candidate, never dropped)."""
+    import numpy as np
+    from rokwatch import gather as G
+    reads = iter([[{"mark": (100, 100), "kind": "wood", "level": 2, "taken": False},
+                   {"mark": (300, 300), "kind": "stone", "level": 6, "taken": False},
+                   {"mark": (500, 500), "kind": "food", "level": 4, "taken": False}],
+                  [{"mark": (101, 100), "kind": "wood", "level": 3, "taken": False},
+                   {"mark": (300, 301), "kind": "stone", "level": 6, "taken": False},
+                   {"mark": (500, 500), "kind": "food", "level": 5, "taken": False}]])
+    monkeypatch.setattr(G.screen, "find_resource_points", lambda f: next(reads))
+    monkeypatch.setattr(G.screen, "plate_level", lambda f, m: {(100, 100): 3, (500, 500): 1}[tuple(m)])
+    monkeypatch.setattr(G.time, "sleep", lambda s: None)
+
+    class Fake:
+        def frame(self):
+            return np.zeros((1024, 1821, 3), np.uint8)
+    pts = G.AutoGather._settled_points(Fake(), np.zeros((1024, 1821, 3), np.uint8))
+    assert [(p["kind"], p["level"]) for p in pts] == [("wood", 3), ("stone", 6), ("food", None)]
+
+
+def test_cut_off_none_is_free():
+    """'Gatherer: Non' (a cut-off None) is a free point, not taken (live 2026-11-15)."""
+    from rokwatch import gather as G
+    from types import SimpleNamespace as T
+    import rokwatch.screen as S
+    texts = [T(text="Level 4 Stone Deposit"), T(text="X:189 Y:399"), T(text="472,500")]
+    orig = S.read_gatherer
+    try:
+        S.read_gatherer = lambda t, n: ("Non", None)
+        p = G.read_point(texts)
+    finally:
+        S.read_gatherer = orig
+    assert p["kind"] == "stone" and p["gatherer"] is None
+
+
+def test_highest_level_first_past_radius():
+    """A level 4 just past the radius goes before a level 3 inside it (the user: "always the
+    highest ones")."""
+    import time as _t
+    from rokwatch import gather as G
+    a = G.AutoGather.__new__(G.AutoGather)
+    a.centre, a.radius = (173, 378), 10
+    a._scan = (_t.time(), [{"kind": "stone", "level": 3, "taken": False, "tile": (175, 380)},
+                           {"kind": "stone", "level": 4, "taken": False, "tile": (176, 366)}])
+    a._scan_taken, a._checked = [], set()
+    a.book = G.PointBook.__new__(G.PointBook)
+    a.book.black, a.book.points = {}, {}
+    assert [lv for _, lv in a.scan("stone")] == [4, 3]

@@ -1063,3 +1063,16 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
     points of one kind within 2.5 tiles are one point (the higher level kept) - one level 6
     stone came out as 4 and 3 "gone" checks cost 20 s each; spots within 2.5 tiles of one
     already checked are skipped.
+49. **v1.45:** the user: "don't miss a single reserve that could be worth it". All level plates
+    are white (being gathered = the pickaxe badge, not the plate). `screen.white_plates` finds
+    plates `level_marks` misses (on stone deposits the plate merges with the pale rocks) - used
+    by the scan (`find_resource_points`) and the zoomed-in check. Only the checked spot itself
+    is skipped (1.3 tiles, was 2.5; blacklist reach 1.3, was 2). Scan doubles only across
+    views, one-to-one nearest pairs (two points on one picture are two points). 8 tries per
+    resource (was 4). The 9-tap grid round a point only when no plate shows at all (5 taps).
+    Also: each scan view's levels are read on two pictures (a third settles a disagreement;
+    one picture read a level 3 wood as 2 - `_settled_points`). Candidates are highest level
+    first wherever the scan saw them (radius no longer outranks level). A box whose exact X:Y
+    was already checked this scan is a "double" (one point seen from two views lands ~3 tiles
+    apart) and isn't a try. The zoomed-in plate search reaches 0.42 H round the projection or
+    the middle (projection ~2.5 tiles off at the close zoom). "Gatherer: Non" = free.

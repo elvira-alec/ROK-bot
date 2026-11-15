@@ -753,6 +753,33 @@ def level_marks(frame: np.ndarray, hud=True) -> list:
     return out
 
 
+def white_plates(frame: np.ndarray) -> list:
+    """Level plates (white) that level_marks misses: on a stone deposit the plate merges
+    with the pale rocks (live 2026-11-15: a level 6 stone never found, the bot tapped round it
+    for 25 s). Only plates with a readable level count. (Being gathered shows as a pickaxe
+    badge, not by the plate.)"""
+    H, W = frame.shape[:2]
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    S, V = hsv[..., 1], hsv[..., 2]
+    m = ((V >= 190) & (S <= 50)).astype(np.uint8) * 255
+    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+    n, lab, st, _ = cv2.connectedComponentsWithStats(m)
+    out = []
+    for i in range(1, n):
+        x, y, w, h, a = st[i]
+        if not (0.008 * H <= h <= 0.024 * H and 0.016 * H <= w <= 0.05 * H and 1.3 <= w / h <= 3.6):
+            continue
+        if a < 0.45 * w * h:
+            continue
+        dark = (V[y:y + h, x:x + w] <= 110).mean()
+        if not 0.06 <= dark <= 0.45:
+            continue
+        c = (x + w / 2, y + h / 2)
+        if plate_level(frame, c):
+            out.append(c)
+    return out
+
+
 def icons_drawn(frame: np.ndarray) -> bool:
     """Have the map's icons been drawn yet? Right after a jump the ground shows first and
     the icons a moment later. Measured: bare map 0-1 marks, drawn 4-17 (day and night)."""
@@ -1759,7 +1786,10 @@ def find_resource_points(frame):
     """Resource points on a searching-zoom picture: [{'mark', 'kind', 'level', 'taken'}]."""
     H, W = frame.shape[:2]
     out = []
-    for mk in level_marks(frame, hud=False):
+    marks = level_marks(frame, hud=False)
+    # plates level_marks misses (on stone deposits): the user, "don't miss a single one"
+    marks += [w for w in white_plates(frame) if not any(math.dist(w, m) < 0.02 * H for m in marks)]
+    for mk in marks:
         if not (0.1 * W < mk[0] < 0.86 * W and 0.12 * H < mk[1] < 0.84 * H):
             continue
         kind = resource_kind(frame, mk)
