@@ -19,7 +19,7 @@ def game_area(gb, cfg):
     if cfg.get("game_area"):
         return cfg["game_area"]
     finder = getattr(gb, "find_game_area", None)
-    if not finder:
+    if not finder or type(gb).__name__ == "DesktopWindow":     # the whole window is the game
         return None
     try:
         area, clipped = finder()

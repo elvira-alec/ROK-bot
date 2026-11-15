@@ -66,10 +66,17 @@ def wait_for_exit(pid, timeout=40):
     return False
 
 
-def _ssl_context():
-    """Windows' certificates plus the bundled standard list (Windows can be missing a
-    root certificate it hasn't needed yet: 'unable to get issuer certificate')."""
+def _ssl_context(native=True):
+    """Windows' own certificate check first (truststore: fetches a missing intermediate like
+    the browser), else Windows' certificates plus the bundled standard list ('unable to get
+    issuer certificate' on some networks)."""
     import ssl
+    if native:
+        try:
+            import truststore
+            return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        except Exception:
+            pass
     ctx = ssl.create_default_context()
     try:
         import certifi
@@ -84,7 +91,7 @@ def download(url, dest, progress, tries=5, waits=(5, 15, 30, 60)):
     ('getaddrinfo failed' mid-update, 2026-11-14) - wait a bit and start again."""
     for attempt in range(tries):
         try:
-            return _download_once(url, dest, progress)
+            return _download_once(url, dest, progress, native=attempt % 2 == 0)
         except OSError as e:          # socket / DNS / timeout (URLError is an OSError too)
             if attempt == tries - 1:
                 raise
@@ -94,9 +101,9 @@ def download(url, dest, progress, tries=5, waits=(5, 15, 30, 60)):
             time.sleep(w)
 
 
-def _download_once(url, dest, progress):
+def _download_once(url, dest, progress, native=True):
     req = urllib.request.Request(url, headers={"User-Agent": "RoKWatcher-updater"})
-    with urllib.request.urlopen(req, timeout=60, context=_ssl_context()) as r, open(dest, "wb") as f:
+    with urllib.request.urlopen(req, timeout=60, context=_ssl_context(native)) as r, open(dest, "wb") as f:
         total = int(r.headers.get("Content-Length") or 0)
         got = 0
         while True:

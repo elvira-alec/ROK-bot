@@ -16,6 +16,7 @@ PyInstaller.__main__.run([
     "--collect-all", "playwright",              # browser control
     "--collect-binaries", "onnxruntime",
     "--collect-data", "certifi",                # certificates for the update check
+    "--hidden-import", "truststore",            # Windows' own certificate check
     "--add-data", f"rokwatch/panel.html{sep}rokwatch",
     "--add-data", f"rokwatch/version.txt{sep}rokwatch",
     "--add-data", f"rokwatch/badges{sep}rokwatch/badges",
@@ -27,7 +28,7 @@ PyInstaller.__main__.run([
 PyInstaller.__main__.run([
     "updater_app.py", "--name", "RoKWatcherUpdater", "--onefile", "--noconsole", "--noconfirm",
     "--distpath", "dist/updater", "--workpath", "build/updater",
-    "--collect-data", "certifi", "--hidden-import", "certifi",
+    "--collect-data", "certifi", "--hidden-import", "certifi", "--hidden-import", "truststore",
 ])
 out = Path("dist/RoKWatcher")
 upd = Path("dist/updater") / ("RoKWatcherUpdater.exe" if os.name == "nt" else "RoKWatcherUpdater")

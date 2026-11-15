@@ -1076,3 +1076,8 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
     was already checked this scan is a "double" (one point seen from two views lands ~3 tiles
     apart) and isn't a try. The zoomed-in plate search reaches 0.42 H round the projection or
     the middle (projection ~2.5 tiles off at the close zoom). "Gatherer: Non" = free.
+50. **v1.46:** the update check and the updater try Windows' own certificate check first
+    (`truststore`: fetches a missing intermediate like the browser; Python's check failed
+    with 'unable to get issuer certificate' on some networks), then the bundled list. The
+    "Couldn't find the game picture" warning is gone for the desktop game (the whole window is
+    the game). Measured one gather point check: jump 3 s, tap + read box 2.5 s, close 1.2 s.

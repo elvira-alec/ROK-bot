@@ -59,7 +59,27 @@ def ssl_context():
     return ctx
 
 
+def native_context():
+    """Windows' own certificate check (truststore), which fetches a missing intermediate
+    certificate the way the browser does - Python's own check failed with 'unable to get
+    issuer certificate' on some networks even with the bundled list. None if unavailable."""
+    try:
+        import ssl
+        import truststore
+        return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    except Exception:
+        return None
+
+
 def urlopen(req, timeout):
+    ctx = native_context()
+    if ctx is not None:
+        try:
+            return urllib.request.urlopen(req, timeout=timeout, context=ctx)
+        except urllib.error.HTTPError:
+            raise                                   # a real answer (404...): no retry
+        except Exception:
+            pass                                    # fall back to Python's own check
     return urllib.request.urlopen(req, timeout=timeout, context=ssl_context())
 
 
