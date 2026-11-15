@@ -1008,3 +1008,9 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
     (`guard_every = 1`; the user: "doing the rounds as constantly as possible", the camera sat on
     the last troop for a minute and looked stuck). The alliance-help bubble is also checked on
     the troop-jump pictures and on auto-gather's close-ups (it shows when zoomed in).
+42. **v1.36:** live view was blank since v1.33: `from urllib.parse import parse_qs` inside do_GET
+    (for /api/activity) made parse_qs a local of the whole function, so /live.jpg crashed
+    ("empty reply"). Removed; tests/test_panel_get.py hits both through the real server.
+    Resource icons with a gathering badge on them are read (the badge disc is blanked out
+    first), so each troop-list jump notes what the troop gathers (`my_troops[i]["kind"]`) and
+    the Resources bars show what's coming back. Faded bar part joined flush, rounded right only.

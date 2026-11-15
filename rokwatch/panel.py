@@ -488,7 +488,6 @@ def make_handler(panel: Panel, port_holder=None):
                 return
             if path == "/api/activity":
                 from . import activity
-                from urllib.parse import parse_qs
                 who = (parse_qs(urlsplit(self.path).query).get("player") or [None])[0]
                 return self._send(200, activity.data(player=who))
             if path.startswith("/live.jpg"):

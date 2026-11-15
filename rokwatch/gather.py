@@ -268,7 +268,7 @@ class AutoGather:
                 continue
             xy = (t["x"], t["y"])
             p = next((v for k, v in self.book.points.items() if math.dist(k, xy) <= 1.5), None)
-            kind = p.get("kind") if p else None
+            kind = t.get("kind") or (p.get("kind") if p else None)     # read at the troop-list jump
             left = p.get("reserves") if p else None
             if not kind:
                 q = next((q for q in scan if math.dist(q["tile"], xy) <= 1.5), None)

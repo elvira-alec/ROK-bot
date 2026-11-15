@@ -1571,6 +1571,15 @@ class Hunter:
                 self._dangers_frame(spot["frame"])
                 self._checked_at[f"troop-{slot.index + 1}"] = time.time()
             t = self.my_troops.get(slot.index) or {"index": slot.index, "history": []}
+            if spot and slot.state == "gathering" and spot.get("frame") is not None                     and screen.view_level(spot["frame"]) == "patrol":
+                # what it's gathering: the resource point under it (the jump centres it)
+                fr = spot["frame"]
+                Hh, Ww = fr.shape[:2]
+                pts = [q for q in screen.find_resource_points(fr)
+                       if math.dist(q["mark"], (Ww / 2, Hh / 2 + 0.03 * Hh)) < 0.15 * Hh]
+                if pts:
+                    q = min(pts, key=lambda q: math.dist(q["mark"], (Ww / 2, Hh / 2)))
+                    t["kind"], t["level"] = q["kind"], q["level"]
             t.update(state=slot.state, checked=now)
             if spot:
                 t.update(x=int(spot["xy"][0]), y=int(spot["xy"][1]), exact=spot["exact"])
@@ -1920,7 +1929,7 @@ class Hunter:
         """For the panel: your troops, with speed for moving ones."""
         out = []
         for t in sorted(self.my_troops.values(), key=lambda t: t["index"]):
-            r = {k: t.get(k) for k in ("index", "state", "x", "y", "exact")}
+            r = {k: t.get(k) for k in ("index", "state", "x", "y", "exact", "kind", "level")}
             r["checked"] = datetime.fromtimestamp(t["checked"]).strftime("%H:%M:%S") if t.get("checked") else None
             h = t.get("history") or []
             r["speed"] = None

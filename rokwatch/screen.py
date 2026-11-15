@@ -1623,8 +1623,24 @@ def resource_icon_mask(frame, mark):
     v, s = hsv[..., 2].astype(np.int16), hsv[..., 1]
     bg = int(np.median(v))
     white = (s < 70) & (v > max(140, bg + 45))           # day and night (dimmer, bluish)
+    # a gathering badge (round green / red / blue disc with a white pickaxe) can sit on the
+    # icon's top: blank the disc out, or its pickaxe spoils the shape (your own gathering
+    # points weren't recognised, so the panel couldn't say what your troops bring back)
+    hh = hsv[..., 0]
+    disc = (((hh >= 45) & (hh <= 85) & (s > 130) & (v > 110))
+            | (((hh < 8) | (hh > 172)) & (s > 150) & (v > 140))
+            | ((hh >= 95) & (hh <= 115) & (s > 150) & (v > 150))).astype(np.uint8) * 255
+    cs, _ = cv2.findContours(cv2.morphologyEx(disc, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8)),
+                             cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    for cnt in cs:
+        bx, by, bw, bh = cv2.boundingRect(cnt)
+        if bw >= 0.012 * H and bh >= 0.008 * H:
+            (cx, cy), r = cv2.minEnclosingCircle(cnt)
+            r = max(r, bw / 2) + 2
+            yy, xx = np.ogrid[:white.shape[0], :white.shape[1]]
+            white &= (xx - cx) ** 2 + (yy - cy) ** 2 > r * r
     red = (((hsv[..., 0] < 10) | (hsv[..., 0] > 170)) & (s > 120) & (v > 100)).mean()
-    if white.mean() < 0.04 or red > 0.02:
+    if white.mean() < 0.03 or red > 0.02:
         return None
     n, lab, st, _ = cv2.connectedComponentsWithStats(white.astype(np.uint8))
     keep = np.zeros_like(white)

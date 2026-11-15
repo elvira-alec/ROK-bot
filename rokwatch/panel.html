@@ -22,7 +22,10 @@
   .rbar svg.i { width: 20px; height: 20px; }
   .rbar .nm { font-size: 13px; color: var(--muted); }
   .rbar .tr { position: relative; height: 12px; border-radius: 6px; background: var(--panel2); overflow: hidden; }
-  .rbar .now, .rbar .inc { position: absolute; top: 0; bottom: 0; border-radius: 6px; }
+  .rbar .now, .rbar .inc { position: absolute; top: 0; bottom: 0; }
+  .rbar .now { border-radius: 6px; }
+  .rbar .now.joined { border-radius: 6px 0 0 6px; }
+  .rbar .inc { border-radius: 0 6px 6px 0; }
   .rbar .inc { opacity: .35; }
   .rbar .v { font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
   .rbar .v small { display: block; color: var(--muted); font-size: 11px; }
@@ -544,7 +547,7 @@ function drawRes(g, helped) {
       + (inc[k] ? `, about ${inc[k].toLocaleString()} on the way` : '') + `">
       <svg class="i" style="color:${C[k]}"><use href="#i-${k}"/></svg>
       <span class="nm">${k[0].toUpperCase() + k.slice(1)}</span>
-      <div class="tr"><div class="now" style="left:0;width:${w1}%;background:${C[k]}"></div>
+      <div class="tr"><div class="now${w2 > 0 ? ' joined' : ''}" style="left:0;width:${w1}%;background:${C[k]}"></div>
         <div class="inc" style="left:${w1}%;width:${w2}%;background:${C[k]}"></div></div>
       <span class="v">${fmt(g.storage[k])}${inc[k] ? `<small>+${fmt(inc[k])}</small>` : ''}</span></div>`;
   }).join('') + `<p class="hint" style="margin:6px 0 0">Bar length = what it's worth (stone x4/3, gold x3).
