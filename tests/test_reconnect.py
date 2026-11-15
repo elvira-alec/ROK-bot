@@ -123,3 +123,29 @@ def test_logged_in_on_another_device_is_never_pressed():
     assert screen.logged_in_elsewhere(f) and screen.find_reconnect_button(f) is None
     net = cv2.imread(str(d / "network_disconnected_960.jpg"))
     assert not screen.logged_in_elsewhere(net)
+
+
+def test_login_failed_while_phone_plays_is_never_pressed():
+    # live 2026-11-15: with the phone holding the account the PC game showed 'NETWORK
+    # DISCONNECTED - Login failed, please click CONFIRM to restart the game. Error Code:
+    # REGISTER_AND_LOGING'; the bot pressed CONFIRM ~30 times, fighting the phone for it.
+    import time as _t
+    from rokwatch import screen
+    f = cv2.imread(str(DIR / "disconnect" / "login_failed_phone.jpg"))
+    assert screen.logged_in_elsewhere(f)
+
+    class B:
+        clicks = []
+
+        def screenshot(self, area=None):
+            return f
+
+        def click(self, x, y):
+            self.clicks.append((x, y))
+    g = Game(B())
+    assert g.recover_connection(timeout=1) is False and g.kicked and B.clicks == []
+    # ...but right after the user pressed Resume, CONFIRM is pressed (taking the game back)
+    g2 = Game(B())
+    g2.take_over_until = _t.time() + 60
+    g2.recover_connection(timeout=0.5)
+    assert B.clicks and not getattr(g2, "kicked", False)

@@ -548,6 +548,9 @@ class Worker:
             if not self.gb:
                 return
         game = self._game()
+        # the user pressed Watch / Guard / Resume: for 3 minutes a 'Login failed / restart the
+        # game' message may be answered (taking the game back is what they asked for)
+        game.take_over_until = time.time() + 180
         if guard:
             cfg = dict(cfg)
             cfg["hunt"] = {**(cfg.get("hunt") or {}), "guard_only": True, "city": None}

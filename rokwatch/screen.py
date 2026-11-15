@@ -645,7 +645,13 @@ RECONNECT_RX = re.compile(r"network|disconnect|reconnect|connection|conexi|desco
 CONFIRM_RX = re.compile(r"^(confirm|confirmar|ok|aceptar|reconnect|reconectar|retry|reintentar)$", re.I)
 
 
-ELSEWHERE_RX = re.compile(r"another\s*device|otro\s*dispositivo|logged\s*in\s*on|sesi[oó]n\s*en", re.I)
+# 'You are already logged in on another device', and - when the phone takes the account while
+# the PC tries to log in again - 'Login failed, please click CONFIRM to restart the game. Error
+# Code: REGISTER_AND_LOGING' (seen live 2026-11-15: pressing that CONFIRM 30 times fought the
+# user's phone for the account). Both: pause, never press.
+ELSEWHERE_RX = re.compile(r"another\s*device|otro\s*dispositivo|logged\s*in\s*on|sesi[oó]n\s*en|"
+                          r"login\s*failed|register_?and_?log|restart\s*the\s*game|reiniciar\s*el\s*juego",
+                          re.I)
 
 
 def logged_in_elsewhere(frame: np.ndarray) -> bool:

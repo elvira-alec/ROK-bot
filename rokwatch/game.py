@@ -922,11 +922,13 @@ class Game:
             return True
         if not screen.modal_dialog(f):
             return False
-        if screen.logged_in_elsewhere(f):
-            # the account was opened on another device (the user's phone): the PC game
-            # closes by itself; nothing to press - the worker tells the user why
+        if screen.logged_in_elsewhere(f) and time.time() >= getattr(self, "take_over_until", 0):
+            # the account is in use on another device (the user's phone): never press anything
+            # (pressing 'Login failed ... CONFIRM' 30 times fought the phone for the account) -
+            # the watch pauses until the user presses Resume. Right after they pressed Watch /
+            # Guard / Resume (take_over_until), taking the game back is what they asked for.
             if not getattr(self, "kicked", False):
-                log.warning("The game says you're logged in on another device; it will close")
+                log.warning("The game is in use on another device; pausing (nothing is pressed)")
             self.kicked = True
             return False
         btn = screen.find_reconnect_button(f)
