@@ -1128,3 +1128,8 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
     (`_close_off`) - taps aim at the right plate, plates already checked this scan aren't
     tapped again. Dry runs (all four kinds, day and night): highest level first every time,
     no box below the scan's level sent, ~7 s per point.
+54. **v1.50:** troop badges over daytime grass: the badge column's green started at hue 40 and
+    the grass behind the troop list (37-40) merged with the badges - 3 of 4 gathering troops
+    read as "other" (and two at the same spot), so the guard watched nothing. Green from 45
+    now (badge green ~57); `tests/real_screens/troops_day_grass_4of4.png`. Guard + auto-gather
+    loop dry-run (scratchpad guard_dry.py): 4 troops read right, ~15.5 s per round.

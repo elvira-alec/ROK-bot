@@ -872,7 +872,9 @@ def _badge_column(frame, top, h):
     hsv = cv2.cvtColor(frame[y0:y1, x0:x1], cv2.COLOR_BGR2HSV)
     # each status colour on its own, so a badge doesn't merge with an orange
     # background or a gold portrait frame next to it
-    ranges = [((40, 120, 90), (80, 255, 255)),     # green: gathering / marching
+    # (green from hue 45: daytime grass behind the panel is 37-40 and merged with the badges -
+    # 3 of 4 gathering troops read as "other", 2026-11-15; the badge green is ~57)
+    ranges = [((45, 130, 90), (80, 255, 255)),     # green: gathering / marching
               ((9, 150, 120), (25, 255, 255)),     # orange: returning
               ((0, 150, 90), (8, 255, 255)),       # red: fighting / stopped
               ((170, 150, 90), (180, 255, 255)),

@@ -368,3 +368,22 @@ def test_march_leaving_your_troop_does_not_alert(monkeypatch):
 def test_a_line_the_army_isnt_on_is_not_trusted():
     h, _ = _hunter({})
     assert h._coming_at(seen((195, 420), ((180, 400), (200, 411))), (200, 410)) is None
+
+
+def test_badges_over_daytime_grass():
+    """Daytime grass behind the troop list (hue 37-40) merged with the green badges: 3 of 4
+    gathering troops read as "other" and the guard watched nothing (2026-11-15)."""
+    import cv2
+    import numpy as np
+    from pathlib import Path
+    from rokwatch import screen
+    part = cv2.imread(str(Path(__file__).parent / "real_screens" / "troops_day_grass_4of4.png"))
+    f = np.zeros((1024, 1821, 3), np.uint8)
+    f[:, 1821 - part.shape[1]:] = part
+    H, W = f.shape[:2]
+    x0 = int(0.72 * W)
+    used, total, slots = screen.troop_panel(f, screen.read_text(f, (x0, 0, W - x0, int(0.5 * H)), strip=True))
+    assert (used, total) == (4, 4)
+    assert [s.state for s in slots] == ["gathering"] * 4
+    ys = [s.badge[1] for s in slots]
+    assert all(60 < b - a < 90 for a, b in zip(ys, ys[1:]))
