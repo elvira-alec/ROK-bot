@@ -930,6 +930,38 @@ def badge_state(frame, centre, h) -> str:
     return "other"
 
 
+def troop_counter(frame: np.ndarray):
+    """The 'N/M' troop counter read on its own: found next to the blue expand button left of
+    it, white digits turned black on white and read enlarged. A Text in frame coordinates,
+    or None. (The normal read missed it with a barbarian icon behind the '4' at night, and
+    over daytime grass: "can't see your troop list", nothing sent with 3 troops free.)"""
+    H, W = frame.shape[:2]
+    x0 = int(0.8 * W)
+    hsv = cv2.cvtColor(frame[:int(0.5 * H), x0:], cv2.COLOR_BGR2HSV)
+    m = cv2.inRange(hsv, np.array((95, 150, 180), np.uint8), np.array((110, 255, 255), np.uint8))
+    n, _, st, _ = cv2.connectedComponentsWithStats(m)
+    btns = [st[i] for i in range(1, n)
+            if 0.02 * H < st[i][2] < 0.05 * H and 0.02 * H < st[i][3] < 0.05 * H
+            and 0.75 < st[i][2] / st[i][3] < 1.33 and st[i][4] > 0.6 * st[i][2] * st[i][3]]
+    for bx, by, bw, bh, _ in sorted(btns, key=lambda b: b[1]):
+        rx, ry = x0 + bx + bw, max(0, by - int(0.01 * H))
+        rw, rh = int(0.06 * H), bh + int(0.02 * H)
+        crop = frame[ry:ry + rh, rx:rx + rw]
+        if crop.size == 0:
+            continue
+        big = cv2.resize(crop, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+        c = cv2.cvtColor(big, cv2.COLOR_BGR2HSV)
+        mask = ((c[..., 2] > 200) & (c[..., 1] < 60)).astype(np.uint8) * 255
+        img = cv2.copyMakeBorder(cv2.cvtColor(255 - mask, cv2.COLOR_GRAY2BGR), 20, 20, 20, 20,
+                                 cv2.BORDER_CONSTANT, value=(255, 255, 255))
+        for t in read_text(img, (0, 0, img.shape[1], img.shape[0]), strip=True):
+            if re.fullmatch(r"(\d)[/|lI1／](\d)", t.text.replace(" ", "")):
+                tx, ty, tw, th = t.box
+                box = (rx + (tx - 20) // 3, ry + (ty - 20) // 3, max(1, tw // 3), max(1, th // 3))
+                return Text(t.text.replace(" ", ""), box, t.conf)
+    return None
+
+
 def troop_panel(frame: np.ndarray, texts: list[Text]):
     """Your armies in the column on the right (under the 'N/M' counter).
     Returns (used, total, [TroopSlot]) or None if the panel isn't visible.
@@ -941,6 +973,11 @@ def troop_panel(frame: np.ndarray, texts: list[Text]):
         if m and t.box[0] > w * 0.8 and t.box[1] < h * 0.4:
             anchor = (t, int(m.group(1)), int(m.group(2)))
             break
+    if not anchor:
+        tc = troop_counter(frame)
+        if tc is not None:
+            m = re.fullmatch(r"(\d)[/|lI1／](\d)", tc.text)
+            anchor = (tc, int(m.group(1)), int(m.group(2)))
     if not anchor:
         return _troop_panel_by_colour(frame, texts)
     t, used, total = anchor

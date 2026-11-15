@@ -377,7 +377,7 @@ def test_badges_over_daytime_grass():
     import numpy as np
     from pathlib import Path
     from rokwatch import screen
-    part = cv2.imread(str(Path(__file__).parent / "real_screens" / "troops_day_grass_4of4.png"))
+    part = cv2.imread(str(Path(__file__).parent / "real_screens" / "troop_lists" / "troops_day_grass_4of4.png"))
     f = np.zeros((1024, 1821, 3), np.uint8)
     f[:, 1821 - part.shape[1]:] = part
     H, W = f.shape[:2]
@@ -387,3 +387,19 @@ def test_badges_over_daytime_grass():
     assert [s.state for s in slots] == ["gathering"] * 4
     ys = [s.badge[1] for s in slots]
     assert all(60 < b - a < 90 for a, b in zip(ys, ys[1:]))
+
+
+def test_counter_behind_a_barbarian_at_night():
+    """'1/4' with a red barbarian icon behind the '4' at night: the counter wasn't read, "can't
+    see your troop list", nothing sent with 3 troops free (2026-11-15)."""
+    import cv2
+    import numpy as np
+    from pathlib import Path
+    from rokwatch import screen
+    part = cv2.imread(str(Path(__file__).parent / "real_screens" / "troop_lists" / "troops_night_1of4_barbarian.png"))
+    f = np.zeros((1024, 1821, 3), np.uint8)
+    f[:, 1821 - part.shape[1]:] = part
+    H, W = f.shape[:2]
+    x0 = int(0.72 * W)
+    used, total, slots = screen.troop_panel(f, screen.read_text(f, (x0, 0, W - x0, int(0.5 * H)), strip=True))
+    assert (used, total) == (1, 4) and [s.state for s in slots] == ["gathering"]

@@ -1133,3 +1133,8 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
     read as "other" (and two at the same spot), so the guard watched nothing. Green from 45
     now (badge green ~57); `tests/real_screens/troops_day_grass_4of4.png`. Guard + auto-gather
     loop dry-run (scratchpad guard_dry.py): 4 troops read right, ~15.5 s per round.
+55. **v1.51:** the troop counter ('1/4') wasn't read at night with a red barbarian icon behind
+    the '4' (and over daytime grass): "can't see your troop list" - nothing sent with 3
+    troops free. `screen.troop_counter`: found next to the blue expand button, white digits
+    binarised and read enlarged; used when the normal read misses it. Night held-out set
+    (261 plates, never trained on): 0 wrong, every real plate read via find_resource_points.
