@@ -154,7 +154,7 @@ def read_point(texts):
         gatherer = None
     full = farms.FULL.get(kind, {}).get(level)
     return {"xy": xy, "kind": kind, "level": level, "reserves": reserves, "gatherer": gatherer,
-            "full": bool(full and reserves and reserves >= full * 0.995)}
+            "full": bool(full and reserves and reserves >= full)}   # intact: exactly the table
 
 
 # ------------------------------------------------------------------ the book of points
