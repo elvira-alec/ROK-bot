@@ -2120,7 +2120,7 @@ class Hunter:
             # back after a lost connection: the game may have reset the view - put the zoom
             # right and start again from his city
             self.game.reconnected = False
-            self._progress(0, 1, "Reconnected: setting the zoom and going back to his city")
+            self._progress(0, 1, "Reconnected: setting the zoom and going back to " + ("your city" if self.guard_only else "his city"))
             if (self.game.zoom_cfg or {}).get("gap"):
                 self.game.reanchor()
             self.game.goto(int(self.city[0]), int(self.city[1]))
@@ -2137,7 +2137,7 @@ class Hunter:
             if self._rounds == 0:
                 # starting: go straight to his city (not looking around wherever the camera
                 # happened to be); the zoom check can wait for the next few minutes
-                self._progress(0, 1, "Going to his city")
+                self._progress(0, 1, "Going to your city" if self.guard_only else "Going to his city")
                 self.game.goto(int(self.city[0]), int(self.city[1]))
                 self._scale_checked = now
                 self._first_scale()
