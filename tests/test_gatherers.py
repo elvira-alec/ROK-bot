@@ -572,3 +572,21 @@ def test_my_marching_troop_speed():
     rows = h.my_troops_summary()
     assert rows[0]["speed"] == 10.0 and rows[0]["trail"]
     assert rows[1]["speed"] is None and rows[1]["trail"] == []
+
+
+def test_activity_by_player(tmp_path):
+    # 'make it by players' (user, 2026-11-15): each row says whose it is; older rows (no player
+    # column) are the old target's; guard mode (no target) logs nothing
+    import csv
+    from rokwatch import activity
+    a, w = tmp_path / "a.csv", tmp_path / "w.csv"
+    with a.open("w", newline="") as f:                       # an old file, before players
+        csv.writer(f).writerows([["time", "kind", "x", "y", "detail", "active"],
+                                 [1000, "sent_out", 1, 2, "x", 1]])
+    activity.ActivityLog(a, w, player="[ABC]Other").action("sent_out", "y", 3, 4, now=2000)
+    activity.ActivityLog(a, w, player="").action("sent_out", "z", 5, 6, now=3000)     # guard: off
+    d = activity.data(actions=a, watch=w, now=2500, days=1)
+    assert d["players"] == ["[ABC]Other", activity.LEGACY_PLAYER]
+    assert [x[2] for x in d["actions"]] == ["y"] and d["player"] == "[ABC]Other"
+    d2 = activity.data(actions=a, watch=w, now=2500, days=1, player=activity.LEGACY_PLAYER)
+    assert [x[2] for x in d2["actions"]] == ["x"]

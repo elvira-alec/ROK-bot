@@ -520,11 +520,18 @@ class Game:
             return None, "Couldn't find where the 3D view switches to the map."
 
         def tags():
-            return screen.count_level_tags(self.fresh_frame())
+            # on a settled picture, the best count over ~1 s: the numbers pop in a moment after
+            # a notch, and near the altar there are only a few - counted straight away the
+            # check "didn't match" (live, 2026-11-15)
+            n, end = screen.count_level_tags(self.fresh_frame(0.6)), time.time() + 1.0
+            while time.time() < end:
+                time.sleep(0.15)
+                n = max(n, screen.count_level_tags(self.frame()))
+            return n
         t = tags()
         moves = 0
         dirs = [(1, 0), (0, 1), (-1, 0), (0, -1), (1, 1), (-1, -1)]
-        while t < 3 and moves < max_moves:              # no resource points here: look elsewhere
+        while t < 5 and moves < max_moves:              # few resource points here: look elsewhere
             say("No resource points here to judge by; moving to find some")
             dx, dy = dirs[moves % len(dirs)]
             self.b.drag(W // 2 + int(0.25 * W * dx), H // 2 + int(0.25 * H * dy),
@@ -552,7 +559,9 @@ class Game:
         search_k = with_tags[-1]
         # check: back in to the searching zoom, the numbers must be there again
         self.steps(k - search_k)
-        if tags() < 3:
+        # back at the searching zoom: about as many numbers as were seen there must come back
+        want = max(3, int(0.5 * dict(counts).get(search_k, 3)))
+        if tags() < want:
             return None, "The check didn't match (numbers didn't come back); nothing was saved."
         gap = search_k - close_k
         if gap < 1:

@@ -415,6 +415,18 @@ class Worker:
             log.info("zoom setup: kept the previous close-zoom scale (%.5f tiles/px)", old_close)
         game.to_sweep()
         config.save_fields({"hunt.zoom": cfg, "patrol.axes": m}, self.cfg_path)
+        if not old_axes_kept:
+            # the watch started right after this reuses the scale just learned (no drags again)
+            try:
+                import json
+                from .hunter import SCALE_CACHE
+                mm = (self._cfg().get("patrol") or {}).get("axes") or np.array(m, float).tolist()
+                mm = [[float(v) for v in r] for r in mm]          # exactly as the watch will load it
+                SCALE_CACHE.write_text(json.dumps({
+                    "t": time.time(), "key": {"cal": mm, "gap": cfg.get("gap")},
+                    "axes": mm, "ref": float(np.linalg.norm(np.array(mm, float)[:, 0]))}))
+            except Exception:
+                log.debug("couldn't save the scale", exc_info=True)
         self._set("ready", "Zoom set up. " + msg + (" (Map scale kept from before: it's measured "
                                                      "again while hunting.)" if old_axes_kept else ""))
 

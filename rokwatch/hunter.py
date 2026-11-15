@@ -780,7 +780,7 @@ class Hunter:
         self.seen_text: dict = {}     # army id -> text read when we zoomed in (for checking)
         self.warning = AttackAlertDetector()
         from .activity import ActivityLog
-        self.activity = ActivityLog()
+        self.activity = ActivityLog(player=self.name)
         # after the first sweep it only follows his armies (+ his city); a new sweep only
         # when one of them goes missing away from home, or as a safety check now and then
         self.full_sweep_every = float(h.get("full_sweep_minutes", 30)) * 60
@@ -1139,6 +1139,11 @@ class Hunter:
         miss = float(np.median(np.linalg.norm(X[ok] @ A - Y[ok], axis=1)))
         fit, cal = A.T, np.array(self._axes_cal, float)
         rx, ry = fit[0, 0] / cal[0, 0], fit[1, 1] / cal[1, 1]
+        if miss <= 1.0 and ((rx < 0.78 and ry < 0.78) or (rx > 1.28 and ry > 1.28)):
+            # both ways a notch's worth off: the zoom itself slipped (the round sets it again)
+            self._zoom_drift = (rx + ry) / 2
+            self._scale_samples = []
+            return
         if miss > 1.0 or not (0.6 <= rx <= 1.6 and 0.6 <= ry <= 1.6):
             log.info("hunt: map scale from moves doesn't look right (x %.2f, y %.2f of the set-up, "
                      "miss %.1f tiles); kept", rx, ry, miss)
@@ -2252,16 +2257,17 @@ class Hunter:
                     log.info("hunt: searching zoom changed; map scale adjusted by %.2fx", f)
                     self._scale_checked = now
                     self._need_sweep = True      # positions seen at the old zoom: search again
-            # every few minutes: is the zoom still right? (measured, corrected by a notch)
-            if self.axes and now - self._scale_checked > 300:
-                self._scale_checked = now
-                # compared with the same kind of measurement taken right after the zoom was set
-                # at the start (a drag measurement and the scale fitted from pans differ by
-                # ~10-15% at the right zoom: compared with each other it re-set the zoom for nothing)
-                ss = getattr(self, "_measure_ref", None) or float(np.linalg.norm(np.array(self.axes, float)[:, 0]))
-                r = self.game.keep_scale(ss)
-                if r and not 0.94 <= r <= 1.06:
-                    log.info("hunt: zoom was off (%.2fx the searching zoom); set again from the close zoom", r)
+            # is the zoom still right? No more drags for it every 5 minutes (the user saw the map
+            # slide right and back at his base every cycle): the scale worked out from the bot's
+            # own moves (_learn_scale) says when the zoom has slipped about a notch - then it's
+            # set again from the close zoom
+            if getattr(self, "_zoom_drift", None):
+                r = self._zoom_drift
+                self._zoom_drift = None
+                log.info("hunt: the zoom slipped (map scale from moves %.2fx the set-up); set again from "
+                         "the close zoom", r)
+                self.game.reanchor()
+                self._scale_samples = []
         self._rounds += 1
         self.mode = "guard" if self.guard_only else self.plan(now)
         from .trace import TRACE

@@ -270,3 +270,18 @@ def test_map_scale_remembered_between_starts(tmp_path, monkeypatch):
     g3.measure_scale = lambda *a: drags.append(1) or 0.0085
     h3._first_scale()
     assert len(drags) == 4
+
+
+def test_zoom_slip_noticed_from_moves_not_by_dragging():
+    # no more right-and-back drags every 5 min (the user saw them at his base every cycle):
+    # the scale from the bot's own moves says when the zoom slipped about a notch
+    import numpy as np
+    h, _ = _hunter({})
+    cal = np.array(h._axes_cal, float)
+    rng = np.random.default_rng(1)
+    for f, slipped in ((0.88, False), (1.42, True)):
+        h._scale_samples, h._scale_new, h._zoom_drift = [], 0, None
+        for _ in range(20):
+            d = rng.uniform(-400, 400, 2)
+            h._learn_scale(d, -(cal * f) @ d)
+        assert bool(h._zoom_drift) is slipped, (f, h._zoom_drift)

@@ -18,6 +18,11 @@
   header h1 { font-size: 18px; margin: 0; letter-spacing: .3px; }
   .pill { padding: 3px 10px; border-radius: 99px; font-size: 12px; font-weight: 600;
           background: var(--panel2); color: var(--muted); text-transform: uppercase; }
+  .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 4px; }
+  .mode { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--panel2); }
+  .mode button { width: 100%; font-size: 16px; padding: 12px 16px; }
+  .mode .hint { margin: 8px 0 0; }
+  @media (max-width: 560px) { .modes { grid-template-columns: 1fr; } }
   .pill.patrolling { background: rgba(53,196,106,.18); color: var(--good); }
   .pill.ready { background: rgba(58,160,255,.18); color: var(--accent); }
   .pill.opening, .pill.busy, .pill.paused { background: rgba(240,180,41,.18); color: var(--warn); }
@@ -157,7 +162,7 @@
 
   <section id="his-box">
     <h2><svg class="i"><use href="#i-target"/></svg> Map</h2>
-    <p id="his-sum" class="hint" style="margin:0">Nothing found yet. Press "Watch &amp; track him".</p>
+    <p id="his-sum" class="hint" style="margin:0">Nothing seen yet. Press Watch &amp; track or Guard.</p>
     <div class="his-wrap">
       <svg id="radar" viewBox="0 0 300 300" role="img" aria-label="Map of your troops, your city and armies around them"></svg>
       <div id="his-list"></div>
@@ -171,9 +176,10 @@
     <p id="mine-sum" class="hint" style="margin:0">Not checked yet.</p>
     <div id="mine-list"></div>
     <div class="row"><button onclick="checkMine()">Check my troops now</button></div>
-    <p class="hint">It taps each of your commanders in the troop list on the right (the game jumps to it) and
-      notes where it is and what it's doing. While watching it does this every few minutes, and about every
-      45 s while one of yours is marching. His armies heading for any of them raise an alert.</p>
+    <p class="hint">It taps each of your commanders in the troop list on the right (the game jumps to it),
+      notes where it is and what it's doing, and checks for armies coming at it right there. While watching it
+      does this every few minutes (more often while one of yours is marching), and looks around each gathering
+      troop every minute or two. Any army marching at one of them raises an alert.</p>
   </section>
 
   <section id="res-box">
@@ -187,14 +193,22 @@
   </section>
 
   <section id="act-box" style="grid-column:1/-1">
-    <h2><svg class="i"><use href="#i-chart"/></svg> Activity: when is he online?</h2>
-    <p id="act-now" style="margin:0">-</p>
+    <details id="act-details" ontoggle="if (this.open) loadActivity()">
+    <summary style="cursor:pointer"><h2 style="display:inline"><svg class="i"><use href="#i-chart"/></svg> Activity by player</h2>
+      <span class="hint" style="margin:0"> when the players you've watched are online</span></summary>
+    <div class="row">
+      <label for="act-player" style="margin:0">Player</label>
+      <select id="act-player" onchange="loadActivity(this.value)" style="flex:1"></select>
+    </div>
+    <p id="act-now" style="margin:6px 0 0">-</p>
     <div class="heat" id="heat"></div>
-    <p class="hint">Each square is an hour of the week in your time (last 14 days). Darker = more of his actions
-      (armies sent out or recalled, gatherers sent, farms pulled back early, scouting or attacking you;
-      farming and armies walking home by themselves don't count). Grey = the bot wasn't watching then.</p>
+    <p class="hint">Each square is an hour of the week in your time (last 14 days). Darker = more of their
+      actions (armies sent out or recalled, gatherers sent, farms pulled back early, scouting or attacking you;
+      farming and armies walking home by themselves don't count). Grey = the bot wasn't watching them then.
+      Built up while "Watch &amp; track" runs on that player.</p>
     <ul class="insights" id="act-ins"></ul>
     <details><summary class="hint">Older report (simple patrol)</summary><pre id="report">-</pre></details>
+    </details>
   </section>
 
   <section>
@@ -221,14 +235,14 @@
       <select id="target_pick" style="flex:1" onchange="pickTarget()"></select>
       <button class="danger" id="target_forget" onclick="forgetTarget()" title="Remove this target from the list">Forget</button>
     </div>
-    <label for="player_name">His name exactly as in game (with alliance tag)</label>
+    <label for="player_name">Their name exactly as in game (with alliance tag)</label>
     <input id="player_name" placeholder="[P83L]JONH WICK">
-    <label>His city (X, Y)</label>
+    <label>Their city (X, Y)</label>
     <div class="row" style="margin-top:0">
       <input id="hunt_x" inputmode="numeric" placeholder="X" style="width:90px">
       <input id="hunt_y" inputmode="numeric" placeholder="Y" style="width:90px">
     </div>
-    <label for="hunt_radius">How far around his city to search (map tiles)</label>
+    <label for="hunt_radius">How far around their city to search (map tiles)</label>
     <input id="hunt_radius" inputmode="numeric" placeholder="25">
     <div class="row"><button class="primary" onclick="save()">Save</button></div>
   </section>
@@ -254,18 +268,28 @@
 
   <section>
     <h2><span class="step">4</span> Watch</h2>
-    <div class="row" style="margin-top:0">
-      <button class="go" id="b-hunt" onclick="post('hunt')" style="font-size:16px;padding:12px 20px"><svg class="i"><use href="#i-play"/></svg> Watch &amp; track him</button>
-      <button class="go" id="b-resume" hidden onclick="post('resume')" style="font-size:16px;padding:12px 20px"><svg class="i"><use href="#i-play"/></svg> Resume</button>
-      <button id="b-guard" onclick="post('guard')" style="font-size:16px;padding:12px 20px"><svg class="i"><use href="#i-play"/></svg> Guard my troops only</button>
-      <button class="danger" id="b-stop" onclick="post('stop')" style="font-size:16px;padding:12px 20px"><svg class="i"><use href="#i-stop"/></svg> Stop</button>
+    <div class="modes">
+      <div class="mode">
+        <button class="go" id="b-hunt" onclick="post('hunt')"><svg class="i"><use href="#i-play"/></svg> Watch &amp; track</button>
+        <p class="hint">Your target (step 2): finds their armies and farms around their city, checks each is
+          theirs, follows them, and alerts you when one heads for you, when they pull farmers back, and if their
+          city moves. Also guards your troops every couple of minutes.</p>
+      </div>
+      <div class="mode">
+        <button class="go" id="b-guard" onclick="post('guard')"><svg class="i"><use href="#i-play"/></svg> Guard</button>
+        <p class="hint">No target needed: every minute it looks around your gathering troops and your city,
+          alerts you when an army marches at them, and follows that army home to tell you whose it is
+          (saved as a target).</p>
+      </div>
     </div>
-    <p class="hint">Searches around his city for his armies (farming or marching), checks each new one is his,
-      then keeps following them. When none are out it watches his city. Alerts you when one heads for your city
-      or your troops, and when you're scouted (red eye) or attacked (red swords).
-      <b>Guard my troops only</b> needs no target: every minute it looks around your gathering troops and
-      your city, alerts you when an army marches at them, and follows that army home to tell you whose it is.</p>
-    <label class="toggle"><input type="checkbox" id="auto_recall"> Recall my troops automatically when a march heads for them <span class="hint">(clicks in the game: higher ban risk)</span></label>
+    <div class="row">
+      <button class="go" id="b-resume" hidden onclick="post('resume')"><svg class="i"><use href="#i-play"/></svg> Resume</button>
+      <button class="danger" id="b-stop" onclick="post('stop')"><svg class="i"><use href="#i-stop"/></svg> Stop</button>
+    </div>
+    <p class="hint">Both modes: alerts when you're scouted (red eye) or attacked (red swords), press the alliance
+      help button whenever it shows, and pause by themselves when you open the game on your phone (press Resume
+      when you're done: the game is started again). Auto-gather below runs inside either.</p>
+    <label class="toggle"><input type="checkbox" id="auto_recall"> Recall a troop automatically when an army marches at it <span class="hint">(always on while auto-gather is on; clicks in the game)</span></label>
     <label for="recall_scope">Which troops to recall</label>
     <select id="recall_scope">
       <option value="threatened">Only the ones at the threatened spot</option>
@@ -380,9 +404,9 @@
       <button onclick="addSite()">+ Add place</button>
       <button class="primary" onclick="save()">Save</button>
     </div>
-    <p class="hint"><b>Enemy</b> = his city (marches there get logged). <b>Mine</b> = your city and gathering spots (any march heading there alerts you).</p>
-    <p class="hint">Simple patrol only checks these places one after another. "Watch &amp; track him" finds your
-      gathering troops by itself; places marked "mine" here are protected too.</p>
+    <p class="hint"><b>Enemy</b> = a target's city (marches there get logged). <b>Mine</b> = your city and gathering spots (any march heading there alerts you).</p>
+    <p class="hint">Simple patrol only checks these places one after another (the old mode). Watch &amp; track
+      and Guard find your gathering troops by themselves; places marked "mine" here are guarded too.</p>
     <div class="row"><button id="b-start" onclick="post('start')">Start simple patrol</button></div>
   </section>
   <section class="view">
@@ -554,7 +578,7 @@ function drawArmies(ar, radar) {
   const count = k => his.filter(a => a.kind === k || a.state === k).length;
   if (!ar.length) $('his-sum').textContent = radar && !radar.city
     ? 'Guarding your troops and city: nothing coming at them.'
-    : 'None of his armies seen yet' + (radar ? ' (still looking, or all at home).' : '. Press "Watch & track him".');
+    : 'None of their armies seen yet' + (radar ? ' (still looking, or all at home).' : '. Press Watch & track or Guard.');
   else $('his-sum').innerHTML = `<b>${his.length}</b> confirmed his` + (ar.length > his.length ? `, ${ar.length - his.length} not checked yet` : '')
     + ` · ${ico('pickaxe')} ${count('gathering')} farming · ${ico('arrow')} ${his.filter(a => /march/.test(a.state)).length} marching · ${ico('back')} ${count('going home')} going home`
     + (threats.length ? ` · <span style="color:var(--bad);font-weight:700">${ico('alert')} ${threats.length} coming at you</span>` : '');
@@ -637,14 +661,20 @@ function drawRadar(ar, radar) {
   }
   svg.innerHTML = g;
 }
-async function loadActivity() {
-  let d; try { d = await (await fetch('/api/activity')).json(); } catch { return; }
+async function loadActivity(player) {
+  if (player === 'Nobody watched yet') player = '';
+  if (!$('act-details').open) return;                 // tucked away: only loaded when opened
+  const q = player ? '?player=' + encodeURIComponent(player) : '';
+  let d; try { d = await (await fetch('/api/activity' + q)).json(); } catch { return; }
+  const sel = $('act-player'), ps = d.players || [];
+  sel.innerHTML = ps.length ? ps.map(p => `<option ${p === d.player ? 'selected' : ''}>${esc(p)}</option>`).join('')
+    : '<option value="">Nobody watched yet</option>';
   drawActivity(d);
 }
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const hh = h => String(h).padStart(2, '0') + ':00';
 function drawActivity(d) {
-  const acts = (d.actions || []).filter(a => a[5] !== 0), watch = d.watch || [];   // only what he did on purpose
+  const acts = (d.actions || []).filter(a => a[5] !== 0), watch = d.watch || [];   // only what they did on purpose
   const W = Array.from({ length: 7 }, () => Array(24).fill(0)), A = Array.from({ length: 7 }, () => Array(24).fill(0));
   const F = Array.from({ length: 7 }, () => Array(24).fill(0));
   const cell = t => { const x = new Date(t * 1000); return [(x.getDay() + 6) % 7, x.getHours()]; };
@@ -668,7 +698,7 @@ function drawActivity(d) {
   $('act-now').innerHTML = last
     ? `Last active <b>${since < 1 ? 'just now' : since < 90 ? Math.round(since) + ' min ago' : Math.round(since / 60) + ' h ago'}</b> (${esc(last[2] || last[1])}). `
       + (since < 20 ? '<b style="color:var(--good)">Probably online.</b>' : since < 60 ? 'Maybe online.' : '<b>Probably offline.</b>')
-    : 'No activity recorded yet. It builds up while "Watch & track him" runs.';
+    : 'No activity recorded for this player yet. It builds up while "Watch & track" runs on them.';
   // insights: by hour of day (all days together)
   const byH = Array.from({ length: 24 }, (_, h) => {
     let w = 0, a = 0, f = 0; for (let dd = 0; dd < 7; dd++) { w += W[dd][h]; a += A[dd][h]; f += F[dd][h]; }
@@ -688,7 +718,7 @@ function drawActivity(d) {
     }
     if (best && best.n >= 3) ins.push(`Usually quiet ${hh(best.s)}–${hh((best.s + Math.min(best.n, 24)) % 24)}: likely asleep or away.`);
     const farmsAlone = seen.filter(x => x.f >= 10 && x.a === 0).map(x => x.h);
-    if (farmsAlone.length) ins.push(`His farms are out while he's inactive around ${farmsAlone.slice(0, 6).map(hh).join(', ')}: the best time to hit them.`);
+    if (farmsAlone.length) ins.push(`Their farms are out while they're inactive around ${farmsAlone.slice(0, 6).map(hh).join(', ')}: the best time to hit them.`);
   } else ins.push('Needs a few hours of watching (at different times of day) before it can show his habits.');
   // sessions: actions less than 20 min apart
   const sess = [];
@@ -901,7 +931,7 @@ async function liveLoop() {
 }
 liveLoop();
 loadSettings(); refresh(); loadPhone(); setInterval(refresh, 1500);
-loadActivity(); setInterval(() => { if (!document.hidden) loadActivity(); }, 60000);
+loadActivity(); setInterval(() => { if (!document.hidden) loadActivity(($('act-player').selectedOptions[0] || {}).text); }, 60000);
 // closing this page closes RoK Watcher (a reload doesn't: the new page checks in at once)
 addEventListener('pagehide', () => { if (!updatingTo) navigator.sendBeacon('/api/bye', '{}'); });
 setInterval(() => { if (!document.hidden && !$('phone-box').hidden && $('panel_on_phone').checked) loadPhone(); }, 15000);

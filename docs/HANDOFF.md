@@ -978,3 +978,17 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
     - panel "Resources": storage (refreshed every 10 min by a quick zoom in: the bar only shows
       at the close zoom), what stone / gold count as, the next pick and what it brings, recent
       sends, alliance helps.
+39. **v1.33 (user, 2026-11-15):**
+    - no more zoom-check drags every 5 min (the map slid right and back at the user's base every
+      cycle): `_learn_scale` flags `_zoom_drift` when the scale from the bot's own moves is a
+      notch off on both axes (<0.78x or >1.28x, normal wobble is 0.85-0.9x) -> `reanchor()`.
+      `Game.keep_scale` is no longer called by the hunt.
+    - "Set up the zoom" writes scale_cache.json, so the watch started right after it doesn't
+      measure again.
+    - zoom setup near the altar ("the check didn't match"): the level numbers are counted on a
+      settled picture (best over ~1 s), it moves to a spot with >= 5 numbers first, and the
+      final check wants half as many numbers back as were seen (not a fixed 3).
+    - activity is per player (`player` column; older rows = [P83L]JONH WICK; guard mode logs
+      nothing), panel box "Activity by player" collapsed with a player picker.
+    - panel: Watch & track and Guard side by side as equals; wording updated to "their" /
+      current behaviour.
