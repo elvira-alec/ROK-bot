@@ -230,13 +230,21 @@ def test_a_scout_alerts_but_does_not_stop_auto_gather():
     assert a.hunter._guard_alerts[0].title.startswith("A SCOUT")          # still alerted
 
 
-def test_touched_point_with_enough_left_is_used():
-    # it skipped a level 6 stone with ~295K left for a level 4 (user, 2026-11-15)
+def test_only_intact_points():
+    """Only a point whose reserves are its level's full amount is sent to (the user: "make
+    sure that it's intact... if it doesn't match, you don't do it")."""
     a = gather.AutoGather.__new__(gather.AutoGather)
-    a.load = 159_090
-    assert a.enough_left({"kind": "stone", "reserves": 295_115})
-    assert not a.enough_left({"kind": "stone", "reserves": 40_000})          # nearly mined out
-    assert not a.enough_left({"kind": "gold", "reserves": None})
+
+    class G:
+        def close_popups(self):
+            pass
+    a.game = G()
+    a.book = gather.PointBook.__new__(gather.PointBook)
+    a.book.points = {}
+    for reserves in (295_115, 944_000):
+        p = {"xy": (177, 390), "kind": "stone", "level": 6, "reserves": reserves, "gatherer": None,
+             "full": False}
+        assert a._check_and_gather(p, []) == "not full"
 
 
 def test_caravan_is_not_an_army():
@@ -296,3 +304,20 @@ def test_highest_level_first_past_radius():
     a.book = G.PointBook.__new__(G.PointBook)
     a.book.black, a.book.points = {}, {}
     assert [lv for _, lv in a.scan("stone")] == [4, 3]
+
+
+def test_fullness_slider():
+    """Panel slider 'Fullness required': 100 % = intact only (default)."""
+    p = {"kind": "stone", "level": 6, "reserves": 944_000}
+    assert not gather.full_enough(p, 100)
+    assert gather.full_enough({**p, "reserves": 945_000}, 100)
+    assert gather.full_enough({**p, "reserves": 295_115}, 30)
+    assert not gather.full_enough({**p, "reserves": 295_115}, 35)
+    assert not gather.full_enough({**p, "reserves": None}, 10)
+    a = gather.AutoGather.__new__(gather.AutoGather)
+    assert a.min_full == 100
+    gather.LIVE["min_full"] = 50
+    try:
+        assert a.min_full == 50
+    finally:
+        gather.LIVE.clear()

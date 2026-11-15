@@ -50,6 +50,7 @@ EDITABLE = {
     "gather_on": "gather.enabled",
     "gather_centre": "gather.centre",
     "gather_radius": "gather.radius",
+    "gather_min_full": "gather.min_full",
 }
 
 
@@ -228,6 +229,7 @@ class Panel:
             out["hunt_city"] = [enemy["x"], enemy["y"]] if enemy else None
         out["gather_centre"] = out["gather_centre"] or [173, 378]       # the altar
         out["gather_radius"] = out["gather_radius"] or 12
+        out["gather_min_full"] = 100 if out["gather_min_full"] is None else out["gather_min_full"]
         se = _get(cfg, "snapshots.every_minutes")
         out["snap_every"] = 10 if se is None else se
         return out
@@ -246,6 +248,13 @@ class Panel:
                         v = [int(v[0]), int(v[1])]
                     except (TypeError, ValueError, IndexError, KeyError):
                         continue
+                elif k == "gather_min_full":
+                    try:
+                        v = max(1, min(100, int(float(v))))
+                    except (TypeError, ValueError):
+                        v = 100
+                    from . import gather as _g
+                    _g.LIVE["min_full"] = v                 # takes effect at once
                 elif k == "gather_radius":
                     try:
                         v = max(3, min(40, int(float(v))))

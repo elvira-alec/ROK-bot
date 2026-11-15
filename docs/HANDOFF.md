@@ -1081,3 +1081,9 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
     with 'unable to get issuer certificate' on some networks), then the bundled list. The
     "Couldn't find the game picture" warning is gone for the desktop game (the whole window is
     the game). Measured one gather point check: jump 3 s, tap + read box 2.5 s, close 1.2 s.
+51. **v1.47:** no troop load anywhere in the send decision (the user: "you don't need to know
+    the troop amounts... make sure it's intact; if the value doesn't match the things I gave
+    you, you don't do it"). Panel slider "Fullness required" (`gather.min_full`, default 100 =
+    reserves equal the table's full amount; `gather.full_enough`; takes effect at once via
+    `gather.LIVE`). Blacklisted points stay skipped. The load isn't read on the MARCH screen
+    any more (~1 s text read per send).

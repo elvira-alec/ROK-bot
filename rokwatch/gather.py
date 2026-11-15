@@ -110,6 +110,19 @@ def find_march_button(frame):
     return int(x0 + cx), int(y0 + cy)
 
 
+# settings changed on the panel while running (same process): {'min_full': percent}
+LIVE: dict = {}
+
+
+def full_enough(p, pct=100):
+    """The point holds at least pct % of its level's full amount (the user's table in
+    farms.FULL). 100 = intact only (the user: "make sure that it's intact... if the value
+    doesn't match the things I gave you, you don't do it")."""
+    full = farms.FULL.get(p.get("kind"), {}).get(p.get("level"))
+    r = p.get("reserves")
+    return bool(full and r) and r >= full * max(1, min(100, pct)) / 100
+
+
 # ------------------------------------------------------------------ reading a point's box
 
 def read_point(texts):
@@ -208,6 +221,7 @@ class AutoGather:
         # a troop's load: read on the MARCH screen at each send and remembered (a 450K guess
         # after a restart made it skip a partly mined level 6 that would have filled a troop)
         self.load = float(self.book.load or g.get("load", 450_000))
+        self._min_full = float(g.get("min_full", 100))      # panel slider: fullness required, %
         self._at = 0.0
         self.paused_until = 0.0                         # after the watcher pulled a troop back
         self.last = ""                                  # what it did last (for the panel)
@@ -434,7 +448,7 @@ class AutoGather:
             # threw away full points next to a checked one (the user: "don't miss a single one")
             if any(math.dist(t, q) < 1.3 for q in self._scan_taken):
                 continue
-            if any(until > now and math.dist(t, xy) <= 1.3 and not self._worth_now(xy)
+            if any(until > now and math.dist(t, xy) <= 1.3
                    for xy, until in self.book.black.items()):
                 continue
             out.append((t, p["level"]))
@@ -634,7 +648,7 @@ class AutoGather:
         if p.get("gatherer"):
             g.close_popups()
             return "taken"
-        if not p.get("full") and not self.enough_left(p):
+        if not full_enough(p, self.min_full):          # 100 % = intact only (the panel slider)
             g.close_popups()
             return "not full"
         btn = next((t for t in texts if re.fullmatch(r"gather|recolectar|recoger", t.text.strip(), re.I)), None)
@@ -644,19 +658,10 @@ class AutoGather:
         g.b.click(*btn.center)
         return self._dispatch()
 
-    def _worth_now(self, xy):
-        """A point skipped as 'not full' whose reserves (as last read) do fill a troop now that
-        the real load is known - it's not skipped any more (a 450K load guess had blacklisted
-        a partly mined level 6 stone for 2 hours)."""
-        p = self.book.points.get(tuple(xy))
-        return bool(p and not p.get("gatherer") and self.enough_left(p))
 
-    def enough_left(self, p):
-        """A touched point is still worth it when what's left fills a troop (the user: the
-        point of 'untouched only' was not to go to a nearly empty one - it skipped a level 6
-        stone with ~295K left for a level 4)."""
-        need = self.load * RATIO.get(p.get("kind"), 1.0) * 1.1
-        return bool(p.get("reserves")) and p["reserves"] >= need
+    @property
+    def min_full(self):
+        return float(LIVE.get("min_full", getattr(self, "_min_full", 100)))
 
     def surveyed_fresh(self, now=None):
         """The area around the centre was surveyed recently, at least this wide."""
@@ -732,7 +737,7 @@ class AutoGather:
 
     def _dispatch(self):
         """After GATHER: 'New Troop' (send one from the city), then MARCH with what the game
-        puts in. Reads the troop's load on the way (to balance the next choice)."""
+        puts in. (No troop amounts: the user, "ship it with whatever troops it suggests".)"""
         t, _ = self._find_text(r"new\s*troop|nueva\s*tropa",
                                lambda W, H: (int(0.55 * W), 0, int(0.45 * W), int(0.45 * H)))
         if not t:
@@ -740,9 +745,6 @@ class AutoGather:
             self.game.close_popups()
             return "no troop"
         self.game.b.click(*t.center)
-        # only the troop window's bottom (MARCH and the load sit there), read once: reading the
-        # whole screen twice took ~5 s before MARCH was pressed (user, 2026-11-15)
-        bottom = lambda W, H: (int(0.38 * W), int(0.55 * H), int(0.47 * W), int(0.38 * H))   # noqa: E731
         # the orange MARCH button by its colour (a text read took 1-2 s each on this PC)
         btn, f, end = None, None, time.time() + 4.0
         while time.time() < end:
@@ -757,19 +759,6 @@ class AutoGather:
             return "failed"
         time.sleep(0.15)                                 # the game's filled in the troops
         self.game.b.click(*btn)
-        try:                                             # the load, from the picture taken
-            texts = screen.read_text(f, bottom(f.shape[1], f.shape[0]))
-            ld = next((t for t in texts if re.search(r"load|carga", t.text, re.I)), None)
-            if ld:
-                v = parse_amount(re.sub(r"(?i)load|carga|[:：]", "", ld.text)) or next(
-                    (parse_amount(u.text) for u in texts if abs(u.center[1] - ld.center[1]) < 15
-                     and u.box[0] > ld.box[0] and parse_amount(u.text)), None)
-                if v and v > 1000:
-                    self.load = float(v)
-                    self.book.load = self.load
-                    self.book.save()
-        except Exception:
-            pass
         time.sleep(0.3)
         if find_march_button(self.game.frame()):
             time.sleep(0.6)                              # (still closing?)
