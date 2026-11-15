@@ -758,7 +758,9 @@ class Hunter:
         self.guard_only = bool(h.get("guard_only"))
         self.tracker.guard_only = self.guard_only
         if self.guard_only:
-            self.guard_every = min(self.guard_every or 60, 60)
+            # continuously (the user: "doing the rounds as constantly as possible"): one pass
+            # straight after another, no waiting in between
+            self.guard_every = 1
             self.refresh_spots = min(self.refresh_spots, 300)
             if not self.city or tuple(self.city) == (0, 0):
                 self.city = tuple(my_sites[0][1]) if my_sites else (0, 0)
@@ -1557,6 +1559,8 @@ class Hunter:
                 continue                          # scouts, and commanders at home
             self.game.check_stop()
             spot = self.game.troop_spot(slot)
+            if spot and spot.get("frame") is not None:
+                self._help_alliance(spot["frame"])   # (the help bubble shows when zoomed in)
             if guard and spot and slot.state in ("gathering",) + self.MOVING_STATES \
                     and spot.get("frame") is not None                     and screen.view_level(spot["frame"]) == "patrol":
                 # the camera is on this troop now: the guard's check right here
@@ -1877,7 +1881,7 @@ class Hunter:
             return []
         self.city_moved, self.guard_only = True, True
         self.tracker.guard_only = True
-        self.guard_every = min(self.guard_every or 60, 60)
+        self.guard_every = 1
         self.tracker.armies = []
         mins = (now - self._city_missing_since) / 60
         try:
@@ -2331,6 +2335,8 @@ class Hunter:
             f = self.game.frame()
             self._dangers_frame(f)
             self._help_alliance(f)
+            left = max(0, int(self.guard_every - (time.time() - self._guard_at)))
+            self._progress(0, 1, f"Watching; next check of your troops in {left} s")
             if not (stop and stop()):
                 time.sleep(2.0)
         if self.mode == "guard":

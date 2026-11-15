@@ -1004,3 +1004,7 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
       than 0.25 s old (`Panel.live_jpeg`), polled 5x a second.
     - panel: Resources next to the map with line icons and bars (length = food-equivalent,
       faded part = what the troops out will bring back, `AutoGather.incoming`); texts cut down.
+41. **v1.35:** guard mode goes round the troops continuously - one pass straight after another
+    (`guard_every = 1`; the user: "doing the rounds as constantly as possible", the camera sat on
+    the last troop for a minute and looked stuck). The alliance-help bubble is also checked on
+    the troop-jump pictures and on auto-gather's close-ups (it shows when zoomed in).

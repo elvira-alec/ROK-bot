@@ -155,7 +155,7 @@ def _guard_hunter(looks):
 
 def test_guard_mode_needs_no_target_and_watches_the_city():
     h, g = _guard_hunter({(210, 422): [seen((216, 416), ((222, 410), (210.5, 421.5)))]})
-    assert h.ready() == [] and h.city == (210, 422) and h.guard_every == 60
+    assert h.ready() == [] and h.city == (210, 422) and h.guard_every == 1
     h.mode = "guard"
     al = h.guard_my_troops()
     assert len(al) == 1 and al[0].title == "AN ARMY IS MARCHING AT YOUR CITY"

@@ -219,6 +219,8 @@ class AutoGather:
         auto-gather stops) when something's coming; the alerts go out with the round."""
         h = self.hunter
         try:
+            if hasattr(h, "_help_alliance"):
+                h._help_alliance(frame)              # the help bubble: shows when zoomed in
             alerts = h.guard_frame(frame, cam) if cam else (h._dangers_frame(frame) or [])
         except Exception:
             log.debug("gather: watch check failed", exc_info=True)
