@@ -2319,9 +2319,11 @@ class Hunter:
             busy = True
         if self.method == "zoomed_out" and self.mode != "sweep":
             self._guard_alerts += self._check_his_city(now)
-        if (self.gather and self.method == "zoomed_out" and self.mode != "sweep" and not busy
+        if (self.gather and self.method == "zoomed_out" and self.mode != "sweep"
                 and not self.attackers and now - self.gather.storage_at > 1800):
-            self.gather.refresh_storage()          # the panel's resource numbers (every 30 min)
+            # the panel's resource numbers: at the start, then every 30 min (also while busy -
+            # guard is never idle now, and the panel sat at "Reading your storage")
+            self.gather.refresh_storage()
             busy = True
         if (self.gather and self.method == "zoomed_out" and self.mode != "sweep"
                 and not self.attackers and self.gather.due(now)):
