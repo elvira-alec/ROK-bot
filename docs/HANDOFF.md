@@ -1138,3 +1138,10 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
     troops free. `screen.troop_counter`: found next to the blue expand button, white digits
     binarised and read enlarged; used when the normal read misses it. Night held-out set
     (261 plates, never trained on): 0 wrong, every real plate read via find_resource_points.
+56. **v1.52:** all troops home = the game shows no troop list at all. Auto-gather logged "can't
+    see your troop list", sent nothing, and Guard sat in 2 s idle rounds (user, 21:44). Now
+    `screen.all_troops_home` (on the map, camera readable, not the city, no blue expand
+    button, no N/M counter, no commander badges) -> every troop free. The troop count (N/M's
+    M) is saved in gather_points.json ("troops"); unknown -> one troop now, the rest once the
+    list shows. Checked on ~700 real screens: only list-less ones count as home.
+    `tests/real_screens/troop_lists/no_list_all_home.png`, tests in test_guard_troops.py.

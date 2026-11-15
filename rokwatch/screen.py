@@ -930,6 +930,30 @@ def badge_state(frame, centre, h) -> str:
     return "other"
 
 
+def _expand_buttons(frame: np.ndarray):
+    """The blue square button left of the 'N/M' troop counter (top right): [x, y, w, h, area]
+    in the right-hand fifth of the picture."""
+    H, W = frame.shape[:2]
+    x0 = int(0.8 * W)
+    hsv = cv2.cvtColor(frame[:int(0.5 * H), x0:], cv2.COLOR_BGR2HSV)
+    m = cv2.inRange(hsv, np.array((95, 150, 180), np.uint8), np.array((110, 255, 255), np.uint8))
+    n, _, st, _ = cv2.connectedComponentsWithStats(m)
+    return [st[i] for i in range(1, n)
+            if 0.02 * H < st[i][2] < 0.05 * H and 0.02 * H < st[i][3] < 0.05 * H
+            and 0.75 < st[i][2] / st[i][3] < 1.33 and st[i][4] > 0.6 * st[i][2] * st[i][3]]
+
+
+def all_troops_home(frame: np.ndarray) -> bool:
+    """On the map with no troop list at all: the game shows the list (the 'N/M' counter, its
+    blue button, the commanders) only while a troop is out. (Live 2026-11-15: all 4 home, read
+    as "can't see your troop list" and nothing was sent.)"""
+    if camera_coords(frame) is None or city_view(frame):
+        return False                       # not plainly on the map (a menu, a box, the city)
+    if _expand_buttons(frame) or troop_counter(frame) is not None:
+        return False
+    return _troop_panel_by_colour(frame, []) is None      # (no commander badges either)
+
+
 def troop_counter(frame: np.ndarray):
     """The 'N/M' troop counter read on its own: found next to the blue expand button left of
     it, white digits turned black on white and read enlarged. A Text in frame coordinates,
@@ -937,12 +961,7 @@ def troop_counter(frame: np.ndarray):
     over daytime grass: "can't see your troop list", nothing sent with 3 troops free.)"""
     H, W = frame.shape[:2]
     x0 = int(0.8 * W)
-    hsv = cv2.cvtColor(frame[:int(0.5 * H), x0:], cv2.COLOR_BGR2HSV)
-    m = cv2.inRange(hsv, np.array((95, 150, 180), np.uint8), np.array((110, 255, 255), np.uint8))
-    n, _, st, _ = cv2.connectedComponentsWithStats(m)
-    btns = [st[i] for i in range(1, n)
-            if 0.02 * H < st[i][2] < 0.05 * H and 0.02 * H < st[i][3] < 0.05 * H
-            and 0.75 < st[i][2] / st[i][3] < 1.33 and st[i][4] > 0.6 * st[i][2] * st[i][3]]
+    btns = _expand_buttons(frame)
     for bx, by, bw, bh, _ in sorted(btns, key=lambda b: b[1]):
         rx, ry = x0 + bx + bw, max(0, by - int(0.01 * H))
         rw, rh = int(0.06 * H), bh + int(0.02 * H)

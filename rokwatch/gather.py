@@ -173,13 +173,14 @@ class PointBook:
         self.black = {tuple(map(int, k.split(","))): v for k, v in (d.get("black") or {}).items()}
         self.surveyed = d.get("surveyed") or {}
         self.load = d.get("load")                       # a troop's load, from the last send
+        self.troops = d.get("troops")                   # how many troops you can send (N/M's M)
 
     def save(self):
         try:
             self.path.write_text(json.dumps({
                 "points": {f"{x},{y}": v for (x, y), v in self.points.items()},
                 "black": {f"{x},{y}": v for (x, y), v in self.black.items()},
-                "surveyed": self.surveyed, "load": self.load}, indent=1))
+                "surveyed": self.surveyed, "load": self.load, "troops": self.troops}, indent=1))
         except OSError:
             pass
 
@@ -339,12 +340,24 @@ class AutoGather:
         done = []
         panel = self.game.troops()
         if not panel:
-            log.info("gather: can't see your troop list")
-            return done
+            # no troop list at all on the map = every troop is home (the game only shows the
+            # list while one is out; live 2026-11-15: all 4 home, "can't see your troop list",
+            # nothing sent and the guard sat idle)
+            f = self.game.frame()
+            if not screen.all_troops_home(f):
+                log.info("gather: can't see your troop list")
+                return done
+            panel = (0, None, [])
+            log.info("gather: no troop list - all your troops are home")
         used, total, slots = panel
         if total:
             self.total = total                          # remembered (the counter's read is flaky)
-        total = total or getattr(self, "total", None)
+            if self.book.troops != total:
+                self.book.troops = total
+                self.book.save()
+        total = total or getattr(self, "total", None) or self.book.troops
+        if not total and used == 0 and not slots:
+            total = 1                                   # count unknown: one now, the list says the rest
         if used is None:                                # counter unread: count the commanders
             used = sum(1 for s in slots if s.state not in ("scout",))
         if not total:

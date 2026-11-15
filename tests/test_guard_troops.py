@@ -403,3 +403,46 @@ def test_counter_behind_a_barbarian_at_night():
     x0 = int(0.72 * W)
     used, total, slots = screen.troop_panel(f, screen.read_text(f, (x0, 0, W - x0, int(0.5 * H)), strip=True))
     assert (used, total) == (1, 4) and [s.state for s in slots] == ["gathering"]
+
+
+def test_no_troop_list_means_all_home():
+    """All 4 troops home: the game shows no troop list at all. It was read as "can't see your
+    troop list", nothing was sent and Guard sat idle (2026-11-15). A list that is there (day,
+    night, or not read by its counter) never counts as all home."""
+    import cv2
+    import numpy as np
+    from pathlib import Path
+    from rokwatch import screen
+    d = Path(__file__).parent / "real_screens"
+    assert screen.all_troops_home(cv2.imread(str(d / "troop_lists" / "no_list_all_home.png")))
+    assert not screen.all_troops_home(cv2.imread(str(d / "his_armies_near_night.png")))
+    base = cv2.imread(str(d / "troop_lists" / "no_list_all_home.png"))
+    for name in ("troops_day_grass_4of4.png", "troops_night_1of4_barbarian.png"):
+        part = cv2.imread(str(d / "troop_lists" / name))
+        f = base.copy()
+        f[:, f.shape[1] - part.shape[1]:] = part
+        assert not screen.all_troops_home(f), name
+
+
+def test_gather_sends_when_all_home(tmp_path, monkeypatch):
+    """No troop list on the map: every troop is free (count remembered from the last N/M)."""
+    from rokwatch import gather, screen
+    monkeypatch.setattr(gather, "BOOK", tmp_path / "book.json")
+    monkeypatch.setattr(screen, "all_troops_home", lambda f: True)
+
+    class G:
+        def troops(self): return None
+        def frame(self): return None
+        def close_popups(self): pass
+
+    class H:
+        def zoom_close(self): return False          # stop right after counting
+        def zoom_out(self): pass
+        def _progress(self, *a): pass
+
+    a = gather.AutoGather(G(), H(), {"gather": {}})
+    a.book = gather.PointBook(tmp_path / "book.json")
+    a.book.troops = 4
+    seen = {}
+    a.hunter.zoom_close = lambda: seen.setdefault("zoomed", True) and False
+    assert a.step() == [] and seen.get("zoomed")
