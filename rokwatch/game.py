@@ -28,6 +28,11 @@ class Stopped(Exception):
     """Stop was pressed: unwind out of whatever the bot is doing."""
 
 
+class GamePaused(Exception):
+    """The game was opened on another device (the user's phone): stop everything and wait
+    for the user to press Resume - never fight them for the account."""
+
+
 @dataclass
 class View:
     frame: np.ndarray

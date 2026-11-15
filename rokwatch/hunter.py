@@ -906,8 +906,10 @@ class Hunter:
         if screen.modal_dialog(frame):
             # a game dialog over the map (lost connection): the dimmed coordinates can
             # still be read, so without this it carried on "looking" at nothing for minutes
-            from .game import View
+            from .game import View, GamePaused
             self.game.recover_connection()
+            if getattr(self.game, "kicked", False):
+                raise GamePaused()
             view = View(frame, [], None, True)
             view.icons_loaded = False
             return view, []
@@ -2114,6 +2116,9 @@ class Hunter:
         self.timing = {"move": 0.0, "look": 0.0, "check": 0.0}
         if self.game.recover_connection():
             pass                                   # (sets `reconnected`: handled just below)
+        if getattr(self.game, "kicked", False):
+            from .game import GamePaused
+            raise GamePaused()                     # the user is playing on another device
         if self._rounds == 0:
             self.game.leave_city_view(home=True)   # started while the game shows your city
         if getattr(self.game, "reconnected", False):

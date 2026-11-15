@@ -915,3 +915,19 @@ track rounds ~0.8 s. Dev tools: `tools/analyze_trace.py`, `tools/capture_sweep.p
 
 Installed app note: its setup.yaml has `close_with_page: true`, so it quits a few minutes
 after no panel page is open - it was NOT watching overnight. Worth telling the user.
+35. **Pause / resume (user, 2026-11-15): "make sure the bot doesn't override when I connect to
+    the game; it must pause and restart once I hit go again".** Opening the game on the phone
+    makes the PC game say "You are already logged in on another device" and close.
+    - `game.kicked` -> `GamePaused` (raised by the round / look_spot) -> the worker stops the
+      watch, phase "paused", one alert, and clicks NOTHING from then on.
+    - Resume (`/api/resume`, panel button shown only while paused) - or Watch / Guard -
+      starts the game: `rokwatch/restart.py` (launcher opened if needed from
+      `C:\Program Files (x86)\Rise of Kingdoms\launcher.exe` or setup `game.launcher`; its
+      orange start button found by colour, `find_start_button`; "Click to Start" tapped until
+      the X:Y readout, your city or a game dialog shows), then the usual recovery (CONFIRM,
+      leave your city) and the same mode carries on. Only for the official PC window title
+      "Rise of Kingdoms", never by itself.
+    - Live: Guard pressed with the game closed -> launcher -> game -> guarding in ~90 s.
+    - Panel: "His armies" is now "Map"; in guard mode the line under it says it's guarding.
+    - The online "tests" job had failed since v1.26 on tests/test_desktop.py (it expected the
+      old instant click): updated.

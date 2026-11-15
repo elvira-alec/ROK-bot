@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 import cv2
 
 from . import config
-from .game import Stopped
+from .game import GamePaused, Stopped
 from .notify import Notifier
 
 log = logging.getLogger("rokwatch")
@@ -513,10 +513,40 @@ class Worker:
         marching at them and follow it home."""
         return self._do_hunt(max_rounds, guard=True)
 
+    def _do_resume(self):
+        """After a pause (the user played on another device): start the game again and carry
+        on in the same mode."""
+        return self._do_hunt(guard=getattr(self, "_resume_mode", "guard") == "guard")
+
+    def _game_running(self, cfg) -> bool:
+        """The official PC game: start it (launcher, start screen) when it isn't open. Only
+        ever done because the user pressed Watch / Guard / Resume."""
+        from . import restart
+        if (cfg.get("game_window") or "").strip() != restart.GAME_TITLE or restart.game_window():
+            return True
+        self._set("busy", "Starting the game...")
+        ok = restart.start_game(cfg, stop=self.stop_patrol.is_set,
+                                say=lambda m: setattr(self.status, "doing", m))
+        if not ok:
+            self._set("ready", "Couldn't start the game. Open it yourself, then press the button again.")
+            return False
+        if self.gb:
+            try:
+                self.gb.hwnd = None                 # a new game window: find it again
+            except Exception:
+                pass
+        return True
+
     def _do_hunt(self, max_rounds=None, guard=False):
         from .commands import sites_from
         from .hunter import Hunter
         cfg = self._cfg()
+        if not self._game_running(cfg):
+            return
+        if not self.gb and cfg.get("game_window"):
+            self._do_open()                         # (connecting failed while the game was closed)
+            if not self.gb:
+                return
         game = self._game()
         if guard:
             cfg = dict(cfg)
@@ -552,7 +582,7 @@ class Worker:
         self._set("patrolling", "Guarding your troops and city" if guard else
                   f"Hunting {hunter.name} around {hunter.city[0]},{hunter.city[1]}")
         _keep_awake(True)          # the PC mustn't go to sleep while it's watching (10 min idle)
-        failing_since, told = None, False
+        failing_since, told, paused = None, False, False
         try:
             while not self.stop_patrol.is_set() and (max_rounds is None or self.status.round < max_rounds):
                 try:
@@ -570,22 +600,17 @@ class Worker:
                     failing_since, told = None, False
                 except Stopped:
                     raise
+                except GamePaused:
+                    paused = True
+                    break
                 except Exception as e:                 # one bad round mustn't stop the watching
                     log.warning("Round failed (%s); recovering and carrying on", e, exc_info=True)
                     self.status.doing = f"Recovering: {e}"[:120]
                     failing_since = failing_since or time.time()
                     gone = "Couldn't find a window" in str(e)
-                    kicked = gone and getattr(game, "kicked", False)
-                    if not told and kicked:
-                        # opened on the phone: say so at once (waiting a minute helps nobody)
-                        from .watcher import Alert
-                        told = True
-                        self._alert(notifier, Alert(
-                            "bot-stuck", "THE GAME CLOSED: YOU LOGGED IN ON ANOTHER DEVICE",
-                            "The game said 'You are already logged in on another device' (your phone) "
-                            "and closed on the PC. Nothing is being watched. When you're done on the "
-                            "phone, start the game on the PC again: the bot carries on by itself.",
-                            urgent=True, cooldown=False))
+                    if gone and getattr(game, "kicked", False):
+                        paused = True                  # closed after 'logged in on another device'
+                        break
                     if not told and time.time() - failing_since > 60:
                         # nobody may be at the PC: don't just keep retrying in silence
                         from .watcher import Alert
@@ -619,6 +644,19 @@ class Worker:
                     time.sleep(0.2)
         finally:
             _keep_awake(False)
+        if paused:
+            # The user opened the game on another device (their phone). Never fight them for
+            # the account: nothing is clicked from here until they press Resume.
+            self._resume_mode = "guard" if guard else "hunt"
+            from .watcher import Alert
+            self._alert(notifier, Alert(
+                "bot-paused", "PAUSED: YOU'RE PLAYING ON ANOTHER DEVICE",
+                "The game said 'You are already logged in on another device'. The bot has paused "
+                "and won't touch the game. When you're done, press Resume in the panel: it starts "
+                "the game on the PC again and carries on.", urgent=True, cooldown=False))
+            self._set("paused", "Paused: you're playing on another device. Press Resume when "
+                                "you're done - the bot starts the game again by itself.")
+            return
         self.stop_patrol.clear()
         his = hunter.tracker.summary()
         where = "; ".join(f"#{a['id']} at {a['x']},{a['y']} ({a['state']})" for a in his[:6])

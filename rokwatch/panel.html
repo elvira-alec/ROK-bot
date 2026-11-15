@@ -20,7 +20,7 @@
           background: var(--panel2); color: var(--muted); text-transform: uppercase; }
   .pill.patrolling { background: rgba(53,196,106,.18); color: var(--good); }
   .pill.ready { background: rgba(58,160,255,.18); color: var(--accent); }
-  .pill.opening, .pill.busy { background: rgba(240,180,41,.18); color: var(--warn); }
+  .pill.opening, .pill.busy, .pill.paused { background: rgba(240,180,41,.18); color: var(--warn); }
   .pill.error { background: rgba(239,77,90,.18); color: var(--bad); }
   #msg { color: var(--muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; padding: 18px 22px; max-width: 1300px; margin: 0 auto; }
@@ -156,10 +156,10 @@
   </section>
 
   <section id="his-box">
-    <h2><svg class="i"><use href="#i-target"/></svg> His armies</h2>
+    <h2><svg class="i"><use href="#i-target"/></svg> Map</h2>
     <p id="his-sum" class="hint" style="margin:0">Nothing found yet. Press "Watch &amp; track him".</p>
     <div class="his-wrap">
-      <svg id="radar" viewBox="0 0 300 300" role="img" aria-label="Map of his armies around his city and your spots"></svg>
+      <svg id="radar" viewBox="0 0 300 300" role="img" aria-label="Map of your troops, your city and armies around them"></svg>
       <div id="his-list"></div>
     </div>
     <p class="hint">Tap the coordinates to move the game camera there. Red = heading for (or close to) your
@@ -246,6 +246,7 @@
     <h2><span class="step">4</span> Watch</h2>
     <div class="row" style="margin-top:0">
       <button class="go" id="b-hunt" onclick="post('hunt')" style="font-size:16px;padding:12px 20px"><svg class="i"><use href="#i-play"/></svg> Watch &amp; track him</button>
+      <button class="go" id="b-resume" hidden onclick="post('resume')" style="font-size:16px;padding:12px 20px"><svg class="i"><use href="#i-play"/></svg> Resume</button>
       <button id="b-guard" onclick="post('guard')" style="font-size:16px;padding:12px 20px"><svg class="i"><use href="#i-play"/></svg> Guard my troops only</button>
       <button class="danger" id="b-stop" onclick="post('stop')" style="font-size:16px;padding:12px 20px"><svg class="i"><use href="#i-stop"/></svg> Stop</button>
     </div>
@@ -511,7 +512,9 @@ async function checkMine() {
 function drawArmies(ar, radar) {
   const his = ar.filter(a => a.his), threats = ar.filter(a => a.threat);
   const count = k => his.filter(a => a.kind === k || a.state === k).length;
-  if (!ar.length) $('his-sum').textContent = 'None of his armies seen yet' + (radar ? ' (still looking, or all at home).' : '. Press "Watch & track him".');
+  if (!ar.length) $('his-sum').textContent = radar && !radar.city
+    ? 'Guarding your troops and city: nothing coming at them.'
+    : 'None of his armies seen yet' + (radar ? ' (still looking, or all at home).' : '. Press "Watch & track him".');
   else $('his-sum').innerHTML = `<b>${his.length}</b> confirmed his` + (ar.length > his.length ? `, ${ar.length - his.length} not checked yet` : '')
     + ` · ${ico('pickaxe')} ${count('gathering')} farming · ${ico('arrow')} ${his.filter(a => /march/.test(a.state)).length} marching · ${ico('back')} ${count('going home')} going home`
     + (threats.length ? ` · <span style="color:var(--bad);font-weight:700">${ico('alert')} ${threats.length} coming at you</span>` : '');
@@ -752,6 +755,7 @@ async function refresh() {
   const running = st.phase === 'patrolling';
   $('b-start').disabled = running || st.phase === 'stopped' || st.phase === 'opening';
   $('b-hunt').disabled = $('b-guard').disabled = $('b-start').disabled;
+  $('b-resume').hidden = st.phase !== 'paused';      // after you played on another device
   $('b-stop').disabled = !running;
   facts($('progress'), [['Rounds done', st.round], ['Last place checked', st.last_site || '-']]);
   $('alerts').innerHTML = st.alerts.length ? st.alerts.map(a =>
@@ -806,7 +810,7 @@ async function loadPhone() {
     const main = document.querySelector('main');
     const find = t => [...main.children].find(sec => sec.querySelector('h2')?.textContent.includes(t));
     // top to bottom: what he's doing, then the steps 1-4 in order, then the rest
-    const order = ['Live view', 'His armies', 'Your troops', 'Connect to the game', 'Who to watch', 'Set up the zoom',
+    const order = ['Live view', 'Map', 'Your troops', 'Connect to the game', 'Who to watch', 'Set up the zoom',
                    '4 Watch', 'Recent alerts', 'Alerts to your phone', 'Activity'];
     order.slice().reverse().forEach(t => { const sec = find(t); if (sec) main.prepend(sec); });
     return;
