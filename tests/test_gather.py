@@ -213,3 +213,18 @@ def test_march_button_by_colour():
     assert abs(x - 1196) < 20 and abs(y - 780) < 20
     for n in ("queue_new_troop", "queue_full_march"):
         assert find_march_button(_cv2.resize(_cv2.imread(str(d / f"{n}.jpg")), (1821, 1024))) is None
+
+
+def test_a_scout_alerts_but_does_not_stop_auto_gather():
+    import numpy as np
+    from rokwatch.watcher import Alert
+
+    class Hn:
+        dangers, warned, _guard_alerts = set(), False, []
+
+        def guard_frame(self, frame, cam):
+            return [Alert("guard-troop-2", "A SCOUT IS MARCHING AT YOUR TROOP 2", "x", urgent=True)]
+    a = gather.AutoGather.__new__(gather.AutoGather)
+    a.hunter, a.threat = Hn(), False
+    assert a._watch(np.zeros((10, 10, 3), np.uint8), (180, 380)) is False
+    assert a.hunter._guard_alerts[0].title.startswith("A SCOUT")          # still alerted

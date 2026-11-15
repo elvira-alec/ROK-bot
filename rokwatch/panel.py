@@ -77,7 +77,9 @@ def _clean_sites(sites):
 class Panel:
     def __init__(self, cfg_path=config.DEFAULT_PATH):
         import threading
+        from .livestream import LiveStream
         self._live_lock = threading.Lock()
+        self.stream = LiveStream(lambda: self.worker.gb)
         self.cfg_path = cfg_path
         self.worker = Worker(cfg_path)
         self.memlog = MemoryLog()
@@ -183,16 +185,16 @@ class Panel:
         f = getattr(self.worker.gb, "last_frame", None) if self.worker.gb else None
         return id(f) if f is not None else None
 
-    def live_jpeg(self, width=640, quality=62):
+    def live_jpeg(self, width=640, quality=62, fresh_after=0.25):
         """Picture of the game for the live view: what the bot last saw, or - when that's more
         than a quarter of a second old (the bot waiting between checks: the stream stalled,
         'too choppy') - a fresh grab of the game window. Only while someone's watching."""
         import cv2
         gb = self.worker.gb
         f = getattr(gb, "last_frame", None) if gb else None
-        if gb is not None and getattr(gb, "hwnd", None) and time.time() - getattr(gb, "last_frame_t", 0) > 0.25:
+        if gb is not None and getattr(gb, "hwnd", None) and time.time() - getattr(gb, "last_frame_t", 0) > fresh_after:
             with self._live_lock:
-                if time.time() - getattr(gb, "last_frame_t", 0) > 0.25:
+                if time.time() - getattr(gb, "last_frame_t", 0) > fresh_after:
                     try:
                         f = gb.screenshot()
                         gb.last_frame, gb.last_frame_t = f, time.time()
@@ -490,6 +492,32 @@ def make_handler(panel: Panel, port_holder=None):
                 from . import activity
                 who = (parse_qs(urlsplit(self.path).query).get("player") or [None])[0]
                 return self._send(200, activity.data(player=who))
+            if path.startswith("/live.mjpg"):
+                # the live view as a stream (MJPEG: the page's <img> shows each picture as it
+                # comes), up to 24 a second - polling one picture at a time was choppy
+                q = parse_qs(urlsplit(self.path).query)
+                try:
+                    width = max(240, min(1280, int(q.get("w", ["640"])[0])))
+                except ValueError:
+                    width = 640
+                self.send_response(200)
+                self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                last, end = 0, time.time() + 3600
+                try:
+                    while time.time() < end:
+                        panel.stream.want(width)           # (keeps the grabber running)
+                        seq, data = panel.stream.latest(width)
+                        if data and seq != last:
+                            self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "
+                                             + str(len(data)).encode() + b"\r\n\r\n" + data + b"\r\n")
+                            self.wfile.flush()
+                            last = seq
+                        time.sleep(0.01)
+                except OSError:                    # the page closed / the view was switched off
+                    pass
+                return
             if path.startswith("/live.jpg"):
                 q = parse_qs(urlsplit(self.path).query)
                 try:

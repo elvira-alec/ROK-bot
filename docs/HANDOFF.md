@@ -1014,3 +1014,13 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
     Resource icons with a gathering badge on them are read (the badge disc is blanked out
     first), so each troop-list jump notes what the troop gathers (`my_troops[i]["kind"]`) and
     the Resources bars show what's coming back. Faded bar part joined flush, rounded right only.
+43. **v1.37-1.39:** panel text cut to a minimum (user); bars fully rounded. Storage read at the
+    start and about every minute with a quick zoom in (also while busy - continuous guard is never
+    idle; the panel sat at "Reading your storage"), the help bubble checked while zoomed in.
+    Live view is an MJPEG stream (`/live.mjpg`, `rokwatch/livestream.py`): a grabber thread runs
+    only while someone watches - plain screen grab of the window when it's in front (34 ms),
+    resize straight from BGRA (6 ms) -> measured 23.8 fps at 640 px (4.8 Mbit/s), ~19-22 at 960.
+    Guard rounds: troops, then your base (`guard_sites`; the user wants it in every round).
+    A scout near a troop alerts but doesn't stop auto-gather (only an army or the red swords).
+    Open: the user's app update check fails with SSL CERTIFICATE_VERIFY_FAILED (falls back to
+    PowerShell) - it stayed on 1.37.

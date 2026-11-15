@@ -168,7 +168,7 @@
 <main>
   <section id="live-box">
     <h2><svg class="i"><use href="#i-eye"/></svg> Live view</h2>
-    <label class="toggle"><input type="checkbox" id="live-on" checked> Show the game here (about 5 frames a second)</label>
+    <label class="toggle"><input type="checkbox" id="live-on" checked> Show the game here</label>
     <img id="live-img" alt="" hidden>
   </section>
 
@@ -885,24 +885,20 @@ function drawRoute() {
       : 'Works from anywhere (mobile data too) while Tailscale is on, on this laptop and on your phone.')
     : (o.help || '');
 }
-// live view: its own loop, ~5 pictures a second, only when the picture changed
-let liveId = null, liveHave = '', liveUrl = null;
-async function liveLoop() {
-  try {
-    if (liveId && $('live-on').checked && !document.hidden) {
-      const r = await fetch('/live.jpg?w=' + (innerWidth < 700 ? 640 : 960) + '&have=' + liveHave + '&t=' + Date.now());
-      if (r.status === 200) {
-        const b = await r.blob();
-        const u = URL.createObjectURL(b);
-        $('live-img').src = u; $('live-img').hidden = false;
-        if (liveUrl) URL.revokeObjectURL(liveUrl);
-        liveUrl = u; liveHave = r.headers.get('X-Live') || '';
-      }
-    }
-  } catch (e) {}
-  setTimeout(liveLoop, 200);
+// live view: a stream (MJPEG) from the app, up to 24 pictures a second, only while it's shown
+let liveId = null, liveOn = false;
+function liveSync() {
+  const want = !!liveId && $('live-on').checked && !document.hidden;
+  if (want && !liveOn) {
+    $('live-img').src = '/live.mjpg?w=' + (innerWidth < 700 ? 640 : 960) + '&t=' + Date.now();
+    $('live-img').hidden = false; liveOn = true;
+  } else if (!want && liveOn) {
+    $('live-img').removeAttribute('src'); liveOn = false;
+  }
 }
-liveLoop();
+$('live-img').addEventListener('error', () => { liveOn = false; setTimeout(liveSync, 2000); });
+document.addEventListener('visibilitychange', liveSync);
+setInterval(liveSync, 1000);
 loadSettings(); refresh(); loadPhone(); setInterval(refresh, 1500);
 loadActivity(); setInterval(() => { if (!document.hidden) loadActivity(($('act-player').selectedOptions[0] || {}).text); }, 60000);
 // closing this page closes RoK Watcher (a reload doesn't: the new page checks in at once)

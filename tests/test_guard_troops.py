@@ -285,3 +285,11 @@ def test_zoom_slip_noticed_from_moves_not_by_dragging():
             d = rng.uniform(-400, 400, 2)
             h._learn_scale(d, -(cal * f) @ d)
         assert bool(h._zoom_drift) is slipped, (f, h._zoom_drift)
+
+
+def test_guard_round_includes_your_base():
+    # 'is guard not checking my base anymore? It should do it as part of the rounds'
+    h, g = _guard_hunter({})
+    h.mode = "guard"
+    h.guard_sites()
+    assert g.panned == [(210, 422)]

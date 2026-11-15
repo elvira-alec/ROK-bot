@@ -1660,6 +1660,26 @@ class Hunter:
             alerts += self._guard_seen(seen, label, pos, key)
         return alerts
 
+    def guard_sites(self, stop=None) -> list[Alert]:
+        """Part of every guard round, after the troops: a look at your own places (your city):
+        anything marching at it, plus the red eye / swords on that picture."""
+        alerts = []
+        for label, pos, key in self._guard_points(sites=True):
+            if not key.startswith("site") or (stop and stop()):
+                continue
+            self._progress(0, 1, f"Looking around {label.lower()} ({pos[0]},{pos[1]})")
+            t0 = time.time()
+            ok = self.game.pan_to(*pos, self.axes)
+            self.timing["move"] += time.time() - t0
+            if not ok:
+                continue
+            view, seen = self.look_spot()
+            if not view.camera:
+                continue
+            self._checked_at[key] = time.time()
+            alerts += self._guard_seen(seen, label, pos, key)
+        return alerts
+
     def _guard_seen(self, seen, label, pos, key) -> list[Alert]:
         """The guard's check on one picture's sightings for one of your spots: an army (or a
         red diamond) marching at it -> alert, follow it, and recall the troop if that's on
@@ -2313,6 +2333,8 @@ class Hunter:
             self._spots_at = self._guard_at = now
             self._progress(0, 1, "Checking your troops")
             self.update_my_troops(guard=self.method == "zoomed_out")
+            if self.guard_only and self.method == "zoomed_out":
+                self._guard_alerts += self.guard_sites(stop)   # ...then your base (the user)
             busy = True
         if self.method == "zoomed_out" and self.attackers:
             self._guard_alerts += self.follow_attackers(stop)
@@ -2320,9 +2342,10 @@ class Hunter:
         if self.method == "zoomed_out" and self.mode != "sweep":
             self._guard_alerts += self._check_his_city(now)
         if (self.gather and self.method == "zoomed_out" and self.mode != "sweep"
-                and not self.attackers and now - self.gather.storage_at > 1800):
-            # the panel's resource numbers: at the start, then every 30 min (also while busy -
-            # guard is never idle now, and the panel sat at "Reading your storage")
+                and not self.attackers and now - self.gather.storage_at > 60):
+            # quick zoom in about once a minute, after the troop rounds: your resources for the
+            # panel, and the alliance-help bubble (it shows when zoomed in) - also while busy:
+            # guard is never idle now
             self.gather.refresh_storage()
             busy = True
         if (self.gather and self.method == "zoomed_out" and self.mode != "sweep"

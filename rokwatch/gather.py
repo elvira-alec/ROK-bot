@@ -227,8 +227,11 @@ class AutoGather:
             return False
         if alerts:
             h._guard_alerts = list(getattr(h, "_guard_alerts", []) or []) + alerts
-        danger = bool({"attacked", "scouted"} & set(getattr(h, "dangers", set()))) or getattr(h, "warned", False)
-        if alerts or danger:
+        # a scout near a troop alerts but doesn't stop auto-gather (it can't attack) - only an
+        # army does, or the red swords
+        armies = [a for a in alerts if "SCOUT" not in a.title]
+        danger = "attacked" in set(getattr(h, "dangers", set())) or getattr(h, "warned", False)
+        if armies or danger:
             if not self.threat:
                 log.warning("gather: something's coming - stopping auto-gather, the watcher takes over")
             self.threat = True
@@ -240,7 +243,10 @@ class AutoGather:
         time.sleep(0.5)
         prev = None
         for _ in range(8):
-            cur = read_storage(self.game.frame())
+            f = self.game.frame()
+            if hasattr(self.hunter, "_help_alliance"):
+                self.hunter._help_alliance(f)        # zoomed in: the help bubble shows here
+            cur = read_storage(f)
             if cur and cur == prev:
                 self.storage, self.storage_at = cur, time.time()
                 return cur
