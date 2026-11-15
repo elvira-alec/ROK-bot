@@ -1089,6 +1089,23 @@ class Game:
         self.wait()
         v = self.look()
         btn = v.find(RECALL_RX)
+        if not btn and getattr(slot, "state", "") in ("marching", "other", "returning"):
+            # a marching troop has no RECALL text: three icons under it - two blue, then a pale
+            # U-turn arrow that turns it back (live 2026-11-15). The camera follows the troop
+            # with a lag, so they're found by the blue ones, on a fresh picture or two.
+            for _ in range(3):
+                u = screen.find_uturn_icon(self.frame())
+                if u:
+                    self.b.click(*u)
+                    time.sleep(1.2)
+                    p = self.troops()
+                    s2 = next((s for s in (p[2] if p else []) if s.index == slot.index), None)
+                    if s2 and s2.state == "returning":
+                        return True
+                    self.b.click(*slot.portrait)           # select it again and retry
+                time.sleep(0.6)
+            log.warning("recall: couldn't turn back marching troop %d", slot.index + 1)
+            return False
         if not btn:
             log.warning("recall: no RECALL button after selecting troop %d", slot.index + 1)
             self.close_popups()

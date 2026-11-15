@@ -348,7 +348,10 @@ class AutoGather:
             for _ in range(free):
                 # lowest first; nothing free of it around -> the next lowest
                 sent = False
-                for kind in sorted(KINDS, key=lambda k: (b.get(k, float("inf")), KINDS.index(k))):
+                order = sorted(KINDS, key=lambda k: (b.get(k, float("inf")), KINDS.index(k)))
+                # never the most plentiful one: if the lower ones all fail, wait for the next
+                # round (it sent a level 4 food with 2.7M food in storage)
+                for kind in order[:-1]:
                     if (stop and stop()) or self.threat:
                         break
                     xy = self.send_one(kind, stop)
@@ -377,7 +380,7 @@ class AutoGather:
                 break
             tried += 1
             self.say(f"Auto-gather: checking the level {level or '?'} {kind} point near {tile[0]:.0f},{tile[1]:.0f}")
-            res, xy = self.try_estimate(tile, kind)
+            res, xy = self.try_estimate(tile, kind, level)
             if res == "sent":
                 self._scan_taken.append(tile)
                 self.sent.append({"time": time.strftime("%H:%M"), "kind": kind, "level": level,
@@ -464,7 +467,7 @@ class AutoGather:
         return found
 
     # -------------------------------------------------------------- one point from the scan
-    def try_estimate(self, tile, kind):
+    def try_estimate(self, tile, kind, level=None):
         """Zoom in where the scan put the point, tap its plate (the nearest real one on the
         close-up), check the box. ('sent' | 'taken' | 'not full' | 'gone' | 'no troop' |
         'failed', exact (x, y) or None)."""
@@ -479,7 +482,7 @@ class AutoGather:
             return "failed", None
         time.sleep(0.4)
         tried = []
-        for _ in range(4):
+        for _ in range(5):
             f = g.frame()
             H, W = f.shape[:2]
             if self._watch(f):
@@ -488,13 +491,20 @@ class AutoGather:
             if not cam:
                 return "failed", None
             q = to_screen(cam[1:3], ac, tile, f.shape)
+            # the scan's spot can be a tile or so off (live: a level 6 wood 150 px from the middle,
+            # a barbarian fort right in it - the old 0.14 H search tapped the fort, found nothing
+            # else and called the point "gone"): look up to ~1.5 tiles round, the plate with the
+            # level the scan read first, then the nearest
             plates = [m for m in screen.level_marks(f)
-                      if math.dist(m, q) < 0.14 * H and 0.1 * W < m[0] < 0.86 * W and 0.12 * H < m[1] < 0.86 * H]
+                      if math.dist(m, q) < 0.26 * H and 0.1 * W < m[0] < 0.86 * W and 0.12 * H < m[1] < 0.86 * H]
             plates = [m for m in plates
                       if not any(math.dist(to_tile(cam[1:3], ac, m, f.shape), t) < 1.0 for t in tried)]
             if not plates:
                 break
-            m = min(plates, key=lambda m: math.dist(m, q))
+            def rank(m):
+                lv = screen.plate_level(f, m) if level else None
+                return (0 if (level and lv == level) else 1, math.dist(m, q))
+            m = min(plates, key=rank)
             tried.append(to_tile(cam[1:3], ac, m, f.shape))
             for off in (0.0, 0.02):
                 texts, box = self._tap_box(m[0], m[1] - off * H)
@@ -505,6 +515,32 @@ class AutoGather:
                     return self._check_and_gather(p, texts), p.get("xy")
                 g.close_popups()                         # (the close drags the map: look again)
                 break
+        # plates can be missed on light ground (white plates on pale sand, live): tap the spot
+        # itself and the tiles round it, nearest first - each box says exactly what's there
+        done_xy = set()
+        for dx, dy in ((0, 0), (1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, 1), (1, -1), (-1, -1)):
+            f = g.frame()
+            H, W = f.shape[:2]
+            if self._watch(f):
+                return "failed", None
+            cam = g.read_camera(f)
+            if not cam:
+                return "failed", None
+            t = (round(tile[0]) + dx, round(tile[1]) + dy)
+            if t in done_xy:
+                continue
+            q = to_screen(cam[1:3], ac, t, f.shape)
+            if not (0.1 * W < q[0] < 0.86 * W and 0.12 * H < q[1] < 0.86 * H):
+                continue
+            texts, box = self._tap_box(q[0], q[1] - 0.01 * H)
+            if not texts:
+                continue
+            p = read_point(texts)
+            if p and p.get("xy"):
+                done_xy.add(tuple(p["xy"]))
+            if p and p.get("kind") == kind:
+                return self._check_and_gather(p, texts), p.get("xy")
+            g.close_popups()
         return "gone", None
 
     def _check_and_gather(self, p, texts):

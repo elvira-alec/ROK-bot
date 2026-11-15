@@ -1048,3 +1048,13 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
     the army is heading that way ('aimed'). Not: parallel / wide marches, an army leaving your
     spot, a line the army isn't on (within 1.5 tiles: someone else's line crossing nearby),
     scouts, caravans. A red diamond on a line ending at you alerts at once.
+47. **v1.43 (live 2026-11-15):** auto-gather's close-zoom check called most points "gone": the
+    scan's spot is ~1 tile off (a barbarian fort sat in the middle, the level 6 wood 150 px
+    away) and white plates on pale sand aren't found by level_marks. Now: plates within 0.26 H,
+    the one showing the scan's level first, up to 5; then taps on the tile and its 8
+    neighbours (each box says what's there). Live dry runs found the level 6 wood (179,370,
+    1,260,000) and a level 4 stone that were "gone" before. The most plentiful resource is never
+    the fallback. `Game.recall` turns a marching troop back with the pale U-turn icon under it
+    (no RECALL text for marching troops) - found by the two blue hexagons beside it
+    (`screen.find_uturn_icon`: the camera lags behind a moving troop, a fixed spot missed).
+    Live: auto-gather sent to the level 6 wood (179,370) and a level 4 stone; both recalled.

@@ -1800,3 +1800,28 @@ def find_help_bubble(frame):
         return None
     th, tw = _help_t.shape[:2]
     return int((x0 + loc[0] + tw / 2) / s), int((y0 + loc[1] + th / 2) / s)
+
+
+def find_uturn_icon(frame):
+    """A selected MARCHING troop of yours shows three hexagon icons under it: two blue ones and
+    then a pale U-turn arrow (turn it back - there's no RECALL text for a marching troop). The
+    camera follows the troop with a lag, so they move about: found by the two blue hexagons
+    side by side; the U-turn is the next one along. (x, y) or None."""
+    H, W = frame.shape[:2]
+    x0, y0 = int(0.25 * W), int(0.25 * H)
+    hsv = cv2.cvtColor(frame[y0:int(0.8 * H), x0:int(0.75 * W)], cv2.COLOR_BGR2HSV)
+    m = ((hsv[..., 0] >= 95) & (hsv[..., 0] <= 115) & (hsv[..., 1] > 120) & (hsv[..., 2] > 150)).astype(np.uint8)
+    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+    n, _, st, cent = cv2.connectedComponentsWithStats(m)
+    hexes = [(x0 + cent[i][0], y0 + cent[i][1]) for i in range(1, n)
+             if 0.016 * H <= st[i][2] <= 0.07 * H and 0.016 * H <= st[i][3] <= 0.07 * H
+             and st[i][4] >= 0.4 * st[i][2] * st[i][3]]
+    best = None
+    for a in hexes:
+        for b in hexes:
+            dx = b[0] - a[0]
+            if 0.035 * H <= dx <= 0.075 * H and abs(b[1] - a[1]) <= 0.012 * H:
+                cand = (int(b[0] + dx), int(b[1]))
+                if best is None or a[1] > best[1]:
+                    best = cand
+    return best
