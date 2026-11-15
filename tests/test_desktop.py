@@ -20,14 +20,17 @@ def window(zoom=""):
 
 
 def test_click_lands_inside_the_window():
+    # a click is: move there, a short pause, press, release (an instant click was ignored
+    # by the game, 2026-11-15)
     w = window()
     w.click(10, 20)
-    clicks = [c for c in w._pg.calls if c[0] == "click"]
-    assert clicks == [("click", (110, 70))]
+    names = [c[0] for c in w._pg.calls]
+    assert names[:3] == ["moveTo", "mouseDown", "mouseUp"]
+    assert w._pg.calls[1] == ("mouseDown", (110, 70)) and w._pg.calls[2] == ("mouseUp", (110, 70))
     w.set_area([5, 5, 100, 100])
     w.click(10, 20)
-    clicks = [c for c in w._pg.calls if c[0] == "click"]
-    assert clicks[-1] == ("click", (115, 75))
+    downs = [c for c in w._pg.calls if c[0] == "mouseDown"]
+    assert downs[-1] == ("mouseDown", (115, 75))
 
 
 def test_mouse_parks_outside_the_game_after_actions():
