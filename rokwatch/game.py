@@ -111,6 +111,9 @@ class Game:
         t_start = time.time()
         TRACE.event("goto", x=x, y=y)
         self.forget_pan()
+        # a tap while the map still glides after a drag was swallowed (the magnifier "didn't
+        # open" twice, 25 s lost): let it stop first (~0.1 s when it's already still)
+        self._settled(timeout=0.5, min_wait=0.05)
         for attempt in range(tries):
             self.check_stop()
             f = self.frame()
@@ -126,7 +129,9 @@ class Game:
             self.close_popups()
         return False
 
-    def _wait_camera(self, x, y, timeout=4.0) -> bool:
+    def _wait_camera(self, x, y, timeout=6.0) -> bool:
+        # (6 s: on the phone hotspot the jump sometimes lands after 4-5 s, and a retry
+        # then tapped the magnifier over a half-loaded map)
         end = time.time() + timeout
         time.sleep(0.05)
         while time.time() < end:
@@ -137,7 +142,7 @@ class Game:
             time.sleep(0.06)
         return False
 
-    def _bar_opened(self, timeout=1.5):
+    def _bar_opened(self, timeout=2.5):
         end = time.time() + timeout
         while time.time() < end:
             time.sleep(0.06)
@@ -148,15 +153,22 @@ class Game:
         return None, None
 
     def _quick_jump(self, f, x, y) -> bool:
-        m = screen.find_magnifier(f)
-        if not m:
-            return False
-        self.b.click(m[0], m[1])
-        f2, btn = self._bar_opened()
-        if not btn:
-            log.warning("goto: tapped the magnifier at %d,%d but the search didn't open", m[0], m[1])
-            self.close_popups()
-            return False
+        btn = screen.search_go_button(f)
+        if btn:
+            f2 = f                                  # the bar is open already (a try that didn't
+        else:                                       # take): tapping the magnifier would close it
+            m = screen.find_magnifier(f)
+            if not m:
+                return False
+            for _ in range(2):                      # a tap that doesn't take: once more
+                self.b.click(m[0], m[1])
+                f2, btn = self._bar_opened()
+                if btn:
+                    break
+            if not btn:
+                log.warning("goto: tapped the magnifier at %d,%d but the search didn't open", m[0], m[1])
+                self.close_popups()
+                return False
         H, W = f2.shape[:2]
         cache = self._bar_cache
         if not (cache and abs(cache[2][0] * W - btn[0]) < 0.02 * H
@@ -173,10 +185,61 @@ class Game:
             self._bar_cache = cache = tuple((p[0] / W, p[1] / H) for p in
                                             (bar.x_field, bar.y_field, bar.button))
         xf, yf, go = ((int(p[0] * W), int(p[1] * H)) for p in cache)
-        self._type_into(xf, x)
-        self._type_into(yf, y)
-        self.b.click(*go)
+        # Type, then read the two boxes back before searching: a click on a box that didn't
+        # take sent the number into the other box ("it types in the wrong boxes", user
+        # 2026-11-15) and it jumped somewhere else. Retype when they're wrong.
+        for attempt in range(3):
+            self._type_into(xf, x)
+            self._type_into(yf, y)
+            got = self._bar_values(xf, yf, btn)
+            if not self._boxes_wrong(got, x, y):
+                break
+            log.info("goto: the boxes read %s instead of %s,%s; typing again", got, x, y)
+        # the search button press is ignored now and then (the bar stays open with the right
+        # numbers, live 2026-11-15): pressed again until the bar closes
+        for attempt in range(3):
+            self.b.click(*go)
+            end = time.time() + 0.9
+            while time.time() < end:
+                time.sleep(0.1)
+                if not screen.search_go_button(self.frame()):
+                    return True
+            log.info("goto: the search button press didn't take; pressing again")
         return True
+
+    @staticmethod
+    def _boxes_wrong(got, x, y) -> bool:
+        """Only the real mistake: a click on a box that didn't take puts Y's number in the
+        X box (or leaves an old number there). The text reader turns '210' into '3210' or
+        '4221' (the cursor) now and then - those aren't reasons to type again."""
+        if not got or got[0] is None:
+            return False
+        from difflib import SequenceMatcher
+        gx = str(got[0])
+        if str(y) in gx and str(x) not in gx:
+            return True                                     # Y typed into the X box
+        return SequenceMatcher(None, gx, str(x)).ratio() < 0.5 and SequenceMatcher(None, gx, str(y)).ratio() >= 0.5
+
+    def _bar_values(self, xf, yf, btn):
+        """(x, y) as typed in the search bar's boxes, read from the bar's row (quick), or
+        None if the row can't be read at all (then don't hold things up)."""
+        time.sleep(0.12)
+        f = self.frame()
+        H, W = f.shape[:2]
+        x0 = max(0, int(min(xf[0], yf[0]) - 0.12 * H))
+        region = (x0, max(0, int(btn[1] - 0.035 * H)), int(btn[0] - 0.02 * H) - x0, int(0.07 * H))
+        texts = screen.read_text(f, region, strip=True)
+        # only the bar's own row (a level number on the map just under it was read as Y)
+        texts = [t for t in texts if abs(t.center[1] - btn[1]) < 0.016 * H]
+        nums = [(t, re.sub(r"\D", "", t.text)) for t in texts]
+        nums = [(t, int(n)) for t, n in nums if n and len(n) <= 4]
+        if not nums:
+            return None
+
+        def near(px):
+            t = min(nums, key=lambda tn: abs(tn[0].center[0] - px))
+            return t[1] if abs(t[0].center[0] - px) < 0.08 * H else None
+        return near(xf[0]), near(yf[0])
 
     def _type_into(self, pos, val):
         self.b.click(*pos)

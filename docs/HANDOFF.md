@@ -891,6 +891,15 @@ Fixed (each with a test that fails on the old code):
       a popup that waits for a click (one sat over the game's CONFIRM and blocked the bot).
     - live guard run: reconnect, out of the city, 4 troops read, a look at them + the city
       every minute (troops within 4 tiles share a picture) - until the phone login.
+33. **v1.26: "guard doesn't work, it types in the wrong boxes" (user, 2026-11-15).** After
+    the game restarted (window 1821x1024) taps were often ignored:
+    - `DesktopWindow.click`: move, 80 ms pause, press, 60 ms, release (an instant
+      jump-and-click didn't open the magnifier at all);
+    - goto waits for the map to stop gliding first; taps the magnifier twice if needed; uses
+      the bar if it's already open (tapping the magnifier closes it); reads the boxes back
+      and retypes only on the real mistake (`_boxes_wrong`: Y's number in the X box); presses
+      the search button again while the bar stays open; waits 6 s for the camera (hotspot).
+    - live: 10/10 jumps arrive, typically 2.4-2.8 s (was 8-19 s with retries / failures).
 
 Live result after 12-18 (7 min, his 4 farms out): every farm tracked the whole run (~250
 sightings each), 0 false alerts, 7-8 owner checks all answered first time, sweep ~40-80 s,

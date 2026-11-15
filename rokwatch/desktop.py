@@ -240,8 +240,16 @@ class DesktopWindow:
             pass
 
     def click(self, x, y):
+        """Move there, wait a moment, then press and release. An instant jump-and-click
+        was ignored by the game (2026-11-15, after it restarted at 1821x1024: the magnifier
+        'didn't open', so guarding never got anywhere); with the pause it always takes."""
         self._front()
-        self._pg.click(*self._abs(x, y))
+        ax, ay = self._abs(x, y)
+        self._pg.moveTo(ax, ay)
+        time.sleep(0.08)
+        self._pg.mouseDown(ax, ay)
+        time.sleep(0.06)
+        self._pg.mouseUp(ax, ay)
         self._park()
 
     def press(self, key):
