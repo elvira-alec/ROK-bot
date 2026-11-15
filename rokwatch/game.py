@@ -802,12 +802,21 @@ class Game:
         # reading (Hunter.look_spot pairs them with the next reading)
         if getattr(self, "_pan_from", None) is None and cam == getattr(self, "_last_read", None):
             self._pan_from, self._pan_px = tuple(cam), np.zeros(2)
-        for _ in range(n):
+        drags = [step] * n
+        if np.hypot(*step) < 0.12 * H:
+            # a short drag counts as a tap: it starts near the middle, on the point just
+            # centred on, and the game zoomed in on it (live 2026-11-15: the pending-point
+            # checks, a few tiles apart, zoomed in and then wandered off). Two long ones instead:
+            # past it and back.
+            u = step / np.hypot(*step) if np.hypot(*step) > 1 else np.array([1.0, 0.0])
+            e = u * 0.25 * H
+            drags = [step + e, -e]
+        for dv in drags:
             self.check_stop()
-            cx, cy = W // 2 - int(step[0]) // 2, H // 2 - int(step[1]) // 2
-            self.b.drag(cx, cy, cx + int(step[0]), cy + int(step[1]))
+            cx, cy = W // 2 - int(dv[0]) // 2, H // 2 - int(dv[1]) // 2
+            self.b.drag(cx, cy, cx + int(dv[0]), cy + int(dv[1]))
             if getattr(self, "_pan_from", None) is not None:
-                self._pan_px = self._pan_px + (int(step[0]), int(step[1]))
+                self._pan_px = self._pan_px + (int(dv[0]), int(dv[1]))
         moved = -(A @ (step * n))
         self._cam = (cam[0] + moved[0], cam[1] + moved[1])   # where it should be now
         return True
@@ -1066,7 +1075,9 @@ class Game:
         # the picture right here (box closed), for the guard's check on this troop
         f2 = self.frame()
         c2 = screen.camera_coords(f2)
-        return {"xy": xy, "exact": exact, "frame": f2, "cam": (c2[1], c2[2]) if c2 else None}
+        moved = bool(exact or (last and before and math.dist(last, before[:2]) > 1.0))
+        return {"xy": xy, "exact": exact, "frame": f2, "cam": (c2[1], c2[2]) if c2 else None,
+                "moved": moved}
 
     def troop_location(self, slot) -> tuple | None:
         """Select a troop; returns (x, y) of where it's gathering (from the info box)."""

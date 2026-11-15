@@ -123,17 +123,17 @@ def start_game(cfg=None, stop=None, say=None, timeout=240) -> bool:
         pressed = 0.0
         while not game_window() and time.time() < end and not stopped():
             lw = launcher_window()
-            if lw and time.time() - pressed > 15:
-                say("Pressing start in the launcher")
+            # only when the button is really there, and once (again only if the game hasn't
+            # opened 30 s later) - the user: "don't spam the clicks"
+            if lw and time.time() - pressed > 30:
                 with DesktopWindow(lw[1]) as w:
                     f = w.screenshot()
                     b = find_start_button(f)
-                    H, W = f.shape[:2]
-                    x, y = b or (int(0.865 * W), int(0.824 * H))
-                    log.info("restart: pressing the launcher's start button at %d,%d%s", x, y,
-                             "" if b else " (where it usually is)")
-                    w.click(x, y)
-                pressed = time.time()
+                    if b:
+                        say("Pressing start in the launcher")
+                        log.info("restart: pressing the launcher's start button at %d,%d", *b)
+                        w.click(*b)
+                        pressed = time.time()
             time.sleep(1.0)
     if not game_window():
         log.warning("restart: the game didn't open")

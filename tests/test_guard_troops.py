@@ -446,3 +446,79 @@ def test_gather_sends_when_all_home(tmp_path, monkeypatch):
     seen = {}
     a.hunter.zoom_close = lambda: seen.setdefault("zoomed", True) and False
     assert a.step() == [] and seen.get("zoomed")
+
+
+def test_short_pan_is_never_a_tap():
+    """A short drag starting on the point just centred on counts as a tap: the game zoomed in
+    on it during the pending-point checks (2026-11-15). Short moves are two long drags."""
+    import math
+    from rokwatch.game import Game
+
+    class B:
+        def __init__(self): self.drags = []
+        def drag(self, *a, **k): self.drags.append(a)
+    g = Game.__new__(Game)
+    g.b, g._size, g._cam, g.stop_check = B(), (1024, 1821), (180.0, 380.0), None
+    axes = [[0.05, 0.0], [0.0, 0.05]]                # 20 px per tile
+    assert g.pan_to(183, 381, axes, close_enough=1)
+    assert len(g.b.drags) == 2
+    net = [0, 0]
+    for x0, y0, x1, y1 in g.b.drags:
+        assert math.hypot(x1 - x0, y1 - y0) >= 0.12 * 1024
+        net[0] += x1 - x0
+        net[1] += y1 - y0
+    assert abs(net[0] + 60) <= 2 and abs(net[1] + 20) <= 2
+    assert g._cam == (183.0, 381.0)
+
+
+def test_guard_continuous_while_troops_march():
+    from rokwatch.hunter import Hunter
+    h = Hunter.__new__(Hunter)
+    h.refresh_spots, h._spots_at, h.guard_only = 300, 1000.0, True
+    h.my_troops = {0: {"index": 0, "state": "marching"}}
+    assert h._troops_due(1001.0)
+    h.my_troops = {0: {"index": 0, "state": "gathering"}}
+    assert not h._troops_due(1001.0)
+
+
+def test_guard_watches_where_troops_are_going():
+    """An army marching at the point a troop is on its way to: guarded like the troop (the
+    user: "in case an enemy army is marching through there")."""
+    from rokwatch.hunter import Hunter
+
+    class Gt:
+        pending = [{"xy": (181, 382), "troop": 2}, {"xy": (176, 364), "troop": None}]
+    h = Hunter.__new__(Hunter)
+    h.my_troops, h.fixed_sites, h.guard_only, h.gather = {}, [("my city", (210, 422))], True, Gt()
+    pts = h._guard_points(sites=True)
+    assert ("WHERE YOUR TROOP 3 IS GOING", (181, 382), "troop-3") in pts
+    assert any(p[1] == (176, 364) and p[2].startswith("dest-") for p in pts)
+
+
+def test_troop_jump_that_didnt_move_keeps_last_position():
+    """Right after a reconnect the game ignored the troop taps: troop 1 read "at your city",
+    troops 2-4 all at one spot (2026-11-15). A jump that didn't move keeps the last position."""
+    from types import SimpleNamespace as NS
+    from rokwatch.hunter import Hunter
+    import rokwatch.hunter as hm
+    h = Hunter.__new__(Hunter)
+    h.my_troops = {1: {"index": 1, "state": "gathering", "x": 176, "y": 364, "history": []}}
+    h.fixed_sites, h._guard_alerts, h._checked_at = [], [], {}
+    h.tracker = NS(my_sites=[])
+    h._progress = lambda *a: None
+    h._help_alliance = lambda f: None
+    slots = [NS(index=1, state="gathering", portrait=(0, 0))]
+
+    class G:
+        def troops(self): return (1, 4, slots)
+        def check_stop(self): pass
+        def troop_spot(self, s): return {"xy": (177, 363), "exact": False, "frame": None, "cam": None, "moved": False}
+        def frame(self): return None
+    h.game = G()
+    orig = hm.screen.view_level
+    hm.screen.view_level = lambda f: "patrol"
+    try:
+        h.update_my_troops()
+    finally:
+        hm.screen.view_level = orig
+    assert (h.my_troops[1]["x"], h.my_troops[1]["y"]) == (176, 364)

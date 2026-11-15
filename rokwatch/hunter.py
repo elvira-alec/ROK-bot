@@ -918,6 +918,21 @@ class Hunter:
             return []
         return self.to_map(self.detect(view.frame), view.camera[1:3], view.frame.shape)
 
+    def icons_ready(self, frame, wait=2.0):
+        """This picture once the map's icons have popped in (they come a moment after a move;
+        a guard check on bare ground sees no armies). Up to `wait` s."""
+        if screen.icons_drawn(frame):
+            return frame
+        end = time.time() + wait
+        while time.time() < end:
+            self.game.check_stop()
+            time.sleep(0.1)
+            frame = self.game.frame()
+            if screen.icons_drawn(frame):
+                time.sleep(0.15)                    # the rest finish popping in
+                return self.game.frame()
+        return frame
+
     def look_spot(self):
         """One look: a fresh picture; reading its coordinates and finding the armies on it
         run at the same time (neither waits for the other). Returns (view, sightings)."""
@@ -947,18 +962,7 @@ class Hunter:
         # ...but the icons pop in a moment after the map is drawn: a look straight after a
         # jump saw bare ground, his farms "weren't there" and he "stopped gathering" (both
         # false alerts in the 2026-11-14 run). Wait for the level plates to show.
-        tags = screen.icons_drawn(frame)
-        if not tags:
-            end = time.time() + 2.0
-            while time.time() < end:
-                self.game.check_stop()
-                time.sleep(0.1)
-                frame = self.game.frame()
-                tags = screen.icons_drawn(frame)
-                if tags:
-                    time.sleep(0.15)                # the rest finish popping in
-                    frame = self.game.frame()
-                    break
+        frame = self.icons_ready(frame)
         job = self._pool.submit(self.game.read_camera, frame)
         found = self.detect(frame)
         if any(k in ("army", "scout") and line is None for _, k, line in found):
@@ -1573,16 +1577,20 @@ class Hunter:
             return
         now = time.time()
         seen = {}
+        todo = [s for s in panel[2] if s.state not in ("scout", "idle")]
         for slot in panel[2]:
             if slot.state in ("scout", "idle"):
                 continue                          # scouts, and commanders at home
             self.game.check_stop()
+            self._progress(len(seen), len(todo), f"Checking your troops ({len(seen) + 1}/{len(todo)})")
             spot = self.game.troop_spot(slot)
             if spot and spot.get("frame") is not None:
                 self._help_alliance(spot["frame"])   # (the help bubble shows when zoomed in)
             if guard and spot and slot.state in ("gathering",) + self.MOVING_STATES \
                     and spot.get("frame") is not None                     and screen.view_level(spot["frame"]) == "patrol":
-                # the camera is on this troop now: the guard's check right here
+                # the camera is on this troop now: the guard's check right here (on a picture
+                # with the icons drawn - the user: "enough time to read when there's enemies")
+                spot["frame"] = self.icons_ready(spot["frame"], 1.5)
                 pos = spot["xy"]
                 self._guard_alerts += self._guard_seen(
                     self.to_map(self.detect(spot["frame"]), spot["cam"], spot["frame"].shape),
@@ -1600,10 +1608,19 @@ class Hunter:
                     q = min(pts, key=lambda q: math.dist(q["mark"], (Ww / 2, Hh / 2)))
                     t["kind"], t["level"] = q["kind"], q["level"]
             t.update(state=slot.state, checked=now)
+            if spot and not spot.get("moved", True) and "x" in t:
+                # the camera didn't go anywhere (just after a reconnect the game ignored the
+                # taps: troop 1 "at your city", troops 2-4 all "at" the same spot) - keep where
+                # it was last seen
+                log.info("hunt: troop %d - the game didn't jump to it; kept its last position", slot.index + 1)
+                spot = None
             if spot:
                 t.update(x=int(spot["xy"][0]), y=int(spot["xy"][1]), exact=spot["exact"])
                 t["history"] = (t["history"] + [(now, (t["x"], t["y"]))])[-10:]
             seen[slot.index] = t
+            # on the panel straight away, not at the end of the pass (the user asked)
+            self.my_troops = {**self.my_troops, slot.index: t}
+            self._progress(len(seen), len(todo), f"Checking your troops ({len(seen)}/{len(todo)})")
         self.my_troops = seen
         # back to the searching zoom only if a jump changed the view (no zoom fiddling each pass)
         if screen.view_level(self.game.frame()) != "patrol":
@@ -1626,6 +1643,15 @@ class Hunter:
         pts = [(f"YOUR TROOP {t['index'] + 1}", (t["x"], t["y"]), f"troop-{t['index'] + 1}")
                for t in sorted(self.my_troops.values(), key=lambda t: t["index"])
                if t.get("state") == "gathering" and "x" in t]
+        # where your troops are on their way to gather (the user: an army marching through
+        # there, or someone taking it first); keyed to the troop, so a threat recalls it
+        gt = getattr(self, "gather", None)
+        for pd in (getattr(gt, "pending", None) or []) if gt else []:
+            n = pd.get("troop")
+            label = (f"WHERE YOUR TROOP {n + 1} IS GOING" if n is not None else "WHERE YOUR TROOP IS GOING")
+            key = f"troop-{n + 1}" if n is not None else f"dest-{pd['xy'][0]},{pd['xy'][1]}"
+            if not any(p[2] == key for p in pts):
+                pts.append((label, tuple(pd["xy"]), key))
         if (self.guard_only if sites is None else sites):
             pts += [(name.upper() if name.lower().startswith("your") else f"YOUR {name.upper()}"
                      .replace("YOUR MY ", "YOUR "), tuple(pos), f"site-{name}")
@@ -1733,12 +1759,18 @@ class Hunter:
         finally:
             self.game._at = None
 
+    SITE_EVERY = 0             # guard: your city every round (the user: "every round, not every minute")
+
     def guard_sites(self, stop=None) -> list[Alert]:
-        """Part of every guard round, after the troops: a look at your own places (your city):
-        anything marching at it, plus the red eye / swords on that picture."""
+        """Guard, every round after the troops: a look at your own places (your city): anything
+        marching at it, plus the red eye / swords on that picture - then zoom in there for your
+        resources and the alliance help, and back out."""
         alerts = []
+        now = time.time()
         for label, pos, key in self._guard_points(sites=True):
             if not key.startswith("site") or (stop and stop()):
+                continue
+            if now - self._checked_at.get(key, 0) < self.SITE_EVERY:
                 continue
             self._progress(0, 1, f"Looking around {label.lower()} ({pos[0]},{pos[1]})")
             t0 = time.time()
@@ -1751,6 +1783,8 @@ class Hunter:
                 continue
             self._checked_at[key] = time.time()
             alerts += self._guard_seen(seen, label, pos, key)
+            if self.gather and not self.attackers and not alerts:
+                self.gather.refresh_storage()       # zoomed in on your city: resources + help
         return alerts
 
     def _guard_seen(self, seen, label, pos, key) -> list[Alert]:
@@ -2040,6 +2074,10 @@ class Hunter:
         if not self.refresh_spots:
             return False
         moving = any(t.get("state") in self.MOVING_STATES for t in self.my_troops.values())
+        if moving and self.guard_only:
+            # guard: troops on the move are the ones to watch - one pass straight after
+            # another (it sat ~20 s at your base between checks while all four marched out)
+            return True
         return now - self._spots_at >= (min(self.refresh_spots, 45) if moving else self.refresh_spots)
 
     def is_his(self, a) -> bool:
@@ -2428,6 +2466,7 @@ class Hunter:
             self._guard_alerts += self._check_his_city(now)
         if (self.gather and self.method == "zoomed_out" and self.mode not in ("sweep", "guard")
                 and not self.attackers and now - self.gather.storage_at > 60):
+            # (guard: done at the look at your city, guard_sites)
             # quick zoom in about once a minute, after the troop rounds: your resources for the
             # panel, and the alliance-help bubble (it shows when zoomed in) - also while busy:
             # guard is never idle now

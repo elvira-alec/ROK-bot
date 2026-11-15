@@ -395,16 +395,16 @@ def test_pending_someone_else_got_there_first(monkeypatch):
     a.note_sent((187, 380), "wood", 5)
     h = _H({0: {"index": 0, "state": "gathering", "x": 179, "y": 370},
             2: {"index": 2, "state": "marching", "x": 192, "y": 410}})
-    monkeypatch.setattr(a, "_badge_at", lambda h, pd: None)
+    monkeypatch.setattr(a, "_badge_at", lambda h, pd, jump=False: "none")
     assert a.check_pending(h) == [] and a.pending[0]["troop"] == 2
-    monkeypatch.setattr(a, "_badge_at", lambda h, pd: "red")
+    monkeypatch.setattr(a, "_badge_at", lambda h, pd, jump=False: "red")
     out = a.check_pending(h)
     assert h.recalled == [2] and not a.pending and "got there first" in out[0]
 
 
 def test_pending_done_when_gathering_and_stranded_recalled(monkeypatch):
     a, _ = _sender([])
-    monkeypatch.setattr(a, "_badge_at", lambda h, pd: None)
+    monkeypatch.setattr(a, "_badge_at", lambda h, pd, jump=False: "none")
     a.note_sent((187, 380), "wood", 5)
     h = _H({2: {"index": 2, "state": "gathering", "x": 187, "y": 380}})
     a.check_pending(h)
@@ -454,3 +454,25 @@ def test_need_from_waiting_candidates():
     a.game, a._need = G(), 4
     p = {"xy": (182, 374), "kind": "stone", "level": 3, "reserves": 354_375, "gatherer": None}
     assert a._check_and_gather(p, [], None) == "lower"
+
+
+def test_pending_every_point_watched_nearest_first(monkeypatch):
+    """All four points troops are on their way to are checked every pass, nearest first; one
+    not seen is tried again with a typed-in jump (2026-11-15: only 2 of 4 were checked)."""
+    a, _ = _sender([])
+    for xy, k in (((178, 388), "wood"), ((176, 364), "stone"), ((181, 382), "food"), ((191, 370), "gold")):
+        a.note_sent(xy, k, 4)
+    h = _H({i: {"index": i, "state": "marching", "x": 205, "y": 420} for i in range(4)})
+
+    class G:
+        _cam = (195, 372)
+    a.game = G()
+    calls = []
+
+    def badge(h, pd, jump=False):
+        calls.append((pd["xy"], jump))
+        return None if (pd["xy"] == (181, 382) and not jump) else "none"
+    monkeypatch.setattr(a, "_badge_at", badge)
+    assert a.check_pending(h) == [] and len(a.pending) == 4
+    assert [c[0] for c in calls] == [(191, 370), (181, 382), (181, 382), (178, 388), (176, 364)]
+    assert calls[2] == ((181, 382), True)

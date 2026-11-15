@@ -1145,3 +1145,36 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
     M) is saved in gather_points.json ("troops"); unknown -> one troop now, the rest once the
     list shows. Checked on ~700 real screens: only list-less ones count as home.
     `tests/real_screens/troop_lists/no_list_all_home.png`, tests in test_guard_troops.py.
+57. **v1.53:** (1) guard while troops march (none gathering yet): it read the troop list only
+    every 45 s and sat at the user's base in between ("staying in my base 5-10 s at the end of
+    each cycle"). Guard mode: troops moving -> the next pass straight away (`_troops_due`).
+    (2) pending-point checks a few tiles apart: `pan_to`'s short drag started on the point
+    just centred on and counted as a tap -> the game zoomed in on it, the next pans ran at the
+    wrong zoom ("going off to the right, then teleported home and zoomed out"). Drags under
+    0.12 H are now two long ones (past it and back); `_badge_at` zooms out if it finds the
+    view zoomed in. Tests in test_guard_troops.py.
+    (3) each troop's position goes to the panel the moment it's read (was: at the end of the
+    pass), with "Checking your troops (n/m)".
+    (4) panel: the "Fullness required" slider is now a row of buttons "Send troops to:
+    Untouched points only / 90% / 75% / 50% left" (the user found the slider odd and its
+    thumb didn't reach the end); range inputs styled so the thumb reaches both ends.
+    (5) the points troops are on their way to: EVERY one, every pass (the user: "I told you
+    explicitly"). It checked 2 of 4: send order (far typed jumps), a failed search skipped a
+    point silently, and the zoom-in made the rest fail. Now nearest first from the camera, a
+    point not seen is tried again with a typed jump, a log line per pass lists each
+    ("watched where your troops are going: x,y free; ..."), and each destination is a guard
+    point (`_guard_points`, keyed to the troop: an army coming at it alerts and recalls).
+    (6) guard, every round (the user: "every round, not every minute"): the look at the
+    user's city, then zoom in there for storage + the alliance help bubble, zoom out, carry on
+    (`guard_sites`). Before: never zoomed in in Guard mode, so with all troops out the
+    resources went stale and help was never pressed.
+    (7) the guard check at every stop waits for the map icons to draw (`Hunter.icons_ready`,
+    shared with look_spot): troop jumps and the destination checks judged the picture straight
+    after the move, possibly bare ground (the user: "enough time to read when there's
+    enemies around"). The storage zoom-in also checks the red eye / swords.
+    (8) live phone-login test 23:12: "already logged in on another device" -> paused, nothing
+    pressed; the game closed itself to the Launcher; Resume -> COMENZAR pressed, game up in
+    31 s, city -> map, guard on. Then "NETWORK DISCONNECTED ... REGISTER_AND_LOGING" twice:
+    CONFIRM pressed, reconnected. Bug seen: right after the reconnect the troop taps didn't
+    jump (troop 1 "at your city", 2-4 all at one spot). `troop_spot` now returns "moved";
+    a non-exact read where the camera didn't move keeps the troop's last position.

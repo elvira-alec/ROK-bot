@@ -48,6 +48,16 @@
   label { display: block; color: var(--muted); font-size: 12px; margin: 10px 0 4px; }
   input, select { width: 100%; background: var(--panel2); color: var(--text); border: 1px solid var(--line);
                   border-radius: 7px; padding: 8px 10px; font: inherit; }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; padding: 0;
+    margin: 4px 0; background: transparent; border: 0; }
+  input[type=range]:focus { outline: none; }
+  input[type=range]::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: var(--line); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: -6px;
+    border-radius: 50%; background: var(--accent); border: 2px solid var(--text); }
+  input[type=range]::-moz-range-track { height: 6px; border-radius: 3px; background: var(--line); }
+  input[type=range]::-moz-range-progress { height: 6px; border-radius: 3px; background: var(--accent); }
+  input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--accent);
+    border: 2px solid var(--text); }
   input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
   button { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 7px;
            padding: 8px 14px; font: inherit; font-weight: 600; cursor: pointer; }
@@ -286,9 +296,14 @@
       <label for="gather_y" style="margin:0">Y</label><input id="gather_y" type="number" style="width:80px" onchange="save()">
       <label for="gather_radius" style="margin:0">radius (tiles)</label><input id="gather_radius" type="number" min="3" max="40" style="width:70px" onchange="save()">
     </div>
-    <label for="gather_min_full">Fullness required <b id="gather_min_full_v">100</b>%</label>
-    <input type="range" id="gather_min_full" min="10" max="100" step="5" value="100"
-           oninput="$('gather_min_full_v').textContent = this.value" onchange="save()">
+    <label>Send troops to</label>
+    <div class="seg" id="gather_min_full_seg" style="margin-top:0">
+      <button type="button" data-v="100" onclick="setMinFull(100)">Untouched points only</button>
+      <button type="button" data-v="90" onclick="setMinFull(90)">90% left</button>
+      <button type="button" data-v="75" onclick="setMinFull(75)">75% left</button>
+      <button type="button" data-v="50" onclick="setMinFull(50)">50% left</button>
+    </div>
+    <input type="hidden" id="gather_min_full" value="100">
     <div class="facts" id="progress"></div>
   </section>
 
@@ -396,6 +411,15 @@
   </details>
 </main>
 <script>
+function showMinFull(v) {
+  v = Number(v) || 100;
+  const opts = [100, 90, 75, 50];
+  const near = opts.reduce((a, b) => Math.abs(b - v) < Math.abs(a - v) ? b : a);
+  document.getElementById('gather_min_full').value = near;
+  document.querySelectorAll('#gather_min_full_seg button').forEach(b => b.classList.toggle('on', Number(b.dataset.v) === near));
+}
+function setMinFull(v) { showMinFull(v); save(); }
+
 const $ = id => document.getElementById(id);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 let sites = [];
@@ -746,7 +770,7 @@ async function loadSettings() {
   $('gather_on').checked = !!s.gather_on;
   $('gather_x').value = (s.gather_centre || [173, 378])[0]; $('gather_y').value = (s.gather_centre || [173, 378])[1];
   $('gather_radius').value = s.gather_radius || 12;
-  $('gather_min_full').value = s.gather_min_full ?? 100; $('gather_min_full_v').textContent = $('gather_min_full').value;
+  showMinFull(s.gather_min_full ?? 100);
   sites = (s.sites || []).map(x => ({ ...x }));
   drawSites();
 }

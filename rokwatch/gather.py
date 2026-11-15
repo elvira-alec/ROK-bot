@@ -269,6 +269,8 @@ class AutoGather:
             f = self.game.frame()
             if hasattr(self.hunter, "_help_alliance"):
                 self.hunter._help_alliance(f)        # zoomed in: the help bubble shows here
+            if hasattr(self.hunter, "_dangers_frame"):
+                self.hunter._dangers_frame(f)        # the red eye / swords show here too
             cur = read_storage(f)
             if cur and cur == prev:
                 self.storage, self.storage_at = cur, time.time()
@@ -826,6 +828,7 @@ class AutoGather:
         now = time.time()
         troops = h.my_troops or {}
         moving = getattr(h, "MOVING_STATES", ("marching", "returning", "fighting", "stopped"))
+        look = []
         for pd in list(getattr(self, "pending", [])):
             if now - pd["at"] > self.PENDING_MAX:
                 self.pending.remove(pd)
@@ -849,7 +852,26 @@ class AutoGather:
                 self.book.blacklist(pd["xy"], 120)
                 self.pending.remove(pd)
                 continue
+            look.append(pd)
+        # every point a troop is on its way to, every pass (the user: "check every single spot
+        # that is being traveled to"): nearest first from where the camera is (it went in send
+        # order: far jumps, one failed search and that point was silently skipped), and a point
+        # not seen is tried again with a typed-in jump
+        cam = (getattr(getattr(self, "game", None), "_cam", None)
+               or getattr(getattr(self, "hunter", None), "city", None))
+        order = []
+        while look:
+            nxt = min(look, key=lambda q: math.dist(q["xy"], cam)) if cam else look[0]
+            look.remove(nxt)
+            order.append(nxt)
+            cam = nxt["xy"]
+        report = []
+        for pd in order:
             col = self._badge_at(h, pd)
+            if col is None:
+                col = self._badge_at(h, pd, jump=True)
+            report.append(f"{pd['xy'][0]},{pd['xy'][1]} " + {None: "NOT SEEN", "none": "free",
+                                                              "green": "ours"}.get(col, col))
             if col in ("red", "blue"):
                 who = "an alliance member" if col == "blue" else "someone else"
                 msg = f"{pd['kind']} at {pd['xy'][0]},{pd['xy'][1]}: {who} got there first"
@@ -858,16 +880,31 @@ class AutoGather:
                 out.append(msg)
                 self.book.blacklist(pd["xy"], 120)
                 self.pending.remove(pd)
+        if report:
+            log.info("gather: watched where your troops are going: %s", "; ".join(report))
         return out
 
-    def _badge_at(self, h, pd):
-        """The pickaxe badge colour on the point (searching zoom), None if none / not seen."""
+    def _badge_at(self, h, pd, jump=False):
+        """The pickaxe badge colour on the point (searching zoom): 'red' / 'blue' / 'green',
+        'none' when the point was seen without one, None when it wasn't seen. The same picture
+        gets the guard's check (armies coming at the point, your troops, your city)."""
         from .hunter import to_screen
         g = self.game
         try:
-            if not g.pan_to(int(pd["xy"][0]), int(pd["xy"][1]), h.axes):
+            x, y = int(pd["xy"][0]), int(pd["xy"][1])
+            ok = g.goto(x, y) if jump else g.pan_to(x, y, h.axes)
+            if not ok:
                 return None
             f = g.fresh_frame()
+            if hasattr(h, "icons_ready"):
+                f = h.icons_ready(f, 1.5)           # guard + badge read need the icons drawn
+            if screen.view_level(f) == "close":
+                # zoomed in by something: back out, never carry on at the wrong zoom (it
+                # wandered off to the right, 2026-11-15)
+                log.info("gather: the view was zoomed in; back to the searching zoom")
+                g._at = None
+                h.zoom_out()
+                return None
             cam = g.read_camera(f)
             if not cam:
                 return None
@@ -879,7 +916,7 @@ class AutoGather:
             if not pts:
                 return None
             m = min(pts, key=lambda p: math.dist(p["mark"], q))["mark"]
-            return screen.gather_badge_on(f, m)
+            return screen.gather_badge_on(f, m) or "none"
         except Exception:
             log.debug("gather: badge check failed", exc_info=True)
             return None
