@@ -255,11 +255,34 @@ class AutoGather:
             self.hunter.zoom_out()
         self.storage_at = max(self.storage_at, time.time())     # (don't retry at once if it failed)
 
-    def summary(self):
-        """For the panel: storage, what each counts as, the next pick, recent sends."""
+    def incoming(self, troops):
+        """Roughly what the troops out gathering will bring back, per resource: each one's
+        point type from what auto-gather has seen there (its box or its scan), one load of it
+        (food-equivalent load x what the point gives), no more than the point has left."""
+        out = {k: 0 for k in KINDS}
+        scan = self._scan[1] if self._scan else []
+        for t in (troops or {}).values():
+            if t.get("state") != "gathering" or "x" not in t:
+                continue
+            xy = (t["x"], t["y"])
+            p = next((v for k, v in self.book.points.items() if math.dist(k, xy) <= 1.5), None)
+            kind = p.get("kind") if p else None
+            left = p.get("reserves") if p else None
+            if not kind:
+                q = next((q for q in scan if math.dist(q["tile"], xy) <= 1.5), None)
+                kind = q["kind"] if q else None
+            if kind in KINDS:
+                amount = self.load * RATIO[kind]
+                out[kind] += int(min(amount, left) if left else amount)
+        return out
+
+    def summary(self, troops=None):
+        """For the panel: storage, what each counts as, what's coming in, the next pick,
+        recent sends."""
         b = balanced(self.storage) if self.storage else {}
         nxt = min(KINDS, key=lambda k: (b.get(k, float("inf")), KINDS.index(k))) if b else None
-        return {"storage": self.storage,
+        inc = self.incoming(troops)
+        return {"storage": self.storage, "incoming": inc, "ratio": RATIO,
                 "storage_at": time.strftime("%H:%M", time.localtime(self.storage_at)) if self.storage else None,
                 "balanced": {k: round(v) for k, v in b.items()},
                 "next": nxt, "next_brings": round(self.load * RATIO[nxt]) if nxt else None,

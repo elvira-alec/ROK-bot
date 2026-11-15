@@ -590,7 +590,7 @@ class Worker:
             self.status.armies = hunter.tracker.summary()
             self.status.radar = hunter.tracker.map_info()
             self.status.my_troops = hunter.my_troops_summary()
-            self.status.gather = hunter.gather.summary() if hunter.gather else None
+            self.status.gather = hunter.gather.summary(hunter.my_troops) if hunter.gather else None
             self.status.helped = getattr(hunter, "helped", 0)
             self._maybe_sample_quick()
         hunter.on_progress = prog

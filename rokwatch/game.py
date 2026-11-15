@@ -70,6 +70,7 @@ class Game:
             TRACE.frame(f)
         try:
             self.b.last_frame = f         # for the panel's live view
+            self.b.last_frame_t = time.time()
         except AttributeError:
             pass
         return f

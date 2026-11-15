@@ -76,6 +76,8 @@ def _clean_sites(sites):
 
 class Panel:
     def __init__(self, cfg_path=config.DEFAULT_PATH):
+        import threading
+        self._live_lock = threading.Lock()
         self.cfg_path = cfg_path
         self.worker = Worker(cfg_path)
         self.memlog = MemoryLog()
@@ -181,10 +183,21 @@ class Panel:
         f = getattr(self.worker.gb, "last_frame", None) if self.worker.gb else None
         return id(f) if f is not None else None
 
-    def live_jpeg(self, width=640, quality=70):
-        """Picture of what the bot last saw (for the live view)."""
+    def live_jpeg(self, width=640, quality=62):
+        """Picture of the game for the live view: what the bot last saw, or - when that's more
+        than a quarter of a second old (the bot waiting between checks: the stream stalled,
+        'too choppy') - a fresh grab of the game window. Only while someone's watching."""
         import cv2
-        f = getattr(self.worker.gb, "last_frame", None) if self.worker.gb else None
+        gb = self.worker.gb
+        f = getattr(gb, "last_frame", None) if gb else None
+        if gb is not None and getattr(gb, "hwnd", None) and time.time() - getattr(gb, "last_frame_t", 0) > 0.25:
+            with self._live_lock:
+                if time.time() - getattr(gb, "last_frame_t", 0) > 0.25:
+                    try:
+                        f = gb.screenshot()
+                        gb.last_frame, gb.last_frame_t = f, time.time()
+                    except Exception:
+                        pass
         if f is None:
             return None
         key = (id(f), width)

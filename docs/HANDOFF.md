@@ -992,3 +992,15 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
       nothing), panel box "Activity by player" collapsed with a player picker.
     - panel: Watch & track and Guard side by side as equals; wording updated to "their" /
       current behaviour.
+40. **v1.34 (user, 2026-11-15):**
+    - one troop pass, about every minute (guard mode; 2 min watching a target): tap each
+      troop in the troop list - the camera jumps to it - note it and run the guard's check on
+      that picture (`update_my_troops(guard=True)`, marching troops too). The typed-coordinate
+      guard visits and the separate troop check are gone from the round (`guard_my_troops`
+      kept for tests). No look at your city (red swords / eye cover it; `_guard_points(sites=
+      True)` still checks it on pictures taken anyway). No zoom_out after the pass unless the
+      view changed. Storage read every 30 min (was 10: the "weird zooming in").
+    - live view: the panel grabs its own picture of the game when the bot's last one is more
+      than 0.25 s old (`Panel.live_jpeg`), polled 5x a second.
+    - panel: Resources next to the map with line icons and bars (length = food-equivalent,
+      faded part = what the troops out will bring back, `AutoGather.incoming`); texts cut down.

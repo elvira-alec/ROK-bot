@@ -1557,7 +1557,8 @@ class Hunter:
                 continue                          # scouts, and commanders at home
             self.game.check_stop()
             spot = self.game.troop_spot(slot)
-            if guard and spot and slot.state == "gathering" and spot.get("frame") is not None                     and screen.view_level(spot["frame"]) == "patrol":
+            if guard and spot and slot.state in ("gathering",) + self.MOVING_STATES \
+                    and spot.get("frame") is not None                     and screen.view_level(spot["frame"]) == "patrol":
                 # the camera is on this troop now: the guard's check right here
                 pos = spot["xy"]
                 self._guard_alerts += self._guard_seen(
@@ -1572,9 +1573,10 @@ class Hunter:
                 t["history"] = (t["history"] + [(now, (t["x"], t["y"]))])[-10:]
             seen[slot.index] = t
         self.my_troops = seen
-        # back to the searching zoom (a jump can change the view)
-        self.game._at = None
-        self.zoom_out()
+        # back to the searching zoom only if a jump changed the view (no zoom fiddling each pass)
+        if screen.view_level(self.game.frame()) != "patrol":
+            self.game._at = None
+            self.zoom_out()
         spots = [(f"your troop {t['index'] + 1} ({t['state']} at {t['x']},{t['y']})", (t["x"], t["y"]))
                  for t in seen.values() if "x" in t]
         self.tracker.my_sites = self.fixed_sites + spots
@@ -1585,13 +1587,14 @@ class Hunter:
 
     update_my_spots = update_my_troops            # (old name)
 
-    def _guard_points(self):
-        """(label, (x, y), key) of what the guard looks at: your gathering troops (their spot
-        is exact and they stay put) and, in guard mode, your own places (your city)."""
+    def _guard_points(self, sites=None):
+        """(label, (x, y), key) of what the guard watches: your gathering troops and, for the
+        checks on pictures taken anyway (sites=True / guard mode), your own places (your city:
+        no separate look at it any more - an attack or scout on it shows the red swords / eye)."""
         pts = [(f"YOUR TROOP {t['index'] + 1}", (t["x"], t["y"]), f"troop-{t['index'] + 1}")
                for t in sorted(self.my_troops.values(), key=lambda t: t["index"])
                if t.get("state") == "gathering" and "x" in t]
-        if self.guard_only:
+        if (self.guard_only if sites is None else sites):
             pts += [(name.upper() if name.lower().startswith("your") else f"YOUR {name.upper()}"
                      .replace("YOUR MY ", "YOUR "), tuple(pos), f"site-{name}")
                     for name, pos in self.fixed_sites]
@@ -1600,7 +1603,7 @@ class Hunter:
     def _guard_due(self, now):
         if not self.guard_every or self.mode == "sweep":
             return False
-        if not self._guard_points():
+        if not self._guard_points(sites=False):
             return False
         return now - self._guard_at >= self.guard_every
 
@@ -1713,7 +1716,7 @@ class Hunter:
         seen = self.to_map(self.detect(frame), cam, frame.shape)
         H, W = frame.shape[:2]
         alerts = []
-        for label, pos, key in self._guard_points():
+        for label, pos, key in self._guard_points(sites=True):
             q = to_screen(cam, self.axes, pos, frame.shape)
             if q and 0 <= q[0] <= W and 0 <= q[1] <= H:
                 alerts += self._guard_seen(seen, label, pos, key)
@@ -2287,18 +2290,16 @@ class Hunter:
             pts = self.track_points(now, frame.shape) if self.mode == "track" else [tuple(self.city)]
             sightings, covered = self.visit(pts, stop)
             visited = len(covered)
-        # where my troops are gathering (after the search, so it gets going at once)
+        # your troops, one pass: tap each in the troop list (the game jumps to it), note where it
+        # is and what it's doing, and the guard checks for armies coming at it right there. That
+        # one pass replaces the old separate troop check + typed-coordinate guard visits (the
+        # user saw every troop visited twice, then the camera parked at his base)
         self._guard_alerts = []
-        if self._troops_due(now):
-            self._spots_at = now
-            self._progress(0, 1, "Checking your troops (tapping each in the troop list)")
-            # each tap puts the camera on that troop: the guard checks it right there (no second
-            # round of visits by typed coordinates - the user saw them visited twice)
-            self.update_my_troops(guard=self.method == "zoomed_out")
         busy = False
-        if self.method == "zoomed_out" and self._guard_due(now):
-            self._guard_at = now
-            self._guard_alerts = self.guard_my_troops(stop)
+        if self._troops_due(now) or (self.method == "zoomed_out" and self._guard_due(now)):
+            self._spots_at = self._guard_at = now
+            self._progress(0, 1, "Checking your troops")
+            self.update_my_troops(guard=self.method == "zoomed_out")
             busy = True
         if self.method == "zoomed_out" and self.attackers:
             self._guard_alerts += self.follow_attackers(stop)
@@ -2306,8 +2307,8 @@ class Hunter:
         if self.method == "zoomed_out" and self.mode != "sweep":
             self._guard_alerts += self._check_his_city(now)
         if (self.gather and self.method == "zoomed_out" and self.mode != "sweep" and not busy
-                and not self.attackers and now - self.gather.storage_at > 600):
-            self.gather.refresh_storage()          # the panel's resource numbers (every 10 min)
+                and not self.attackers and now - self.gather.storage_at > 1800):
+            self.gather.refresh_storage()          # the panel's resource numbers (every 30 min)
             busy = True
         if (self.gather and self.method == "zoomed_out" and self.mode != "sweep"
                 and not self.attackers and self.gather.due(now)):

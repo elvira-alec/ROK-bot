@@ -18,6 +18,15 @@
   header h1 { font-size: 18px; margin: 0; letter-spacing: .3px; }
   .pill { padding: 3px 10px; border-radius: 99px; font-size: 12px; font-weight: 600;
           background: var(--panel2); color: var(--muted); text-transform: uppercase; }
+  .rbar { display: grid; grid-template-columns: 22px 54px 1fr 92px; align-items: center; gap: 8px; margin: 7px 0; }
+  .rbar svg.i { width: 20px; height: 20px; }
+  .rbar .nm { font-size: 13px; color: var(--muted); }
+  .rbar .tr { position: relative; height: 12px; border-radius: 6px; background: var(--panel2); overflow: hidden; }
+  .rbar .now, .rbar .inc { position: absolute; top: 0; bottom: 0; border-radius: 6px; }
+  .rbar .inc { opacity: .35; }
+  .rbar .v { font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+  .rbar .v small { display: block; color: var(--muted); font-size: 11px; }
+  .rbar.low .nm { color: var(--text); font-weight: 600; }
   .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 4px; }
   .mode { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--panel2); }
   .mode button { width: 100%; font-size: 16px; padding: 12px 16px; }
@@ -107,6 +116,7 @@
           border: 1px solid var(--line); color: var(--muted); }
   .chip.on { background: rgba(58,160,255,.18); border-color: var(--accent); color: var(--accent); }
   .army .detail { color: var(--muted); font-size: 12px; }
+  #res-sent .detail { color: var(--muted); font-size: 12px; margin-top: 2px; }
   .heat { display: grid; grid-template-columns: 34px repeat(24, minmax(0, 1fr)); gap: 2px; margin-top: 10px; font-size: 10px; }
   .heat div { height: 16px; border-radius: 3px; }
   .heat .lbl { height: auto; color: var(--muted); align-self: center; }
@@ -139,7 +149,7 @@
 </style>
 </head>
 <body>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol><symbol id="i-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol><symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol><symbol id="i-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></symbol><symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></symbol><symbol id="i-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></symbol><symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></symbol><symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4l13 8-13 8z" fill="currentColor"/></symbol><symbol id="i-stop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></symbol><symbol id="i-pickaxe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 12.5 6.6 20.4a1 1 0 1 1-3-3l7.9-7.9"/><path d="M15.7 4.3A12.5 12.5 0 0 0 5.5 3a1 1 0 0 0 .1 1.7 22 22 0 0 1 6.3 3.4"/><path d="M17.7 3.7a1 1 0 0 0-1.4 0l-4.6 4.6a1 1 0 0 0 0 1.4l2.6 2.6a1 1 0 0 0 1.4 0l4.6-4.6a1 1 0 0 0 0-1.4z"/><path d="M19.7 8.3A12.5 12.5 0 0 1 21 18.5a1 1 0 0 1-1.7-.1 22 22 0 0 0-3.4-6.3"/></symbol><symbol id="i-tent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 21 14 3"/><path d="M20.5 21 10 3"/><path d="M15.5 21 12 15l-3.5 6"/><path d="M2 21h20"/></symbol><symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></symbol><symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol><symbol id="i-castle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 20v-9H2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2Z"/><path d="M18 11V4H6v7"/><path d="M15 22v-4a3 3 0 0 0-6 0v4"/><path d="M6 4V2M10 4V2M14 4V2M18 4V2M2 11V9M22 11V9"/></symbol><symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol><symbol id="i-diamond" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 22 12 12 22 2 12z"/></symbol><symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></symbol><symbol id="i-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></symbol><symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol><symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></symbol><symbol id="i-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></symbol></svg>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol><symbol id="i-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol><symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol><symbol id="i-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></symbol><symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></symbol><symbol id="i-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></symbol><symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></symbol><symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4l13 8-13 8z" fill="currentColor"/></symbol><symbol id="i-stop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></symbol><symbol id="i-pickaxe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 12.5 6.6 20.4a1 1 0 1 1-3-3l7.9-7.9"/><path d="M15.7 4.3A12.5 12.5 0 0 0 5.5 3a1 1 0 0 0 .1 1.7 22 22 0 0 1 6.3 3.4"/><path d="M17.7 3.7a1 1 0 0 0-1.4 0l-4.6 4.6a1 1 0 0 0 0 1.4l2.6 2.6a1 1 0 0 0 1.4 0l4.6-4.6a1 1 0 0 0 0-1.4z"/><path d="M19.7 8.3A12.5 12.5 0 0 1 21 18.5a1 1 0 0 1-1.7-.1 22 22 0 0 0-3.4-6.3"/></symbol><symbol id="i-tent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 21 14 3"/><path d="M20.5 21 10 3"/><path d="M15.5 21 12 15l-3.5 6"/><path d="M2 21h20"/></symbol><symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></symbol><symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol><symbol id="i-castle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 20v-9H2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2Z"/><path d="M18 11V4H6v7"/><path d="M15 22v-4a3 3 0 0 0-6 0v4"/><path d="M6 4V2M10 4V2M14 4V2M18 4V2M2 11V9M22 11V9"/></symbol><symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol><symbol id="i-diamond" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 22 12 12 22 2 12z"/></symbol><symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></symbol><symbol id="i-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></symbol><symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol><symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></symbol><symbol id="i-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></symbol><symbol id="i-food" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22V7"/><path d="M12 11c-2.6 0-4-1.6-4-4 2.6 0 4 1.6 4 4z"/><path d="M12 11c2.6 0 4-1.6 4-4-2.6 0-4 1.6-4 4z"/><path d="M12 16c-2.6 0-4-1.6-4-4 2.6 0 4 1.6 4 4z"/><path d="M12 16c2.6 0 4-1.6 4-4-2.6 0-4 1.6-4 4z"/><path d="M12 7c-1.3-1-1.3-3 0-4 1.3 1 1.3 3 0 4z"/></symbol><symbol id="i-wood" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="7" cy="12" rx="3.5" ry="6"/><path d="M7 6h10a3.5 6 0 0 1 0 12H7"/><ellipse cx="7" cy="12" rx="1.2" ry="2.2"/></symbol><symbol id="i-stone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18l3-9 6-4 6 3 3 9-7 3H7z"/><path d="M6 9l6 4 6-5"/><path d="M12 13v7"/></symbol><symbol id="i-gold" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 9.5v5"/></symbol></svg>
 <div id="toasts" aria-live="polite"></div>
 <header>
   <h1>RoK Watcher <span class="ver" id="ver"></span></h1>
@@ -156,7 +166,7 @@
 <main>
   <section id="live-box">
     <h2><svg class="i"><use href="#i-eye"/></svg> Live view</h2>
-    <label class="toggle"><input type="checkbox" id="live-on" checked> Show what the bot sees (small picture, about every 2 seconds)</label>
+    <label class="toggle"><input type="checkbox" id="live-on" checked> Show the game here (about 5 frames a second)</label>
     <img id="live-img" alt="" hidden>
   </section>
 
@@ -167,8 +177,14 @@
       <svg id="radar" viewBox="0 0 300 300" role="img" aria-label="Map of your troops, your city and armies around them"></svg>
       <div id="his-list"></div>
     </div>
-    <p class="hint">Tap the coordinates to move the game camera there. Red = heading for (or close to) your
-      city or troops. The map shows map coordinates (X to the right, Y up), not the game's tilted camera.</p>
+    <p class="hint">Tap coordinates to jump there. Red: heading for you.</p>
+  </section>
+
+  <section id="res-box">
+    <h2><svg class="i"><use href="#i-chart"/></svg> Resources</h2>
+    <div id="res-bars"><p class="hint" style="margin:0">Shows once auto-gather is on.</p></div>
+    <p class="hint" id="res-next" style="margin:10px 0 0"></p>
+    <div id="res-sent"></div>
   </section>
 
   <section id="mine-box">
@@ -176,21 +192,9 @@
     <p id="mine-sum" class="hint" style="margin:0">Not checked yet.</p>
     <div id="mine-list"></div>
     <div class="row"><button onclick="checkMine()">Check my troops now</button></div>
-    <p class="hint">It taps each of your commanders in the troop list on the right (the game jumps to it),
-      notes where it is and what it's doing, and checks for armies coming at it right there. While watching it
-      does this every few minutes (more often while one of yours is marching), and looks around each gathering
-      troop every minute or two. Any army marching at one of them raises an alert.</p>
+    <p class="hint">Checked about every minute while watching: where each troop is, what it's doing, and anything marching at it.</p>
   </section>
 
-  <section id="res-box">
-    <h2><svg class="i"><use href="#i-chart"/></svg> Resources</h2>
-    <p id="res-sum" class="hint" style="margin:0">Shows once auto-gather is on and watching.</p>
-    <div class="facts" id="res-facts"></div>
-    <p class="hint" id="res-next"></p>
-    <div id="res-sent"></div>
-    <p class="hint">"Counts as" compares resources by what a resource point gives (stone 3/4 of food and
-      wood, gold 1/3): the lowest one gets the next free troop.</p>
-  </section>
 
   <section id="act-box" style="grid-column:1/-1">
     <details id="act-details" ontoggle="if (this.open) loadActivity()">
@@ -202,10 +206,7 @@
     </div>
     <p id="act-now" style="margin:6px 0 0">-</p>
     <div class="heat" id="heat"></div>
-    <p class="hint">Each square is an hour of the week in your time (last 14 days). Darker = more of their
-      actions (armies sent out or recalled, gatherers sent, farms pulled back early, scouting or attacking you;
-      farming and armies walking home by themselves don't count). Grey = the bot wasn't watching them then.
-      Built up while "Watch &amp; track" runs on that player.</p>
+    <p class="hint">One square per hour of the week, last 14 days. Darker = more activity; grey = not watched.</p>
     <ul class="insights" id="act-ins"></ul>
     <details><summary class="hint">Older report (simple patrol)</summary><pre id="report">-</pre></details>
     </details>
@@ -213,12 +214,11 @@
 
   <section>
     <h2><span class="step">1</span> Connect to the game</h2>
-    <p class="hint" style="margin-top:0">Start Rise of Kingdoms on this laptop (window mode), log in and go to the map.</p>
+    <p class="hint" style="margin-top:0">Open Rise of Kingdoms (window mode) on the map.</p>
     <label for="game_window">Game window title (the PC game is "Rise of Kingdoms")</label>
     <input id="game_window" placeholder="Rise of Kingdoms   (leave empty to use a browser)">
     <label class="toggle"><input type="checkbox" id="game_window_zoom_key"> Hold Ctrl while scrolling to zoom (BlueStacks)</label>
-    <p class="hint">With a game window the bot uses your real mouse while it works. To stop it at
-      once, push the mouse into a corner of the screen.</p>
+    <p class="hint">The bot uses your mouse. Push it into a screen corner to stop it at once.</p>
     <details><summary class="hint">Playing in a browser instead?</summary>
     <label for="game_url">Page where you play Rise of Kingdoms in the browser</label>
     <input id="game_url" placeholder="https://...">
@@ -249,10 +249,7 @@
 
   <section>
     <h2><span class="step">3</span> Set up the zoom <span class="hint" style="margin:0">(once)</span></h2>
-    <p class="hint" style="margin-top:0">Close any menus and press the button. The bot zooms all the way in, then out
-      one step at a time. The <b>close zoom</b> is the last 3D step, and the <b>searching zoom</b> is the furthest
-      step where resource points still show their level numbers. If no resource points are in view, it moves to
-      find some. It only saves the result once it has checked it.</p>
+    <p class="hint" style="margin-top:0">Close any menus, then press. Finds the close zoom (last 3D step) and the searching zoom (furthest step with level numbers).</p>
     <div class="row"><button class="primary" onclick="post('auto_zoom')">Set up the zoom automatically</button></div>
     <details><summary class="hint">Or set it by hand</summary>
     <ol class="hint" style="margin:6px 0 0;padding-left:18px;line-height:1.6">
@@ -271,36 +268,27 @@
     <div class="modes">
       <div class="mode">
         <button class="go" id="b-hunt" onclick="post('hunt')"><svg class="i"><use href="#i-play"/></svg> Watch &amp; track</button>
-        <p class="hint">Your target (step 2): finds their armies and farms around their city, checks each is
-          theirs, follows them, and alerts you when one heads for you, when they pull farmers back, and if their
-          city moves. Also guards your troops every couple of minutes.</p>
+        <p class="hint">Follows your target's armies and farms (step 2) and alerts you when they move on you, pull farmers back or move their city. Guards your troops too.</p>
       </div>
       <div class="mode">
         <button class="go" id="b-guard" onclick="post('guard')"><svg class="i"><use href="#i-play"/></svg> Guard</button>
-        <p class="hint">No target needed: every minute it looks around your gathering troops and your city,
-          alerts you when an army marches at them, and follows that army home to tell you whose it is
-          (saved as a target).</p>
+        <p class="hint">No target needed. Watches your troops every minute and follows any attacker home to find out who it is.</p>
       </div>
     </div>
     <div class="row">
       <button class="go" id="b-resume" hidden onclick="post('resume')"><svg class="i"><use href="#i-play"/></svg> Resume</button>
       <button class="danger" id="b-stop" onclick="post('stop')"><svg class="i"><use href="#i-stop"/></svg> Stop</button>
     </div>
-    <p class="hint">Both modes: alerts when you're scouted (red eye) or attacked (red swords), press the alliance
-      help button whenever it shows, and pause by themselves when you open the game on your phone (press Resume
-      when you're done: the game is started again). Auto-gather below runs inside either.</p>
-    <label class="toggle"><input type="checkbox" id="auto_recall"> Recall a troop automatically when an army marches at it <span class="hint">(always on while auto-gather is on; clicks in the game)</span></label>
+    <p class="hint">Both: scout / attack alerts, alliance help, auto-gather (below). They pause when you open the game on your phone; press Resume afterwards.</p>
+    <label class="toggle"><input type="checkbox" id="auto_recall"> Recall a troop when an army marches at it <span class="hint">(always on with auto-gather)</span></label>
     <label for="recall_scope">Which troops to recall</label>
     <select id="recall_scope">
       <option value="threatened">Only the ones at the threatened spot</option>
       <option value="all">All gathering troops</option>
     </select>
     <h3 style="margin:14px 0 4px;font-size:14px">Auto-gather</h3>
-    <label class="toggle"><input type="checkbox" id="gather_on" onchange="save()"> Keep my troops gathering
-      <span class="hint">(runs with Watch or Guard; clicks in the game)</span></label>
-    <p class="hint" style="margin:4px 0">Free troops are sent to the resource you're lowest on, counted by what a
-      resource point gives (stone 3/4 of food, gold 1/3), to the highest-level full, free point around the spot
-      below. If an army comes at a gathering troop, the watcher pulls it back.</p>
+    <label class="toggle"><input type="checkbox" id="gather_on" onchange="save()"> Keep my troops gathering</label>
+    <p class="hint" style="margin:4px 0">Sends free troops to your lowest resource: the best untouched point around the spot below.</p>
     <div class="row">
       <label for="gather_x" style="margin:0">Search around X</label><input id="gather_x" type="number" style="width:80px" onchange="save()">
       <label for="gather_y" style="margin:0">Y</label><input id="gather_y" type="number" style="width:80px" onchange="save()">
@@ -404,9 +392,8 @@
       <button onclick="addSite()">+ Add place</button>
       <button class="primary" onclick="save()">Save</button>
     </div>
-    <p class="hint"><b>Enemy</b> = a target's city (marches there get logged). <b>Mine</b> = your city and gathering spots (any march heading there alerts you).</p>
-    <p class="hint">Simple patrol only checks these places one after another (the old mode). Watch &amp; track
-      and Guard find your gathering troops by themselves; places marked "mine" here are guarded too.</p>
+    <p class="hint"><b>Enemy</b>: a target's city. <b>Mine</b>: your city and spots (marches heading there alert you).</p>
+    <p class="hint">Simple patrol (old mode) checks these places in turn.</p>
     <div class="row"><button id="b-start" onclick="post('start')">Start simple patrol</button></div>
   </section>
   <section class="view">
@@ -540,22 +527,32 @@ async function setFocus(id, k, v) {
   focus[id] = r.focus; toast(v ? 'On for army #' + id : 'Off for army #' + id, 'good'); refresh();
 }
 function drawRes(g, helped) {
-  const fmt = v => v >= 1e6 ? (v / 1e6).toFixed(2) + 'M' : v >= 1e3 ? Math.round(v / 1e3) + 'K' : String(v);
-  const helpTxt = helped ? ` Alliance helped ${helped} time${helped > 1 ? 's' : ''}.` : '';
+  const fmt = v => v >= 1e6 ? (v / 1e6).toFixed(2) + 'M' : v >= 1e3 ? Math.round(v / 1e3) + 'K' : String(Math.round(v));
+  const helpTxt = helped ? `Alliance helped ${helped}x.` : '';
   if (!g || !g.storage) {
-    $('res-sum').textContent = (g ? 'Reading your storage...' : 'Shows once auto-gather is on and watching.') + helpTxt;
-    $('res-facts').innerHTML = ''; $('res-next').textContent = ''; $('res-sent').innerHTML = '';
+    $('res-bars').innerHTML = `<p class="hint" style="margin:0">${g ? 'Reading your storage...' : 'Shows once auto-gather is on.'} ${helpTxt}</p>`;
+    $('res-next').textContent = ''; $('res-sent').innerHTML = '';
     return;
   }
-  const K = ['food', 'wood', 'stone', 'gold'], low = g.next;
-  $('res-sum').textContent = `Your storage at ${g.storage_at}.` + helpTxt;
-  facts($('res-facts'), K.map(k => [k[0].toUpperCase() + k.slice(1) + (k === low ? ' (lowest)' : ''),
-    fmt(g.storage[k]) + (k === 'stone' || k === 'gold' ? ` (counts as ${fmt(g.balanced[k])})` : '')]));
-  $('res-next').textContent = g.paused_min ? `Auto-gather paused for ${g.paused_min} min (the watcher pulled a troop back).`
-    : `Next free troop goes for ${low}` + (g.next_brings ? ` (about +${fmt(g.next_brings)} when it's back)` : '')
-      + `: the highest-level free point within ${g.radius} tiles of ${g.centre[0]},${g.centre[1]}.`;
+  const K = ['food', 'wood', 'stone', 'gold'], C = { food: '#e3c25b', wood: '#c08a57', stone: '#9fb0c4', gold: '#f0b429' };
+  const R = g.ratio || { food: 1, wood: 1, stone: 0.75, gold: 1 / 3 }, inc = g.incoming || {};
+  const val = k => g.storage[k] / R[k], add = k => (inc[k] || 0) / R[k];      // in food-equivalent
+  const top = Math.max(1, ...K.map(k => val(k) + add(k)));
+  $('res-bars').innerHTML = K.map(k => {
+    const w1 = 100 * val(k) / top, w2 = 100 * add(k) / top;
+    return `<div class="rbar ${k === g.next ? 'low' : ''}" title="${k}: ${g.storage[k].toLocaleString()} in storage`
+      + (inc[k] ? `, about ${inc[k].toLocaleString()} on the way` : '') + `">
+      <svg class="i" style="color:${C[k]}"><use href="#i-${k}"/></svg>
+      <span class="nm">${k[0].toUpperCase() + k.slice(1)}</span>
+      <div class="tr"><div class="now" style="left:0;width:${w1}%;background:${C[k]}"></div>
+        <div class="inc" style="left:${w1}%;width:${w2}%;background:${C[k]}"></div></div>
+      <span class="v">${fmt(g.storage[k])}${inc[k] ? `<small>+${fmt(inc[k])}</small>` : ''}</span></div>`;
+  }).join('') + `<p class="hint" style="margin:6px 0 0">Bar length = what it's worth (stone x4/3, gold x3).
+    Faded = on its way back (estimate). ${g.storage_at ? 'Read ' + g.storage_at + '.' : ''} ${helpTxt}</p>`;
+  $('res-next').textContent = g.paused_min ? `Auto-gather paused ${g.paused_min} min (a troop was pulled back).`
+    : `Next troop: ${g.next}, best free point within ${g.radius} of ${g.centre[0]},${g.centre[1]}.`;
   $('res-sent').innerHTML = (g.sent || []).slice().reverse().map(x =>
-    `<div class="detail">${esc(x.time)}: a troop to the level ${esc(x.level || '?')} ${esc(x.kind)} at ` +
+    `<div class="detail">${esc(x.time)} ${esc(x.kind)} lv ${esc(x.level || '?')} at ` +
     `<a class="xy" onclick="jumpTo(${+x.xy[0]}, ${+x.xy[1]})">${esc(x.xy[0])},${esc(x.xy[1])}</a></div>`).join('');
 }
 function drawMine(tr) {
@@ -886,7 +883,7 @@ async function loadPhone() {
     const main = document.querySelector('main');
     const find = t => [...main.children].find(sec => sec.querySelector('h2')?.textContent.includes(t));
     // top to bottom: what he's doing, then the steps 1-4 in order, then the rest
-    const order = ['Live view', 'Map', 'Your troops', 'Connect to the game', 'Who to watch', 'Set up the zoom',
+    const order = ['Live view', 'Map', 'Resources', 'Your troops', 'Connect to the game', 'Who to watch', 'Set up the zoom',
                    '4 Watch', 'Recent alerts', 'Alerts to your phone', 'Activity'];
     order.slice().reverse().forEach(t => { const sec = find(t); if (sec) main.prepend(sec); });
     return;
@@ -912,7 +909,7 @@ function drawRoute() {
       : 'Works from anywhere (mobile data too) while Tailscale is on, on this laptop and on your phone.')
     : (o.help || '');
 }
-// live view: its own loop, ~3 pictures a second, only when the picture changed
+// live view: its own loop, ~5 pictures a second, only when the picture changed
 let liveId = null, liveHave = '', liveUrl = null;
 async function liveLoop() {
   try {
@@ -927,7 +924,7 @@ async function liveLoop() {
       }
     }
   } catch (e) {}
-  setTimeout(liveLoop, 330);
+  setTimeout(liveLoop, 200);
 }
 liveLoop();
 loadSettings(); refresh(); loadPhone(); setInterval(refresh, 1500);
