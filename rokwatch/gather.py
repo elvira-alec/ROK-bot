@@ -187,6 +187,26 @@ class AutoGather:
         self.last = ""                                  # what it did last (for the panel)
         self._scan = (0.0, [])                          # (when, points seen by the last scan)
         self._scan_taken = []                           # tiles tried since that scan
+        self.threat = False                             # the watcher saw something: stop
+
+    def _watch(self, frame, cam=None) -> bool:
+        """The watcher's checks on a picture auto-gather took anyway (so it isn't blind while
+        gathering): armies marching at your troops / city, the red eye / swords. True (and
+        auto-gather stops) when something's coming; the alerts go out with the round."""
+        h = self.hunter
+        try:
+            alerts = h.guard_frame(frame, cam) if cam else (h._dangers_frame(frame) or [])
+        except Exception:
+            log.debug("gather: watch check failed", exc_info=True)
+            return False
+        if alerts:
+            h._guard_alerts = list(getattr(h, "_guard_alerts", []) or []) + alerts
+        danger = bool({"attacked", "scouted"} & set(getattr(h, "dangers", set()))) or getattr(h, "warned", False)
+        if alerts or danger:
+            if not self.threat:
+                log.warning("gather: something's coming - stopping auto-gather, the watcher takes over")
+            self.threat = True
+        return self.threat
 
     def pause(self, minutes=10):
         self.paused_until = time.time() + minutes * 60
@@ -203,6 +223,7 @@ class AutoGather:
         """Send out as many free troops as there are, each to the right resource. Returns
         what it did (for the log / panel)."""
         self._at = time.time()
+        self.threat = False
         done = []
         panel = self.game.troops()
         if not panel:
@@ -246,7 +267,7 @@ class AutoGather:
                 # lowest first; nothing free of it around -> the next lowest
                 sent = False
                 for kind in sorted(KINDS, key=lambda k: (b.get(k, float("inf")), KINDS.index(k))):
-                    if stop and stop():
+                    if (stop and stop()) or self.threat:
                         break
                     xy = self.send_one(kind, stop)
                     if xy:
@@ -254,7 +275,7 @@ class AutoGather:
                         b[kind] = b.get(kind, 0) + self.load      # counted in for the next troop
                         sent = True
                         break
-                if not sent:
+                if not sent or self.threat:
                     break
         finally:
             self.game.close_popups()
@@ -270,7 +291,7 @@ class AutoGather:
         cands = self.scan(kind, stop)
         tried = 0
         for tile, level in cands:
-            if (stop and stop()) or tried >= 4:
+            if (stop and stop()) or tried >= 4 or self.threat:
                 break
             tried += 1
             self.say(f"Auto-gather: checking the level {level} {kind} point near {tile[0]:.0f},{tile[1]:.0f}")
@@ -345,6 +366,8 @@ class AutoGather:
             if not cam:
                 continue
             g._cam = cam[1:3]
+            if self._watch(f, cam[1:3]):
+                break                                    # a threat: the watcher takes over
             for p in screen.find_resource_points(f):
                 t = to_tile(cam[1:3], axes, p["mark"], f.shape)
                 if any(math.dist(t, q["tile"]) < 1.5 for q in found):
@@ -373,6 +396,8 @@ class AutoGather:
         for _ in range(4):
             f = g.frame()
             H, W = f.shape[:2]
+            if self._watch(f):
+                return "failed", None                    # the watcher takes over
             cam = g.read_camera(f)
             if not cam:
                 return "failed", None

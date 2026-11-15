@@ -953,3 +953,9 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
     - the watcher overrides: an army aimed at a gathering troop -> recall it, auto-gather
       paused 10 min.
     - `Game.recall` zooms in first (selecting a troop at the searching zoom opens no box).
+37. **v1.31: the watcher isn't blind while auto-gather has the game.** Every scan picture gets
+    the guard's check (`Hunter.guard_frame`: armies marching at your troops / city, red eye /
+    swords) - the same rules as the guard's own looks (`_guard_seen`, shared). Close-up
+    pictures get the red eye / swords check. Anything coming -> auto-gather stops at once
+    (`AutoGather.threat`), the alerts go out with the round, the watcher takes over
+    (recall + 10 min pause). ~0.16 s per picture.

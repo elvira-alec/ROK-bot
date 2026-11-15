@@ -1601,40 +1601,64 @@ class Hunter:
             view, seen = self.look_spot()
             if not view.camera:
                 continue
-            for s in seen:
-                how = self._coming_at(s, pos)
-                if not how:
-                    continue
-                his = bool(self.name) and not self.guard_only and (
-                    any(self.tracker.at_home(e) for e in (s.ends or ()))
-                    or any(a.owner == "him" and a.kind != "farm" and math.dist(a.tile, s.tile) <= 4
-                           for a in self.tracker.armies))
-                who = "HIS ARMY" if his else ("A SCOUT" if s.kind == "scout" else "AN ARMY")
-                d = math.dist(s.tile, pos)
-                what = "is marching against" if how == "hostile" else "is marching at"
-                title = f"{who} {what.upper()} {label}"
-                where = label.lower()
-                msg = (f"At {s.tile[0]:.0f},{s.tile[1]:.0f}, about {d:.0f} tiles from {where} "
-                       f"at {pos[0]},{pos[1]}." + (" It's his." if his else "")
-                       + ("" if s.kind == "scout" else " Following it to see where it goes home."))
-                log.warning("hunt: %s - %s", title, msg)
-                from .trace import TRACE
-                TRACE.event("guard", at=label, pos=list(pos), how=how, his=his,
-                            tile=[round(s.tile[0], 1), round(s.tile[1], 1)])
-                alerts.append(Alert(f"guard-{key}", title, msg, urgent=True))
-                if s.kind != "scout":
-                    self._add_attacker(s, pos, label)
-                if ((self.auto_recall or self.gather) and s.kind != "scout" and key.startswith("troop")
-                        and f"guard-recall-{key}" not in self._recalled):
-                    # auto-gather on: the watcher always pulls an attacked gatherer back, and
-                    # auto-gather waits before sending troops out again
-                    self._recalled.add(f"guard-recall-{key}")
-                    if self.gather:
-                        self.gather.pause(10)
-                    report = self.game.recall_all([pos])
-                    alerts.append(Alert(f"recall-guard-{key}-{time.time()}", "Auto-recall", "; ".join(report),
-                                        urgent=True, cooldown=False))
-                break                              # one alert per spot per look
+            alerts += self._guard_seen(seen, label, pos, key)
+        return alerts
+
+    def _guard_seen(self, seen, label, pos, key) -> list[Alert]:
+        """The guard's check on one picture's sightings for one of your spots: an army (or a
+        red diamond) marching at it -> alert, follow it, and recall the troop if that's on
+        (always with auto-gather). Used by the guard's own looks and by auto-gather's scan
+        pictures (so the watcher isn't blind while it gathers)."""
+        alerts = []
+        for s in seen:
+            how = self._coming_at(s, pos)
+            if not how:
+                continue
+            his = bool(self.name) and not self.guard_only and (
+                any(self.tracker.at_home(e) for e in (s.ends or ()))
+                or any(a.owner == "him" and a.kind != "farm" and math.dist(a.tile, s.tile) <= 4
+                       for a in self.tracker.armies))
+            who = "HIS ARMY" if his else ("A SCOUT" if s.kind == "scout" else "AN ARMY")
+            d = math.dist(s.tile, pos)
+            what = "is marching against" if how == "hostile" else "is marching at"
+            title = f"{who} {what.upper()} {label}"
+            where = label.lower()
+            msg = (f"At {s.tile[0]:.0f},{s.tile[1]:.0f}, about {d:.0f} tiles from {where} "
+                   f"at {pos[0]},{pos[1]}." + (" It's his." if his else "")
+                   + ("" if s.kind == "scout" else " Following it to see where it goes home."))
+            log.warning("hunt: %s - %s", title, msg)
+            from .trace import TRACE
+            TRACE.event("guard", at=label, pos=list(pos), how=how, his=his,
+                        tile=[round(s.tile[0], 1), round(s.tile[1], 1)])
+            alerts.append(Alert(f"guard-{key}", title, msg, urgent=True))
+            if s.kind != "scout":
+                self._add_attacker(s, pos, label)
+            if ((self.auto_recall or self.gather) and s.kind != "scout" and key.startswith("troop")
+                    and f"guard-recall-{key}" not in self._recalled):
+                # auto-gather on: the watcher always pulls an attacked gatherer back, and
+                # auto-gather waits before sending troops out again
+                self._recalled.add(f"guard-recall-{key}")
+                if self.gather:
+                    self.gather.pause(10)
+                report = self.game.recall_all([pos])
+                alerts.append(Alert(f"recall-guard-{key}-{time.time()}", "Auto-recall", "; ".join(report),
+                                    urgent=True, cooldown=False))
+            break                                  # one alert per spot per look
+        return alerts
+
+    def guard_frame(self, frame, cam) -> list[Alert]:
+        """The watcher's checks on a picture taken for something else (auto-gather's scan):
+        the red eye / swords, and armies marching at any of your spots that's on it."""
+        self._dangers_frame(frame)
+        if not cam or not self.axes:
+            return []
+        seen = self.to_map(self.detect(frame), cam, frame.shape)
+        H, W = frame.shape[:2]
+        alerts = []
+        for label, pos, key in self._guard_points():
+            q = to_screen(cam, self.axes, pos, frame.shape)
+            if q and 0 <= q[0] <= W and 0 <= q[1] <= H:
+                alerts += self._guard_seen(seen, label, pos, key)
         return alerts
 
     # ---------------------------------------------------------- attackers: follow them home

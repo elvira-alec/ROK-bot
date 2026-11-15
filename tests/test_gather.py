@@ -169,3 +169,35 @@ def test_barbarians_are_not_resource_points():
         f = _cv2.imread(str(_R / f"view_{v}.jpg"))
         for p in screen.find_resource_points(f):
             assert p["kind"] in ("food", "wood", "stone", "gold", "gems")
+
+
+def test_threat_seen_while_gathering_stops_it_and_alerts():
+    # the watcher must not be blind while auto-gather has the game: every scan picture gets
+    # the guard's check, and a threat stops auto-gather (user, 2026-11-15)
+    import numpy as np
+    from rokwatch.watcher import Alert
+
+    class Hn:
+        dangers, warned, _guard_alerts = set(), False, []
+
+        def guard_frame(self, frame, cam):
+            return [Alert("guard-troop-1", "AN ARMY IS MARCHING AT YOUR TROOP 1", "x", urgent=True)]
+    a = gather.AutoGather.__new__(gather.AutoGather)
+    a.hunter, a.threat = Hn(), False
+    assert a._watch(np.zeros((10, 10, 3), np.uint8), (180, 380)) is True and a.threat
+    assert a.hunter._guard_alerts[0].title.startswith("AN ARMY")
+
+
+def test_quiet_picture_lets_it_carry_on():
+    import numpy as np
+
+    class Hn:
+        dangers, warned, _guard_alerts = set(), False, []
+
+        def guard_frame(self, frame, cam):
+            return []
+    a = gather.AutoGather.__new__(gather.AutoGather)
+    a.hunter, a.threat = Hn(), False
+    assert a._watch(np.zeros((10, 10, 3), np.uint8), (180, 380)) is False
+    Hn.dangers = {"attacked"}                    # the red swords showing: stop too
+    assert a._watch(np.zeros((10, 10, 3), np.uint8), (180, 380)) is True
