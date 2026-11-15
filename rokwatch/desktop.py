@@ -285,7 +285,17 @@ class DesktopWindow:
         self._front()
         self._pg.moveTo(*self._abs(x0, y0))
         self._pg.mouseDown()
-        self._pg.moveTo(*self._abs(x1, y1), duration=0.18)
-        time.sleep(0.1)               # hold still before letting go: no fling / drift
+        # slow down into the end point and hold still before letting go: with a full-speed
+        # move and a 0.1 s hold the game flung the map on ~30% of drags (it kept gliding after
+        # the release - user, 2026-11-15), which threw the positions and scale off
+        try:
+            tween = self._pg.easeOutQuad
+        except AttributeError:
+            tween = None
+        if tween:
+            self._pg.moveTo(*self._abs(x1, y1), duration=0.3, tween=tween)
+        else:
+            self._pg.moveTo(*self._abs(x1, y1), duration=0.3)
+        time.sleep(0.25)
         self._pg.mouseUp()
         self._park()

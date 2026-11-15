@@ -201,3 +201,15 @@ def test_quiet_picture_lets_it_carry_on():
     assert a._watch(np.zeros((10, 10, 3), np.uint8), (180, 380)) is False
     Hn.dangers = {"attacked"}                    # the red swords showing: stop too
     assert a._watch(np.zeros((10, 10, 3), np.uint8), (180, 380)) is True
+
+
+def test_march_button_by_colour():
+    # pressed straight away (a text read took ~5 s in all) - and never the queue's 'March'
+    # for a troop that's already out
+    from rokwatch.gather import find_march_button
+    d = _Path(__file__).parent / "real_screens" / "gather_send"
+    f = _cv2.resize(_cv2.imread(str(d / "new_troop_window.jpg")), (1821, 1024))
+    x, y = find_march_button(f)
+    assert abs(x - 1196) < 20 and abs(y - 780) < 20
+    for n in ("queue_new_troop", "queue_full_march"):
+        assert find_march_button(_cv2.resize(_cv2.imread(str(d / f"{n}.jpg")), (1821, 1024))) is None

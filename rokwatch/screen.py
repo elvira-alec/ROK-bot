@@ -1722,3 +1722,35 @@ def find_resource_points(frame):
         out.append({"mark": (int(mk[0]), int(mk[1])), "kind": kind, "level": plate_level(frame, mk),
                     "taken": gather_badge_on(frame, mk)})
     return out
+
+
+# ---------------------------------------------------------------- alliance help (handshake)
+
+_help_t = None
+
+
+def find_help_bubble(frame):
+    """The alliance-help bubble (white bubble, green ring with a handshake) that pops up over
+    the Alliance button: pressing it helps every member. Its centre, or None. The picture is
+    scaled to 1200 wide (the template's size) and only the bottom-right is searched.
+    Measured: 0.93-0.99 on real bubbles (day and night), at most 0.55 elsewhere."""
+    global _help_t
+    if _help_t is None:
+        p = __import__("pathlib").Path(__file__).with_name("hud") / "help.png"
+        _help_t = cv2.imread(str(p)) if p.exists() else False
+    if _help_t is False or frame is None:
+        return None
+    H, W = frame.shape[:2]
+    s = 1200 / W
+    g = cv2.resize(frame, (1200, int(round(H * s))), interpolation=cv2.INTER_AREA)
+    h = g.shape[0]
+    y0, x0 = int(0.6 * h), 720
+    r = g[y0:int(0.97 * h), x0:1200]
+    if r.shape[0] < _help_t.shape[0] or r.shape[1] < _help_t.shape[1]:
+        return None
+    m = cv2.matchTemplate(r, _help_t, cv2.TM_CCOEFF_NORMED)
+    _, v, _, loc = cv2.minMaxLoc(m)
+    if v < 0.8:
+        return None
+    th, tw = _help_t.shape[:2]
+    return int((x0 + loc[0] + tw / 2) / s), int((y0 + loc[1] + th / 2) / s)

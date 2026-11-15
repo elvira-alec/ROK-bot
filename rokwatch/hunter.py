@@ -6,6 +6,7 @@ between sweeps into alerts (farmers pulled back, armies sent out, ...).
 from __future__ import annotations
 
 import csv
+import json
 import logging
 import math
 import re
@@ -706,6 +707,9 @@ class Tracker:
 
 # ---------------------------------------------------------------- the hunter
 
+SCALE_CACHE = Path("scale_cache.json")       # the map scale measured at the last start
+
+
 class Hunter:
     def __init__(self, game, cfg: dict, my_sites, log_path="his_armies.csv", debug_dir="debug"):
         h = cfg.get("hunt", {})
@@ -748,6 +752,7 @@ class Hunter:
         self._guard_at = 0.0
         self._guard_alerts = []
         self._crossing = {}                       # (id, id) of his army and another passing close
+        self._checked_at = {}                     # guard spot key -> when the guard last looked
         # "Guard my troops": no target - only your troops and city, and whoever comes at them.
         # Also what the watch falls back to when his city has gone from its spot (he moved).
         self.guard_only = bool(h.get("guard_only"))
@@ -1079,6 +1084,20 @@ class Hunter:
         neighbour's next to them). Refined from real moves after that (_learn_scale)."""
         if not self.axes_out:
             return
+        # measured in the last few hours with the same zoom setup: reuse it, no drags (the
+        # user: "it moves right and back, twice, every time I start it"). The 5-min zoom
+        # check while hunting still catches a change.
+        key = {"cal": self._axes_cal, "gap": (self.game.zoom_cfg or {}).get("gap")}
+        try:
+            c = json.loads(SCALE_CACHE.read_text())
+            if (time.time() - c.get("t", 0) < 6 * 3600 and c.get("key") == key
+                    and c.get("axes") and c.get("ref")):
+                self.axes_out = self.axes = c["axes"]
+                self._measure_ref = float(c["ref"])
+                log.info("hunt: map scale from %.0f min ago reused", (time.time() - c["t"]) / 60)
+                return
+        except (OSError, ValueError, TypeError, AttributeError):
+            pass
         ss = float(np.linalg.norm(np.array(self.axes_out, float)[:, 0]))
         s1, s2 = self.game.measure_scale(0.6), self.game.measure_scale(0.6)
         if not (s1 and s2 and ss) or abs(math.log(s1 / s2)) > 0.08:
@@ -1088,6 +1107,11 @@ class Hunter:
         if 0.6 <= f <= 1.6 and abs(f - 1) > 0.06:
             self.axes_out = self.axes = (np.array(self.axes_out, float) * f).round(6).tolist()
             log.info("hunt: map scale measured at the start: %.2fx the saved one; using that", f)
+        try:
+            SCALE_CACHE.write_text(json.dumps({"t": time.time(), "key": key, "axes": self.axes_out,
+                                               "ref": self._measure_ref}))
+        except OSError:
+            pass
 
     def _learn_scale(self, drag_px, dcam):
         """One real move at the searching zoom: the map was dragged drag_px pixels and the
@@ -1509,7 +1533,7 @@ class Hunter:
 
     MOVING_STATES = ("marching", "returning", "fighting", "stopped")
 
-    def update_my_troops(self):
+    def update_my_troops(self, guard=False):
         """Where are your armies right now, and what are they doing? Tap each commander
         in the troop list on the right: the game jumps to it. Gathering ones give their
         exact X:Y (from the box); marching ones where the camera went. No map search.
@@ -1528,6 +1552,14 @@ class Hunter:
                 continue                          # scouts, and commanders at home
             self.game.check_stop()
             spot = self.game.troop_spot(slot)
+            if guard and spot and slot.state == "gathering" and spot.get("frame") is not None                     and screen.view_level(spot["frame"]) == "patrol":
+                # the camera is on this troop now: the guard's check right here
+                pos = spot["xy"]
+                self._guard_alerts += self._guard_seen(
+                    self.to_map(self.detect(spot["frame"]), spot["cam"], spot["frame"].shape),
+                    f"YOUR TROOP {slot.index + 1}", pos, f"troop-{slot.index + 1}") if spot.get("cam") else []
+                self._dangers_frame(spot["frame"])
+                self._checked_at[f"troop-{slot.index + 1}"] = time.time()
             t = self.my_troops.get(slot.index) or {"index": slot.index, "history": []}
             t.update(state=slot.state, checked=now)
             if spot:
@@ -1588,7 +1620,9 @@ class Hunter:
         an army marching at one of them that slipped past the watch around his city.
         Alerts whoever it is (the user's choice: fastest); says 'his' when that's known."""
         alerts = []
-        pts = self._guard_points()
+        now = time.time()
+        # spots checked in the last minute some other way (the troop-list taps) are skipped
+        pts = [p for p in self._guard_points() if now - self._checked_at.get(p[2], 0) > 0.9 * self.guard_every]
         for i, (label, pos, key) in enumerate(pts):
             if stop and stop():
                 break
@@ -1601,6 +1635,7 @@ class Hunter:
             view, seen = self.look_spot()
             if not view.camera:
                 continue
+            self._checked_at[key] = time.time()
             alerts += self._guard_seen(seen, label, pos, key)
         return alerts
 
@@ -1645,6 +1680,24 @@ class Hunter:
                                     urgent=True, cooldown=False))
             break                                  # one alert per spot per look
         return alerts
+
+    def _help_alliance(self, frame=None):
+        """The alliance-help bubble (handshake over the Alliance button) is showing: press it
+        (helps every member - the user: 'click it whenever it shows up')."""
+        now = time.time()
+        if now - getattr(self, "_helped_at", 0) < 15:
+            return
+        try:
+            f = self.game.frame() if frame is None else frame
+            p = screen.find_help_bubble(f)
+        except Exception:
+            return
+        if not p:
+            return
+        self._helped_at = now
+        self.game.b.click(*p)
+        self.helped = getattr(self, "helped", 0) + 1
+        log.info("hunt: helped the alliance (handshake pressed)")
 
     def guard_frame(self, frame, cam) -> list[Alert]:
         """The watcher's checks on a picture taken for something else (auto-gather's scan):
@@ -2154,6 +2207,7 @@ class Hunter:
             raise GamePaused()                     # the user is playing on another device
         if self._rounds == 0:
             self.game.leave_city_view(home=True)   # started while the game shows your city
+        self._help_alliance()
         if getattr(self.game, "reconnected", False):
             # back after a lost connection: the game may have reset the view - put the zoom
             # right and start again from his city
@@ -2228,11 +2282,13 @@ class Hunter:
             sightings, covered = self.visit(pts, stop)
             visited = len(covered)
         # where my troops are gathering (after the search, so it gets going at once)
+        self._guard_alerts = []
         if self._troops_due(now):
             self._spots_at = now
             self._progress(0, 1, "Checking your troops (tapping each in the troop list)")
-            self.update_my_troops()
-        self._guard_alerts = []
+            # each tap puts the camera on that troop: the guard checks it right there (no second
+            # round of visits by typed coordinates - the user saw them visited twice)
+            self.update_my_troops(guard=self.method == "zoomed_out")
         busy = False
         if self.method == "zoomed_out" and self._guard_due(now):
             self._guard_at = now
@@ -2243,6 +2299,10 @@ class Hunter:
             busy = True
         if self.method == "zoomed_out" and self.mode != "sweep":
             self._guard_alerts += self._check_his_city(now)
+        if (self.gather and self.method == "zoomed_out" and self.mode != "sweep" and not busy
+                and not self.attackers and now - self.gather.storage_at > 600):
+            self.gather.refresh_storage()          # the panel's resource numbers (every 10 min)
+            busy = True
         if (self.gather and self.method == "zoomed_out" and self.mode != "sweep"
                 and not self.attackers and self.gather.due(now)):
             from .game import Stopped, GamePaused
@@ -2261,7 +2321,9 @@ class Hunter:
         if self.mode == "guard" and not busy:
             # nothing to look at this round: keep an eye on the game's red eye / swords
             # (they show on any screen) without hammering the game
-            self._dangers_frame(self.game.frame())
+            f = self.game.frame()
+            self._dangers_frame(f)
+            self._help_alliance(f)
             if not (stop and stop()):
                 time.sleep(2.0)
         if self.mode == "guard":

@@ -6,6 +6,8 @@ swap the two), then both are read again."""
 
 import time
 
+import pytest
+
 import numpy as np
 
 from rokwatch.hunter import Hunter, Army, ArmySeen
@@ -235,3 +237,36 @@ def test_city_seen_again_resets_the_count(monkeypatch):
     for i in range(5):
         out += h._check_his_city(now + i * 121)
     assert out == [] and not h.city_moved
+
+
+def test_spots_checked_by_the_troop_list_taps_are_not_visited_again():
+    # the user saw each troop visited twice at the start: tapped in the troop list (camera on
+    # it), then again by typed coordinates. A spot checked in the last minute is skipped.
+    h, g = _hunter({})
+    h._checked_at["troop-1"] = time.time()
+    h.guard_my_troops()
+    assert g.panned == [(220, 430)]                 # troop 3 only; troop 1 was just checked
+
+
+def test_map_scale_remembered_between_starts(tmp_path, monkeypatch):
+    # 'it moves right and back, twice, every time I start it': a scale measured in the last
+    # few hours with the same zoom setup is reused - no drags
+    import json as _j
+    from rokwatch import hunter as hm
+    monkeypatch.setattr(hm, "SCALE_CACHE", tmp_path / "scale.json")
+    h, g = _hunter({})
+    drags = []
+    g.measure_scale = lambda *a: drags.append(1) or 0.0085
+    h._first_scale()
+    assert len(drags) == 2                                  # measured (twice, must agree)
+    h2, g2 = _hunter({})
+    g2.measure_scale = lambda *a: drags.append(1) or 0.0085
+    h2._first_scale()
+    assert len(drags) == 2 and h2._measure_ref == pytest.approx(0.0085)   # reused: no drags
+    c = _j.loads((tmp_path / "scale.json").read_text())
+    c["t"] -= 7 * 3600                                       # too old: measured again
+    (tmp_path / "scale.json").write_text(_j.dumps(c))
+    h3, g3 = _hunter({})
+    g3.measure_scale = lambda *a: drags.append(1) or 0.0085
+    h3._first_scale()
+    assert len(drags) == 4

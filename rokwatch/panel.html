@@ -176,6 +176,16 @@
       45 s while one of yours is marching. His armies heading for any of them raise an alert.</p>
   </section>
 
+  <section id="res-box">
+    <h2><svg class="i"><use href="#i-chart"/></svg> Resources</h2>
+    <p id="res-sum" class="hint" style="margin:0">Shows once auto-gather is on and watching.</p>
+    <div class="facts" id="res-facts"></div>
+    <p class="hint" id="res-next"></p>
+    <div id="res-sent"></div>
+    <p class="hint">"Counts as" compares resources by what a resource point gives (stone 3/4 of food and
+      wood, gold 1/3): the lowest one gets the next free troop.</p>
+  </section>
+
   <section id="act-box" style="grid-column:1/-1">
     <h2><svg class="i"><use href="#i-chart"/></svg> Activity: when is he online?</h2>
     <p id="act-now" style="margin:0">-</p>
@@ -505,6 +515,25 @@ async function setFocus(id, k, v) {
     body: JSON.stringify({ id, [k]: v }) })).json();
   focus[id] = r.focus; toast(v ? 'On for army #' + id : 'Off for army #' + id, 'good'); refresh();
 }
+function drawRes(g, helped) {
+  const fmt = v => v >= 1e6 ? (v / 1e6).toFixed(2) + 'M' : v >= 1e3 ? Math.round(v / 1e3) + 'K' : String(v);
+  const helpTxt = helped ? ` Alliance helped ${helped} time${helped > 1 ? 's' : ''}.` : '';
+  if (!g || !g.storage) {
+    $('res-sum').textContent = (g ? 'Reading your storage...' : 'Shows once auto-gather is on and watching.') + helpTxt;
+    $('res-facts').innerHTML = ''; $('res-next').textContent = ''; $('res-sent').innerHTML = '';
+    return;
+  }
+  const K = ['food', 'wood', 'stone', 'gold'], low = g.next;
+  $('res-sum').textContent = `Your storage at ${g.storage_at}.` + helpTxt;
+  facts($('res-facts'), K.map(k => [k[0].toUpperCase() + k.slice(1) + (k === low ? ' (lowest)' : ''),
+    fmt(g.storage[k]) + (k === 'stone' || k === 'gold' ? ` (counts as ${fmt(g.balanced[k])})` : '')]));
+  $('res-next').textContent = g.paused_min ? `Auto-gather paused for ${g.paused_min} min (the watcher pulled a troop back).`
+    : `Next free troop goes for ${low}` + (g.next_brings ? ` (about +${fmt(g.next_brings)} when it's back)` : '')
+      + `: the highest-level free point within ${g.radius} tiles of ${g.centre[0]},${g.centre[1]}.`;
+  $('res-sent').innerHTML = (g.sent || []).slice().reverse().map(x =>
+    `<div class="detail">${esc(x.time)}: a troop to the level ${esc(x.level || '?')} ${esc(x.kind)} at ` +
+    `<a class="xy" onclick="jumpTo(${+x.xy[0]}, ${+x.xy[1]})">${esc(x.xy[0])},${esc(x.xy[1])}</a></div>`).join('');
+}
 function drawMine(tr) {
   if (!tr.length) { $('mine-sum').textContent = 'Not checked yet (or none of your troops are out).'; $('mine-list').innerHTML = ''; return; }
   $('mine-sum').textContent = `${tr.length} out`;
@@ -802,6 +831,7 @@ async function refresh() {
   focus = st.focus || {};
   drawArmies(st.armies || [], st.radar);
   drawMine(st.my_troops || []);
+  drawRes(st.gather, st.helped || 0);
   const lg = $('log'), atEnd = lg.scrollTop + lg.clientHeight >= lg.scrollHeight - 5;
   lg.textContent = st.log.join('\n'); if (atEnd) lg.scrollTop = lg.scrollHeight;
   if (st.look && st.look.time !== lastLook) {

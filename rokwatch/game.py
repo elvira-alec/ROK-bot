@@ -1041,7 +1041,12 @@ class Game:
             xy = last
         self.close_popups()
         self._cam = None                           # the camera moved: read it again next time
-        return {"xy": xy, "exact": exact} if xy else None
+        if not xy:
+            return None
+        # the picture right here (box closed), for the guard's check on this troop
+        f2 = self.frame()
+        c2 = screen.camera_coords(f2)
+        return {"xy": xy, "exact": exact, "frame": f2, "cam": (c2[1], c2[2]) if c2 else None}
 
     def troop_location(self, slot) -> tuple | None:
         """Select a troop; returns (x, y) of where it's gathering (from the info box)."""

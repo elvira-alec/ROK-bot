@@ -959,3 +959,22 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
     pictures get the red eye / swords check. Anything coming -> auto-gather stops at once
     (`AutoGather.threat`), the alerts go out with the round, the watcher takes over
     (recall + 10 min pause). ~0.16 s per picture.
+38. **v1.32 (user's notes after running it):**
+    - start-up drags: the map scale is saved (scale_cache.json: axes, measure ref, the
+      calibration + zoom gap it belongs to) and reused for 6 h - no right-and-back drags.
+    - troops visited twice at the start: `troop_spot` now returns the picture where the jump
+      landed; `update_my_troops(guard=True)` runs the guard's check on it and stamps
+      `_checked_at[troop-N]`; `guard_my_troops` skips spots checked in the last minute.
+    - drag fling (~30% of drags glided on after release): the move eases out over 0.3 s and
+      holds still 0.25 s before the release (`DesktopWindow.drag`).
+    - ~5 s before MARCH: the orange MARCH button is found by colour (`gather.find_march_button`,
+      3 ms; finds nothing on the queue screens, so never the queue's March for a troop that's
+      out) and pressed at once; the load is read afterwards from the picture already taken.
+    - alliance help: the handshake bubble over the Alliance button is pressed whenever it shows
+      (`screen.find_help_bubble`, template rokwatch/hud/help.png matched at 1200 px wide:
+      0.93-0.99 on real bubbles, <= 0.55 elsewhere; checked every round, at most every 15 s).
+    - auto-gather: a point whose level plate can't be read is still a candidate (ranked as 4.5:
+      the user saw a level 6 cropland skipped) - tapping it shows the real level.
+    - panel "Resources": storage (refreshed every 10 min by a quick zoom in: the bar only shows
+      at the close zoom), what stone / gold count as, the next pick and what it brings, recent
+      sends, alliance helps.

@@ -292,7 +292,7 @@ class Panel:
             "can_self_update": updater.can_self_update(),
             "phase": st.phase, "message": st.message, "round": st.round,
             "last_site": st.last_site, "alerts": st.alerts, "look": st.look,
-            "armies": st.armies, "radar": st.radar, "my_troops": st.my_troops, "focus": {str(k): v for k, v in st.focus.items()},
+            "armies": st.armies, "radar": st.radar, "my_troops": st.my_troops, "gather": st.gather, "helped": st.helped, "focus": {str(k): v for k, v in st.focus.items()},
             "snaps": snapshots.listing(limit=24),
             "progress": st.progress, "doing": st.doing, "trace": __import__("rokwatch.trace", fromlist=["TRACE"]).TRACE.status(),
             "live": self.live_id(),

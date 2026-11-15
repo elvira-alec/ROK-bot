@@ -62,6 +62,8 @@ class Status:
     progress: list | None = None                 # [done, total] of the current job
     doing: str = ""                              # what it's doing right now (short)
     my_troops: list = field(default_factory=list)  # your armies: state, where, speed
+    gather: dict | None = None                    # auto-gather: storage, next pick, sends
+    helped: int = 0                               # alliance help presses this session
 
 
 class Worker:
@@ -576,6 +578,8 @@ class Worker:
             self.status.armies = hunter.tracker.summary()
             self.status.radar = hunter.tracker.map_info()
             self.status.my_troops = hunter.my_troops_summary()
+            self.status.gather = hunter.gather.summary() if hunter.gather else None
+            self.status.helped = getattr(hunter, "helped", 0)
             self._maybe_sample_quick()
         hunter.on_progress = prog
         hunter.focus = self.status.focus          # the panel's per-army choices, live

@@ -88,6 +88,28 @@ def pick_kinds(storage: dict, n: int, load: float = 450_000) -> list:
     return out
 
 
+def find_march_button(frame):
+    """Centre of the troop window's orange MARCH button (bottom right of the window, next to
+    the blue MAX), or None. By colour: quick."""
+    import cv2
+    import numpy as np
+    H, W = frame.shape[:2]
+    x0, y0 = int(0.38 * W), int(0.55 * H)
+    hsv = cv2.cvtColor(frame[y0:int(0.95 * H), x0:int(0.88 * W)], cv2.COLOR_BGR2HSV)
+    m = ((hsv[..., 0] >= 10) & (hsv[..., 0] <= 30) & (hsv[..., 1] > 150) & (hsv[..., 2] > 190)).astype(np.uint8)
+    n, _, st, cent = cv2.connectedComponentsWithStats(m)
+    best = None
+    for i in range(1, n):
+        x, y, w, h, a = st[i]
+        if 0.08 * W < w < 0.25 * W and 0.04 * H < h < 0.12 * H and a > 0.55 * w * h:
+            if best is None or a > best[1]:
+                best = (i, a)
+    if best is None:
+        return None
+    cx, cy = cent[best[0]]
+    return int(x0 + cx), int(y0 + cy)
+
+
 # ------------------------------------------------------------------ reading a point's box
 
 def read_point(texts):
@@ -188,6 +210,8 @@ class AutoGather:
         self._scan = (0.0, [])                          # (when, points seen by the last scan)
         self._scan_taken = []                           # tiles tried since that scan
         self.threat = False                             # the watcher saw something: stop
+        self.storage, self.storage_at = None, 0.0       # your storage, last read (panel stats)
+        self.sent = []                                  # recent sends (panel): time, kind, level, xy
 
     def _watch(self, frame, cam=None) -> bool:
         """The watcher's checks on a picture auto-gather took anyway (so it isn't blind while
@@ -207,6 +231,41 @@ class AutoGather:
                 log.warning("gather: something's coming - stopping auto-gather, the watcher takes over")
             self.threat = True
         return self.threat
+
+    def read_storage_now(self):
+        """Your storage from the top bar (only shown at the close zoom): two reads must agree.
+        Kept for the panel. None if it couldn't be read."""
+        time.sleep(0.5)
+        prev = None
+        for _ in range(8):
+            cur = read_storage(self.game.frame())
+            if cur and cur == prev:
+                self.storage, self.storage_at = cur, time.time()
+                return cur
+            prev = cur
+            time.sleep(0.35)
+        return None
+
+    def refresh_storage(self):
+        """For the panel's numbers between sends: zoom in a moment, read, zoom back out."""
+        try:
+            if self.hunter.zoom_close():
+                self.read_storage_now()
+        finally:
+            self.hunter.zoom_out()
+        self.storage_at = max(self.storage_at, time.time())     # (don't retry at once if it failed)
+
+    def summary(self):
+        """For the panel: storage, what each counts as, the next pick, recent sends."""
+        b = balanced(self.storage) if self.storage else {}
+        nxt = min(KINDS, key=lambda k: (b.get(k, float("inf")), KINDS.index(k))) if b else None
+        return {"storage": self.storage,
+                "storage_at": time.strftime("%H:%M", time.localtime(self.storage_at)) if self.storage else None,
+                "balanced": {k: round(v) for k, v in b.items()},
+                "next": nxt, "next_brings": round(self.load * RATIO[nxt]) if nxt else None,
+                "centre": list(self.centre), "radius": self.radius,
+                "paused_min": max(0, round((self.paused_until - time.time()) / 60)),
+                "sent": self.sent[-6:], "last": self.last}
 
     def pause(self, minutes=10):
         self.paused_until = time.time() + minutes * 60
@@ -246,17 +305,9 @@ class AutoGather:
         try:
             storage = None
             # the bar fades in after zooming in from the map (read straight away it was empty),
-            # and a number can be missed: keep reading for up to 3 s
-            # ...and a decimal point can be lost ('1.1M' read as '11M'): two reads must agree
-            time.sleep(0.5)
-            prev = None
-            for _ in range(8):
-                cur = read_storage(self.game.frame())
-                if cur and cur == prev:
-                    storage = cur
-                    break
-                prev = cur
-                time.sleep(0.35)
+            # a number can be missed, a decimal point lost ('1.1M' read as '11M'): two reads
+            # must agree
+            storage = self.read_storage_now()
             if not storage:
                 log.info("gather: couldn't read your storage")
                 return done
@@ -294,10 +345,12 @@ class AutoGather:
             if (stop and stop()) or tried >= 4 or self.threat:
                 break
             tried += 1
-            self.say(f"Auto-gather: checking the level {level} {kind} point near {tile[0]:.0f},{tile[1]:.0f}")
+            self.say(f"Auto-gather: checking the level {level or '?'} {kind} point near {tile[0]:.0f},{tile[1]:.0f}")
             res, xy = self.try_estimate(tile, kind)
             if res == "sent":
                 self._scan_taken.append(tile)
+                self.sent.append({"time": time.strftime("%H:%M"), "kind": kind, "level": level,
+                                  "xy": list(xy or (round(tile[0]), round(tile[1])))})
                 log.info("gather: sent a troop to the level %s %s at %s", level, kind, xy)
                 return xy or (round(tile[0]), round(tile[1]))
             if res == "no troop":
@@ -324,8 +377,10 @@ class AutoGather:
         out = []
         for p in self._scan[1]:
             t = p["tile"]
-            if p["kind"] != kind or p["taken"] or not p["level"]:
+            if p["kind"] != kind or p["taken"]:
                 continue
+            # level plate unreadable: still a candidate (a level 6 cropland was missed that way,
+            # user 2026-11-15) - ranked just under the known 5s; tapping it shows the real level
             if any(math.dist(t, q) < 1.5 for q in self._scan_taken):
                 continue
             if any(until > now and math.dist(t, xy) <= 2 for xy, until in self.book.black.items()):
@@ -333,8 +388,8 @@ class AutoGather:
             out.append((t, p["level"]))
         # inside the radius first (best first); then anything else the scan saw (its views
         # reach a little past the radius) - better than sending nothing
-        out.sort(key=lambda tl: (math.dist(tl[0], self.centre) > self.radius, -tl[1],
-                                 math.dist(tl[0], self.centre)))
+        out.sort(key=lambda tl: (math.dist(tl[0], self.centre) > self.radius,
+                                 -(tl[1] if tl[1] else 4.5), math.dist(tl[0], self.centre)))
         return out
 
     def _scan_area(self, stop=None):
@@ -501,10 +556,12 @@ class AutoGather:
             f = self.game.frame()
             H, W = f.shape[:2]
             r = region(W, H) if region else None
-            hits = [t for t in screen.read_text(f, r) if re.search(rx, t.text, re.I)]
+            texts = screen.read_text(f, r)
+            hits = [t for t in texts if re.search(rx, t.text, re.I)]
             if hits:
+                self._last_texts = texts
                 return hits[0], f
-            time.sleep(0.25)
+            time.sleep(0.15)
         return None, None
 
     def _dispatch(self):
@@ -517,13 +574,25 @@ class AutoGather:
             self.game.close_popups()
             return "no troop"
         self.game.b.click(*t.center)
-        m, f = self._find_text(r"^march|marchar", None, timeout=4.0)
-        if not m:
+        # only the troop window's bottom (MARCH and the load sit there), read once: reading the
+        # whole screen twice took ~5 s before MARCH was pressed (user, 2026-11-15)
+        bottom = lambda W, H: (int(0.38 * W), int(0.55 * H), int(0.47 * W), int(0.38 * H))   # noqa: E731
+        # the orange MARCH button by its colour (a text read took 1-2 s each on this PC)
+        btn, f, end = None, None, time.time() + 4.0
+        while time.time() < end:
+            f = self.game.frame()
+            btn = find_march_button(f)
+            if btn:
+                break
+            time.sleep(0.1)
+        if not btn:
             log.warning("gather: the troop screen didn't open")
             self.game.b.press("Escape")
             return "failed"
-        try:
-            texts = screen.read_text(f)
+        time.sleep(0.15)                                 # the game's filled in the troops
+        self.game.b.click(*btn)
+        try:                                             # the load, from the picture taken
+            texts = screen.read_text(f, bottom(f.shape[1], f.shape[0]))
             ld = next((t for t in texts if re.search(r"load|carga", t.text, re.I)), None)
             if ld:
                 v = parse_amount(re.sub(r"(?i)load|carga|[:：]", "", ld.text)) or next(
@@ -533,9 +602,10 @@ class AutoGather:
                     self.load = float(v)
         except Exception:
             pass
-        self.game.b.click(*m.center)
-        time.sleep(1.0)
-        still, _ = self._find_text(r"^march|marchar", None, timeout=0.6)
+        time.sleep(0.3)
+        if find_march_button(self.game.frame()):
+            time.sleep(0.6)                              # (still closing?)
+        still = find_march_button(self.game.frame())
         if still:
             log.warning("gather: MARCH didn't go")
             self.game.b.press("Escape")
