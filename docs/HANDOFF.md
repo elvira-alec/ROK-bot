@@ -1058,3 +1058,8 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
     (no RECALL text for marching troops) - found by the two blue hexagons beside it
     (`screen.find_uturn_icon`: the camera lags behind a moving troop, a fixed spot missed).
     Live: auto-gather sent to the level 6 wood (179,370) and a level 4 stone; both recalled.
+48. **v1.44:** a troop's load is remembered (gather_points.json "load"; a 450K guess after each
+    restart made `enough_left` skip a partly mined level 6 that would fill a troop). Scan
+    points of one kind within 2.5 tiles are one point (the higher level kept) - one level 6
+    stone came out as 4 and 3 "gone" checks cost 20 s each; spots within 2.5 tiles of one
+    already checked are skipped.

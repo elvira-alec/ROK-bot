@@ -158,13 +158,14 @@ class PointBook:
         self.points = {tuple(map(int, k.split(","))): v for k, v in (d.get("points") or {}).items()}
         self.black = {tuple(map(int, k.split(","))): v for k, v in (d.get("black") or {}).items()}
         self.surveyed = d.get("surveyed") or {}
+        self.load = d.get("load")                       # a troop's load, from the last send
 
     def save(self):
         try:
             self.path.write_text(json.dumps({
                 "points": {f"{x},{y}": v for (x, y), v in self.points.items()},
                 "black": {f"{x},{y}": v for (x, y), v in self.black.items()},
-                "surveyed": self.surveyed}, indent=1))
+                "surveyed": self.surveyed, "load": self.load}, indent=1))
         except OSError:
             pass
 
@@ -203,7 +204,9 @@ class AutoGather:
         self.every = float(g.get("check_seconds", 60))
         self.survey_every = float(g.get("survey_minutes", 30)) * 60
         self.book = PointBook()
-        self.load = float(g.get("load", 450_000))       # learned from the MARCH screen
+        # a troop's load: read on the MARCH screen at each send and remembered (a 450K guess
+        # after a restart made it skip a partly mined level 6 that would have filled a troop)
+        self.load = float(self.book.load or g.get("load", 450_000))
         self._at = 0.0
         self.paused_until = 0.0                         # after the watcher pulled a troop back
         self.last = ""                                  # what it did last (for the panel)
@@ -391,6 +394,8 @@ class AutoGather:
                 return None
             self.book.blacklist(xy or (round(tile[0]), round(tile[1])), 120 if res in ("taken", "not full") else 30)
             self._scan_taken.append(tile)
+            if xy:
+                self._scan_taken.append(tuple(xy))       # (the real spot: its doubles are skipped too)
             log.info("gather: the %s near %.0f,%.0f skipped (%s)", kind, tile[0], tile[1], res)
         self.book.save()
         if not cands:
@@ -415,9 +420,10 @@ class AutoGather:
                 continue
             # level plate unreadable: still a candidate (a level 6 cropland was missed that way,
             # user 2026-11-15) - ranked just under the known 5s; tapping it shows the real level
-            if any(math.dist(t, q) < 1.5 for q in self._scan_taken):
-                continue
-            if any(until > now and math.dist(t, xy) <= 2 for xy, until in self.book.black.items()):
+            if any(math.dist(t, q) < 2.5 for q in self._scan_taken):
+                continue                               # checked already (or right next to one)
+            if any(until > now and math.dist(t, xy) <= 2 and not self._worth_now(xy)
+                   for xy, until in self.book.black.items()):
                 continue
             out.append((t, p["level"]))
         # inside the radius first (best first); then anything else the scan saw (its views
@@ -459,7 +465,13 @@ class AutoGather:
                 break                                    # a threat: the watcher takes over
             for p in screen.find_resource_points(f):
                 t = to_tile(cam[1:3], axes, p["mark"], f.shape)
-                if any(math.dist(t, q["tile"]) < 1.5 for q in found):
+                # the same point seen from two views lands a tile or two apart: one level 6
+                # stone came out as 4 "points", 3 of them then checked for nothing (20 s each)
+                twin = next((q for q in found
+                             if math.dist(t, q["tile"]) < (2.5 if q["kind"] == p["kind"] else 1.5)), None)
+                if twin is not None:
+                    if twin["kind"] == p["kind"] and (p["level"] or 0) > (twin["level"] or 0):
+                        twin.update(level=p["level"], taken=p["taken"])     # keep the higher level
                     continue
                 found.append({**p, "tile": t})
         log.info("gather: scan of %d views in %.0f s: %s", len(views), time.time() - t0,
@@ -558,6 +570,13 @@ class AutoGather:
             return "failed"
         g.b.click(*btn.center)
         return self._dispatch()
+
+    def _worth_now(self, xy):
+        """A point skipped as 'not full' whose reserves (as last read) do fill a troop now that
+        the real load is known - it's not skipped any more (a 450K load guess had blacklisted
+        a partly mined level 6 stone for 2 hours)."""
+        p = self.book.points.get(tuple(xy))
+        return bool(p and not p.get("gatherer") and self.enough_left(p))
 
     def enough_left(self, p):
         """A touched point is still worth it when what's left fills a troop (the user: the
@@ -674,6 +693,8 @@ class AutoGather:
                      and u.box[0] > ld.box[0] and parse_amount(u.text)), None)
                 if v and v > 1000:
                     self.load = float(v)
+                    self.book.load = self.load
+                    self.book.save()
         except Exception:
             pass
         time.sleep(0.3)
