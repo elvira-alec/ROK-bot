@@ -261,6 +261,17 @@
       <option value="threatened">Only the ones at the threatened spot</option>
       <option value="all">All gathering troops</option>
     </select>
+    <h3 style="margin:14px 0 4px;font-size:14px">Auto-gather</h3>
+    <label class="toggle"><input type="checkbox" id="gather_on" onchange="save()"> Keep my troops gathering
+      <span class="hint">(runs with Watch or Guard; clicks in the game)</span></label>
+    <p class="hint" style="margin:4px 0">Free troops are sent to the resource you're lowest on, counted by what a
+      resource point gives (stone 3/4 of food, gold 1/3), to the highest-level full, free point around the spot
+      below. If an army comes at a gathering troop, the watcher pulls it back.</p>
+    <div class="row">
+      <label for="gather_x" style="margin:0">Search around X</label><input id="gather_x" type="number" style="width:80px" onchange="save()">
+      <label for="gather_y" style="margin:0">Y</label><input id="gather_y" type="number" style="width:80px" onchange="save()">
+      <label for="gather_radius" style="margin:0">radius (tiles)</label><input id="gather_radius" type="number" min="3" max="40" style="width:70px" onchange="save()">
+    </div>
     <div class="facts" id="progress"></div>
   </section>
 
@@ -697,6 +708,9 @@ async function loadSettings() {
   $('close_with_page').checked = s.close_with_page !== false;
   $('update_every').value = s.update_every || 30; $('update_every_v').textContent = $('update_every').value;
   $('recall_scope').value = s.recall_scope === 'all' ? 'all' : 'threatened';
+  $('gather_on').checked = !!s.gather_on;
+  $('gather_x').value = (s.gather_centre || [173, 378])[0]; $('gather_y').value = (s.gather_centre || [173, 378])[1];
+  $('gather_radius').value = s.gather_radius || 12;
   sites = (s.sites || []).map(x => ({ ...x }));
   drawSites();
 }
@@ -711,7 +725,9 @@ async function save() {
       ...($('hunt_x').value && $('hunt_y').value ? { hunt_city: [$('hunt_x').value, $('hunt_y').value] } : {}),
       panel_on_phone: $('panel_on_phone').checked, snap_every: $('snap_every').value,
       update_every: $('update_every').value, close_with_page: $('close_with_page').checked,
-      recall_scope: $('recall_scope').value }) });
+      recall_scope: $('recall_scope').value, gather_on: $('gather_on').checked,
+      ...($('gather_x').value && $('gather_y').value ? { gather_centre: [$('gather_x').value, $('gather_y').value] } : {}),
+      gather_radius: $('gather_radius').value }) });
   await loadSettings(); refresh(); loadPhone();
   toast('Saved', 'good');
 }

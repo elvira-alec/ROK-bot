@@ -1,0 +1,272 @@
+[
+ {
+  "cam": [
+   180,
+   372
+  ],
+  "view": 2,
+  "mark": [
+   863,
+   412
+  ],
+  "xy": [
+   180,
+   374
+  ],
+  "kind": "gold",
+  "level": 6,
+  "taken": true
+ },
+ {
+  "cam": [
+   180,
+   372
+  ],
+  "view": 2,
+  "mark": [
+   809,
+   709
+  ],
+  "xy": [
+   179,
+   370
+  ],
+  "kind": "wood",
+  "level": 6,
+  "taken": false
+ },
+ {
+  "cam": [
+   166,
+   386
+  ],
+  "view": 3,
+  "mark": [
+   736,
+   522
+  ],
+  "xy": [
+   164,
+   386
+  ],
+  "kind": "food",
+  "level": 4,
+  "taken": false
+ },
+ {
+  "cam": [
+   180,
+   386
+  ],
+  "view": 4,
+  "mark": [
+   805,
+   486
+  ],
+  "xy": [
+   179,
+   387
+  ],
+  "kind": "wood",
+  "level": 4,
+  "taken": false
+ },
+ {
+  "cam": [
+   180,
+   386
+  ],
+  "view": 4,
+  "mark": [
+   1054,
+   444
+  ],
+  "xy": [
+   181,
+   387
+  ],
+  "kind": "wood",
+  "level": 4,
+  "taken": false
+ },
+ {
+  "cam": [
+   173,
+   392
+  ],
+  "view": 5,
+  "mark": [
+   1199,
+   620
+  ],
+  "xy": [
+   176,
+   391
+  ],
+  "kind": "wood",
+  "level": 3,
+  "taken": false
+ },
+ {
+  "cam": [
+   173,
+   392
+  ],
+  "view": 5,
+  "mark": [
+   1496,
+   282
+  ],
+  "xy": [
+   177,
+   394
+  ],
+  "kind": "wood",
+  "level": 3,
+  "taken": false
+ },
+ {
+  "cam": [
+   173,
+   392
+  ],
+  "view": 5,
+  "mark": [
+   714,
+   746
+  ],
+  "xy": [
+   171,
+   389
+  ],
+  "kind": "food",
+  "level": 4,
+  "taken": false
+ },
+ {
+  "cam": [
+   173,
+   392
+  ],
+  "view": 5,
+  "mark": [
+   1390,
+   692
+  ],
+  "xy": [
+   177,
+   390
+  ],
+  "kind": "stone",
+  "level": 6,
+  "taken": false
+ },
+ {
+  "cam": [
+   173,
+   366
+  ],
+  "view": 6,
+  "mark": [
+   1236,
+   504
+  ],
+  "xy": [
+   176,
+   366
+  ],
+  "kind": "stone",
+  "level": 4,
+  "taken": false
+ },
+ {
+  "cam": [
+   173,
+   366
+  ],
+  "view": 6,
+  "mark": [
+   1376,
+   749
+  ],
+  "xy": [
+   177,
+   363
+  ],
+  "kind": "stone",
+  "level": 4,
+  "taken": false
+ },
+ {
+  "cam": [
+   186,
+   380
+  ],
+  "view": 8,
+  "mark": [
+   432,
+   572
+  ],
+  "xy": [
+   183,
+   379
+  ],
+  "kind": "food",
+  "level": 3,
+  "taken": false
+ },
+ {
+  "cam": [
+   186,
+   380
+  ],
+  "view": 8,
+  "mark": [
+   689,
+   821
+  ],
+  "xy": [
+   184,
+   377
+  ],
+  "kind": "food",
+  "level": 3,
+  "taken": false
+ },
+ {
+  "cam": [
+   186,
+   380
+  ],
+  "view": 8,
+  "mark": [
+   954,
+   761
+  ],
+  "xy": [
+   186,
+   377
+  ],
+  "kind": "wood",
+  "level": 3,
+  "taken": false
+ },
+ {
+  "cam": [
+   186,
+   380
+  ],
+  "view": 8,
+  "mark": [
+   1037,
+   519
+  ],
+  "xy": [
+   187,
+   380
+  ],
+  "kind": "wood",
+  "level": 3,
+  "taken": false
+ }
+]

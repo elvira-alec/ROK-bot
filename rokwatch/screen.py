@@ -1563,3 +1563,162 @@ def read_gatherer(texts: list[Text], frame_h: int):
             name = m.group(1).strip()
             break
     return name, coords
+
+
+# ---------------------------------------------------------------- resource points (searching zoom)
+#
+# Auto-gather reads, at the searching zoom, what each resource point is from its white icon
+# (corn = food, rolled log = wood, cut stone = stone, ringed coin = gold, diamond = gems) and
+# its level from the digit on its plate - no zooming in to find the best one. Both by shape:
+# small black-and-white masks in rokwatch/resources/ (icon-<kind>-N.png, digit-<n>-N.png),
+# compared by overlap, the same way as the troop badges.
+
+RES_DIR = __import__("pathlib").Path(__file__).with_name("resources")
+_res_t = None
+_ICON = 32
+_DIGIT = (16, 20)
+
+
+def _res_templates():
+    global _res_t
+    if _res_t is None:
+        _res_t = {"icon": {}, "digit": {}}
+        for p in sorted(RES_DIR.glob("*.png")) if RES_DIR.exists() else []:
+            part = p.stem.split("-")
+            if len(part) < 2 or part[0] not in _res_t:
+                continue
+            m = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+            _res_t[part[0]].setdefault(part[1], []).append((m > 127).astype(np.float32))
+    return _res_t
+
+
+def _fit(mask, size):
+    """The mask's lit part, cropped to its box and scaled to `size` (w, h), keeping the
+    shape's proportions (padded)."""
+    ys, xs = np.nonzero(mask)
+    if len(xs) < 6:
+        return None
+    m = mask[ys.min():ys.max() + 1, xs.min():xs.max() + 1].astype(np.uint8) * 255
+    h, w = m.shape
+    W, H = size
+    s = min(W / w, H / h)
+    m = cv2.resize(m, (max(1, int(round(w * s))), max(1, int(round(h * s)))), interpolation=cv2.INTER_AREA)
+    out = np.zeros((H, W), np.uint8)
+    y0, x0 = (H - m.shape[0]) // 2, (W - m.shape[1]) // 2
+    out[y0:y0 + m.shape[0], x0:x0 + m.shape[1]] = m
+    return (out > 100).astype(np.float32)
+
+
+def resource_icon_mask(frame, mark):
+    """The white icon just above a level plate, as a 32x32 mask (None if there's no white
+    icon: barbarians are red, forts red, cities have no white glyph there)."""
+    H, W = frame.shape[:2]
+    mx, my = int(mark[0]), int(mark[1])
+    y0, y1 = max(0, int(my - 0.068 * H)), max(0, int(my - 0.012 * H))
+    x0, x1 = max(0, int(mx - 0.032 * H)), min(W, int(mx + 0.032 * H))
+    c = frame[y0:y1, x0:x1]
+    if c.size == 0:
+        return None
+    hsv = cv2.cvtColor(c, cv2.COLOR_BGR2HSV)
+    v, s = hsv[..., 2].astype(np.int16), hsv[..., 1]
+    bg = int(np.median(v))
+    white = (s < 70) & (v > max(140, bg + 45))           # day and night (dimmer, bluish)
+    red = (((hsv[..., 0] < 10) | (hsv[..., 0] > 170)) & (s > 120) & (v > 100)).mean()
+    if white.mean() < 0.04 or red > 0.02:
+        return None
+    n, lab, st, _ = cv2.connectedComponentsWithStats(white.astype(np.uint8))
+    keep = np.zeros_like(white)
+    for i in range(1, n):
+        if st[i, 4] >= 0.15 * st[1:, 4].max():             # the glyph's pieces, not specks
+            keep |= lab == i
+    return _fit(keep, (_ICON, _ICON))
+
+
+def plate_digit_mask(frame, mark):
+    """The dark digit(s) on a level plate as a 16x20 mask, and how many digits (by width)."""
+    H, W = frame.shape[:2]
+    mx, my = int(mark[0]), int(mark[1])
+    c = frame[max(0, int(my - 0.0095 * H)):int(my + 0.0095 * H), max(0, int(mx - 0.012 * H)):int(mx + 0.012 * H)]
+    if c.size == 0:
+        return None, 0
+    g = cv2.cvtColor(c, cv2.COLOR_BGR2GRAY)
+    dark = g < min(110, int(np.percentile(g, 70)) - 60)
+    n, lab, st, _ = cv2.connectedComponentsWithStats(dark.astype(np.uint8))
+    # the digit's strokes: tall enough, and not touching the crop's left/right edge (the
+    # plate's dark outline does)
+    parts = [i for i in range(1, n) if st[i, 4] >= 6 and st[i, 3] >= 0.4 * c.shape[0]
+             and st[i, 0] > 0 and st[i, 0] + st[i, 2] < c.shape[1]]
+    if not parts:
+        return None, 0
+    keep = np.isin(lab, parts)
+    return _fit(keep, _DIGIT), len(parts)
+
+
+def _best(mask, temps, floor):
+    best, score = None, 0.0
+    for name, ts in temps.items():
+        for t in ts:
+            inter = float((mask * t).sum())
+            union = float(np.maximum(mask, t).sum())
+            iou = inter / union if union else 0.0
+            if iou > score:
+                best, score = name, iou
+    return (best, score) if score >= floor else (None, score)
+
+
+def resource_kind(frame, mark):
+    m = resource_icon_mask(frame, mark)
+    if m is None:
+        return None
+    return _best(m, _res_templates()["icon"], 0.5)[0]
+
+
+def plate_level(frame, mark):
+    """The level on a resource point's plate (1-8), None if unreadable or two digits."""
+    m, n = plate_digit_mask(frame, mark)
+    if m is None or n != 1:
+        return None
+    d = _best(m, _res_templates()["digit"], 0.55)[0]
+    return int(d) if d and d.isdigit() else None
+
+
+def gather_badge_on(frame, mark):
+    """A gathering badge (round green / red / blue disc with a pickaxe) right above this
+    point's icon: someone is gathering there. Only a round, filled blob counts: the blue
+    territory border passing above an icon is a thin line (it marked free points 'taken')."""
+    H, W = frame.shape[:2]
+    mx, my = int(mark[0]), int(mark[1])
+    c = frame[max(0, int(my - 0.15 * H)):max(0, int(my - 0.03 * H)), max(0, int(mx - 0.045 * H)):min(W, int(mx + 0.045 * H))]
+    if c.size == 0:
+        return False
+    hsv = cv2.cvtColor(c, cv2.COLOR_BGR2HSV)
+    h, s_, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
+    masks = [((h >= 45) & (h <= 85) & (s_ > 130) & (v > 110)),                       # green: you
+             (((h < 8) | (h > 172)) & (s_ > 150) & (v > 140)),                         # red: others
+             ((h >= 95) & (h <= 115) & (s_ > 150) & (v > 150))]                        # blue: alliance
+    lo, hi = 0.018 * H, 0.06 * H
+    for m in masks:
+        m = cv2.morphologyEx(m.astype(np.uint8) * 255, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+        cs, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for cnt in cs:
+            x, y, w, hh = cv2.boundingRect(cnt)
+            # the disc's outline (the white pickaxe inside doesn't matter): round and filled
+            if (lo <= w <= hi and lo <= hh <= hi and 0.7 <= w / hh <= 1.4
+                    and cv2.contourArea(cnt) >= 0.55 * w * hh):
+                return True
+    return False
+
+
+def find_resource_points(frame):
+    """Resource points on a searching-zoom picture: [{'mark', 'kind', 'level', 'taken'}]."""
+    H, W = frame.shape[:2]
+    out = []
+    for mk in level_marks(frame, hud=False):
+        if not (0.1 * W < mk[0] < 0.86 * W and 0.12 * H < mk[1] < 0.84 * H):
+            continue
+        kind = resource_kind(frame, mk)
+        if not kind:
+            continue
+        out.append({"mark": (int(mk[0]), int(mk[1])), "kind": kind, "level": plate_level(frame, mk),
+                    "taken": gather_badge_on(frame, mk)})
+    return out

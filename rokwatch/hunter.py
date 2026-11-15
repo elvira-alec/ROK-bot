@@ -762,6 +762,11 @@ class Hunter:
         self._city_check_at = 0.0
         self._city_missing = 0
         self._city_missing_since = None
+        # auto-gather (gather.py): keeps free troops gathering; the watcher overrides it
+        self.gather = None
+        if (cfg.get("gather") or {}).get("enabled"):
+            from .gather import AutoGather
+            self.gather = AutoGather(game, self, cfg)
         self.attackers: list = []                 # armies that came at you, followed home
         self._attacker_id = 1000
         self.log_path = Path(log_path)
@@ -1619,9 +1624,13 @@ class Hunter:
                 alerts.append(Alert(f"guard-{key}", title, msg, urgent=True))
                 if s.kind != "scout":
                     self._add_attacker(s, pos, label)
-                if (self.auto_recall and s.kind != "scout" and key.startswith("troop")
+                if ((self.auto_recall or self.gather) and s.kind != "scout" and key.startswith("troop")
                         and f"guard-recall-{key}" not in self._recalled):
+                    # auto-gather on: the watcher always pulls an attacked gatherer back, and
+                    # auto-gather waits before sending troops out again
                     self._recalled.add(f"guard-recall-{key}")
+                    if self.gather:
+                        self.gather.pause(10)
                     report = self.game.recall_all([pos])
                     alerts.append(Alert(f"recall-guard-{key}-{time.time()}", "Auto-recall", "; ".join(report),
                                         urgent=True, cooldown=False))
@@ -2210,6 +2219,21 @@ class Hunter:
             busy = True
         if self.method == "zoomed_out" and self.mode != "sweep":
             self._guard_alerts += self._check_his_city(now)
+        if (self.gather and self.method == "zoomed_out" and self.mode != "sweep"
+                and not self.attackers and self.gather.due(now)):
+            from .game import Stopped, GamePaused
+            try:
+                did = self.gather.step(stop)
+            except (Stopped, GamePaused):
+                raise
+            except Exception as e:
+                log.warning("gather: failed (%s)", e, exc_info=True)
+                did = []
+                self.game.close_popups()
+            if did:
+                log.info("gather: sent %s", "; ".join(did))
+                self._spots_at = 0.0               # read the troop list again (new gatherers)
+            busy = True
         if self.mode == "guard" and not busy:
             # nothing to look at this round: keep an eye on the game's red eye / swords
             # (they show on any screen) without hammering the game
@@ -2324,8 +2348,10 @@ class Hunter:
                      "farm_left": "His farmer is heading home"}[kind]
             alerts.append(Alert(f"hunt-{kind}-{now}-{info.get('id', '')}", title, msg,
                                 urgent=urgent, cooldown=False))
-            if urgent and kind in ("army_out", "hostile", "army_close") and self.auto_recall \
+            if urgent and kind in ("army_out", "hostile", "army_close") and (self.auto_recall or self.gather) \
                     and f"recalled-{info.get('id')}" not in self._recalled:
+                if self.gather:
+                    self.gather.pause(10)        # the watcher overrides auto-gather
                 self._recalled.add(f"recalled-{info.get('id')}")
                 pos = dict(self.my_sites).get(info["target"])
                 report = self.game.recall_all([pos] if pos else None)

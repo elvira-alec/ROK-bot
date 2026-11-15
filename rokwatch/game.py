@@ -1065,7 +1065,11 @@ class Game:
         return None
 
     def recall(self, slot) -> bool:
-        """Select a troop and press RECALL. True if the button was pressed and went away."""
+        """Select a troop and press RECALL. True if the button was pressed and went away.
+        At the close zoom: selecting a gathering troop there opens its point's box with the
+        RECALL button; at the searching zoom it only moves the camera (live 2026-11-15)."""
+        if (self.zoom_cfg or {}).get("gap"):
+            self.to_close()
         self.b.click(*slot.portrait)
         self.wait()
         v = self.look()

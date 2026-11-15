@@ -20,6 +20,7 @@ PyInstaller.__main__.run([
     "--add-data", f"rokwatch/version.txt{sep}rokwatch",
     "--add-data", f"rokwatch/badges{sep}rokwatch/badges",
     "--add-data", f"rokwatch/hud{sep}rokwatch/hud",
+    "--add-data", f"rokwatch/resources{sep}rokwatch/resources",   # auto-gather: icon / digit shapes
     *sys.argv[1:],
 ])
 # the updater: a small separate program (one file, no console) that installs new versions

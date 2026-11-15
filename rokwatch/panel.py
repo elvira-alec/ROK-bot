@@ -47,6 +47,9 @@ EDITABLE = {
     "hunt_city": "hunt.city",
     "update_every": "updates.check_minutes",
     "close_with_page": "close_with_page",
+    "gather_on": "gather.enabled",
+    "gather_centre": "gather.centre",
+    "gather_radius": "gather.radius",
 }
 
 
@@ -208,6 +211,8 @@ class Panel:
         if not out["hunt_city"]:                      # older setups: his city from the places list
             enemy = next((x for x in (_get(cfg, "patrol.sites") or []) if x.get("kind") == "enemy"), None)
             out["hunt_city"] = [enemy["x"], enemy["y"]] if enemy else None
+        out["gather_centre"] = out["gather_centre"] or [173, 378]       # the altar
+        out["gather_radius"] = out["gather_radius"] or 12
         se = _get(cfg, "snapshots.every_minutes")
         out["snap_every"] = 10 if se is None else se
         return out
@@ -219,8 +224,18 @@ class Panel:
                 v = data[k]
                 if k == "sites":
                     v = _clean_sites(v)
-                elif k in ("auto_recall", "panel_on_phone", "close_with_page"):
+                elif k in ("auto_recall", "panel_on_phone", "close_with_page", "gather_on"):
                     v = bool(v)
+                elif k == "gather_centre":
+                    try:
+                        v = [int(v[0]), int(v[1])]
+                    except (TypeError, ValueError, IndexError, KeyError):
+                        continue
+                elif k == "gather_radius":
+                    try:
+                        v = max(3, min(40, int(float(v))))
+                    except (TypeError, ValueError):
+                        v = 12
                 elif k == "recall_scope":
                     v = "all" if v == "all" else "threatened"
                 elif k == "game_window_zoom_key":
