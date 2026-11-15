@@ -228,3 +228,19 @@ def test_a_scout_alerts_but_does_not_stop_auto_gather():
     a.hunter, a.threat = Hn(), False
     assert a._watch(np.zeros((10, 10, 3), np.uint8), (180, 380)) is False
     assert a.hunter._guard_alerts[0].title.startswith("A SCOUT")          # still alerted
+
+
+def test_touched_point_with_enough_left_is_used():
+    # it skipped a level 6 stone with ~295K left for a level 4 (user, 2026-11-15)
+    a = gather.AutoGather.__new__(gather.AutoGather)
+    a.load = 159_090
+    assert a.enough_left({"kind": "stone", "reserves": 295_115})
+    assert not a.enough_left({"kind": "stone", "reserves": 40_000})          # nearly mined out
+    assert not a.enough_left({"kind": "gold", "reserves": None})
+
+
+def test_caravan_is_not_an_army():
+    # a grey diamond with a blue diamond badge under it: a caravan (user's screenshot)
+    from rokwatch import screen
+    f = _cv2.imread(str(_Path(__file__).parent / "real_screens" / "caravan" / "caravan_on_canvas.png"))
+    assert screen.find_map_icons(f) == []

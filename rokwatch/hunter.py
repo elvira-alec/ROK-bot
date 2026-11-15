@@ -1659,7 +1659,26 @@ class Hunter:
                 continue
             self._checked_at[key] = time.time()
             alerts += self._guard_seen(seen, label, pos, key)
+            if self.gather and time.time() - self.gather.storage_at > 60:
+                # at your base: zoom in for your resources and the alliance-help bubble
+                self.gather.refresh_storage()
         return alerts
+
+    def _recall_troop(self, index):
+        """Recall one of your troops by its place in the troop list (the one under threat),
+        not 'whatever is gathering near that spot' (that found nothing and recalled nothing)."""
+        try:
+            panel = self.game.troops()
+            slot = next((s for s in (panel[2] if panel else []) if s.index == index), None)
+            if slot is None:
+                return [f"troop {index + 1}: not in the troop list"]
+            ok = self.game.recall(slot)
+            return [f"troop {index + 1}: {'recalled' if ok else 'recall FAILED'}"]
+        except Exception as e:
+            log.warning("recall failed: %s", e)
+            return [f"troop {index + 1}: recall FAILED"]
+        finally:
+            self.game._at = None
 
     def guard_sites(self, stop=None) -> list[Alert]:
         """Part of every guard round, after the troops: a look at your own places (your city):
@@ -1715,10 +1734,10 @@ class Hunter:
                 # auto-gather on: the watcher always pulls an attacked gatherer back, and
                 # auto-gather waits before sending troops out again
                 self._recalled.add(f"guard-recall-{key}")
-                if self.gather:
-                    self.gather.pause(10)
-                report = self.game.recall_all([pos])
+                report = self._recall_troop(int(key.split("-")[1]) - 1)
                 if any("recalled" in r for r in report):          # (nothing done: no alert)
+                    if self.gather:
+                        self.gather.pause(10)      # the watcher overrides auto-gather
                     alerts.append(Alert(f"recall-guard-{key}-{time.time()}", "Auto-recall", "; ".join(report),
                                         urgent=True, cooldown=False))
                 else:
@@ -2345,7 +2364,7 @@ class Hunter:
             busy = True
         if self.method == "zoomed_out" and self.mode != "sweep":
             self._guard_alerts += self._check_his_city(now)
-        if (self.gather and self.method == "zoomed_out" and self.mode != "sweep"
+        if (self.gather and self.method == "zoomed_out" and self.mode not in ("sweep", "guard")
                 and not self.attackers and now - self.gather.storage_at > 60):
             # quick zoom in about once a minute, after the troop rounds: your resources for the
             # panel, and the alliance-help bubble (it shows when zoomed in) - also while busy:

@@ -99,7 +99,10 @@ def test_scouts_never_alert_from_the_guard():
     assert h.guard_my_troops() == []
 
 def test_auto_recall_that_troop_once():
-    h, _ = _hunter({(200, 410): [seen((206, 404), ((212, 398), (200, 411)))]}, recall=True)
+    import types
+    h, g = _hunter({(200, 410): [seen((206, 404), ((212, 398), (200, 411)))]}, recall=True)
+    g.troops = lambda: (3, 4, [types.SimpleNamespace(index=i, state="gathering") for i in range(3)])
+    g.recall = lambda slot: True
     al = h.guard_my_troops()
     assert any(a.title == "Auto-recall" for a in al)
     al2 = h.guard_my_troops()
@@ -302,3 +305,16 @@ def test_guard_round_includes_your_base():
     h.mode = "guard"
     h.guard_sites()
     assert g.panned == [(210, 422)]
+
+
+def test_recall_goes_to_the_threatened_troop():
+    # 'no troops recalled because none were under threat' - it searched near the spot and found
+    # nothing; now the threatened troop itself is selected and recalled
+    import types
+    h, g = _hunter({(200, 410): [seen((206, 404), ((212, 398), (200.8, 410.6)))]}, recall=True)
+    recalled = []
+    slots = [types.SimpleNamespace(index=i, state="gathering") for i in range(3)]
+    g.troops = lambda: (3, 4, slots)
+    g.recall = lambda slot: recalled.append(slot.index) or True
+    al = h.guard_my_troops()
+    assert recalled == [0] and any(a.title == "Auto-recall" for a in al)

@@ -1271,7 +1271,37 @@ def find_map_icons(frame: np.ndarray):
         # scouts are grey-lavender: 0.00). Live, one came out as an "army" and was zoomed in on
         # 5 times. Red hostile armies are their own kind ('hostile'), not touched here.
         found = [(c, k) for c, k in found if k not in ("army", "scout") or _red_share(frame, c) < 0.25]
+        # a caravan: a grey diamond with a solid blue diamond badge just under it (the user,
+        # 2026-11-15 - it was taken for an army marching at a troop). Real armies have none.
+        found = [(c, k) for c, k in found if k not in ("army", "scout") or not is_caravan(frame, c)]
     return found
+
+
+def is_caravan(frame, c):
+    """A blue diamond badge 0.025-0.085 H under this diamond (measured: centre +0.057 H, about
+    0.04 H across): it's a caravan, not an army."""
+    H, W = frame.shape[:2]
+    x, y = int(c[0]), int(c[1])
+    r = frame[max(0, int(y + 0.025 * H)):min(H, int(y + 0.09 * H)), max(0, int(x - 0.03 * H)):min(W, int(x + 0.03 * H))]
+    if r.size == 0:
+        return False
+    hsv = cv2.cvtColor(r, cv2.COLOR_BGR2HSV)
+    m = ((hsv[..., 0] >= 95) & (hsv[..., 0] <= 115) & (hsv[..., 1] > 120) & (hsv[..., 2] > 120)).astype(np.uint8)
+    k = max(3, int(0.01 * H)) | 1                  # the white symbol inside splits the blue: join it
+    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((k, k), np.uint8))
+    n, _, st, cent = cv2.connectedComponentsWithStats(m)
+    y0, x0 = max(0, int(y + 0.025 * H)), max(0, int(x - 0.03 * H))
+    for i in range(1, n):
+        bx, by, bw, bh, area = st[i]
+        cx, cy = x0 + cent[i][0], y0 + cent[i][1]
+        # the measured badge: 0.031 H square, diamond-shaped (fills 0.56 of its box - a round
+        # button fills ~0.8), centred under the diamond (dx -0.6 px), 0.057 H below it. A loose
+        # 'any blue blob below' took real armies near the blue troop panel for caravans.
+        if (0.022 * H <= bw <= 0.045 * H and 0.022 * H <= bh <= 0.045 * H and 0.75 <= bw / bh <= 1.33
+                and 0.42 <= area / (bw * bh) <= 0.68 and abs(cx - x) <= 0.012 * H
+                and 0.042 * H <= cy - y <= 0.072 * H):
+            return True
+    return False
 
 
 def _red_share(frame, c, r=0.012):

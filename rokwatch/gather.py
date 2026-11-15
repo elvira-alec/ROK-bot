@@ -513,7 +513,7 @@ class AutoGather:
         if p.get("gatherer"):
             g.close_popups()
             return "taken"
-        if not p.get("full"):
+        if not p.get("full") and not self.enough_left(p):
             g.close_popups()
             return "not full"
         btn = next((t for t in texts if re.fullmatch(r"gather|recolectar|recoger", t.text.strip(), re.I)), None)
@@ -522,6 +522,13 @@ class AutoGather:
             return "failed"
         g.b.click(*btn.center)
         return self._dispatch()
+
+    def enough_left(self, p):
+        """A touched point is still worth it when what's left fills a troop (the user: the
+        point of 'untouched only' was not to go to a nearly empty one - it skipped a level 6
+        stone with ~295K left for a level 4)."""
+        need = self.load * RATIO.get(p.get("kind"), 1.0) * 1.1
+        return bool(p.get("reserves")) and p["reserves"] >= need
 
     def surveyed_fresh(self, now=None):
         """The area around the centre was surveyed recently, at least this wide."""

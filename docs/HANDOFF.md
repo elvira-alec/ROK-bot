@@ -1028,3 +1028,16 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
     game's red eye / border alert scouting - the user's rule); a red "hostile" diamond counts only
     on a march line ending at your troop / base (a lone red diamond 6 tiles off was a false
     alarm); "Auto-recall" alerts only when something was actually recalled.
+45. **v1.41 (user, 2026-11-15):**
+    - caravans (a grey diamond with a blue diamond badge 0.057 H under it, any colour) aren't
+      armies: `screen.is_caravan`, strict (badge size 0.022-0.045 H, diamond-shaped fill 0.42-0.68,
+      centred under it) - a loose version dropped 31/216 real armies near the blue troop panel
+      in test_scouts_and_armies_never_swapped.
+    - recall targets the threatened troop by its place in the troop list (`_recall_troop`); the
+      old "anything gathering near that spot" found nothing. Auto-gather pauses only after a
+      real recall (a false alert used to pause it 10 min: a free troop sat at home for rounds).
+    - a touched point is used when what's left fills a troop (`enough_left`: reserves >= load x
+      ratio x 1.1) - it skipped a level 6 stone with ~295K left for a level 4.
+    - guard mode: the storage zoom (and help-bubble check) happens at the base look each round.
+    - test_hunter::test_zoomed_out_ignores_other_players_marching failed twice only inside the
+      22-min full run (PC under load), passes alone and within its file: timing-sensitive.
