@@ -204,6 +204,16 @@ class Game:
         # the search button press is ignored now and then (the bar stays open with the right
         # numbers, live 2026-11-15): pressed again until the bar closes
         for attempt in range(3):
+            if attempt:
+                # a second press only while the bar is really still open and the camera hasn't
+                # moved: a press after it closed lands on the map, and a tap on an icon there
+                # zooms the game in (scans went on at the close zoom, 2026-11-15)
+                f3 = self.frame()
+                if not screen.search_go_button(f3):
+                    return True
+                c3 = screen.camera_coords(f3)
+                if c3 and abs(c3[1] - x) <= 2 and abs(c3[2] - y) <= 2:
+                    return True
             self.b.click(*go)
             end = time.time() + 0.9
             while time.time() < end:

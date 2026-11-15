@@ -934,6 +934,16 @@ class Hunter:
             view = View(frame, [], None, True)
             view.icons_loaded = False
             return view, []
+        if (self.method == "zoomed_out" and self.game._at == "sweep"
+                and screen.view_level(frame) == "close"):
+            # zoomed in by something (a tap that landed on an icon): every look after it was
+            # at the wrong zoom - back out and over the spot again
+            log.info("hunt: the view was zoomed in; back to the searching zoom")
+            self.game._at = None
+            self.zoom_out()
+            if expected:
+                self.game.pan_to(int(round(expected[0])), int(round(expected[1])), self.axes)
+            frame = self.game.fresh_frame()
         # ...but the icons pop in a moment after the map is drawn: a look straight after a
         # jump saw bare ground, his farms "weren't there" and he "stopped gathering" (both
         # false alerts in the 2026-11-14 run). Wait for the level plates to show.

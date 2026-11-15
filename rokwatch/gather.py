@@ -228,6 +228,8 @@ class AutoGather:
         self._scan = (0.0, [])                          # (when, points seen by the last scan)
         self._scan_taken = []                           # tiles tried since that scan
         self._checked = set()                           # exact X:Y boxes read since that scan
+        from .persp import Persp
+        self.persp = Persp()                            # map pixel -> tile, perspective-correct
         self.pending = []                               # points troops were sent to (watched)
         self.threat = False                             # the watcher saw something: stop
         self.storage, self.storage_at = None, 0.0       # your storage, last read (panel stats)
@@ -401,7 +403,9 @@ class AutoGather:
                 break
             self.say(f"Auto-gather: checking the level {level or '?'} {kind} point near {tile[0]:.0f},{tile[1]:.0f}")
             self._last_box = None
+            self._need = max([level or 0] + [lv for _, lv in cands if lv])
             res, xy = self.try_estimate(tile, kind, level)
+            self._need = 0
             self._keep_miss(tile, kind, level)
             if res == "double":
                 # the scan saw one point twice (views land ~3 tiles apart): not a try
@@ -413,7 +417,7 @@ class AutoGather:
                 real = (getattr(self, "_last_box", None) or {}).get("level")
                 self._scan_taken.append(tile)
                 log.info("gather: the %s near %.0f,%.0f is level %s, not %s", kind, tile[0], tile[1], real, level)
-                at = next((i for i, (_, lv) in enumerate(cands) if (lv or 4.5) < real), len(cands))
+                at = next((i for i, (_, lv) in enumerate(cands) if (lv or 0.5) < real), len(cands))
                 cands.insert(at, ((float(xy[0]), float(xy[1])), real))
                 continue
             tried += 1
@@ -458,8 +462,11 @@ class AutoGather:
             t = p["tile"]
             if p["kind"] != kind or p["taken"]:
                 continue
-            # level plate unreadable: still a candidate (a level 6 cropland was missed that way,
-            # user 2026-11-15) - ranked just under the known 5s; tapping it shows the real level
+            if not p["level"]:
+                # no level plate: an alliance resource point (a small shield on the icon; the
+                # user: "they don't count") - night plates cut off at the top are read again
+                # lower by find_resource_points, so a real point has its level
+                continue
             # only the checked spot itself (the scan's estimate is ~1 tile off): a wider skip
             # threw away full points next to a checked one (the user: "don't miss a single one")
             if any(math.dist(t, q) < 1.3 for q in self._scan_taken):
@@ -473,7 +480,10 @@ class AutoGather:
             out.append((t, p["level"]))
         # highest level first, wherever the scan saw it (the user: "always the highest ones";
         # inside-the-radius first sent level 3s before level 4s just past it); nearer breaks ties
-        out.sort(key=lambda tl: (-(tl[1] if tl[1] else 4.5), math.dist(tl[0], self.centre)))
+        # an unread plate goes last: those are icons without a plate (a small shield on them,
+        # seen at night - nothing to tap at the close zoom either); a cut-off night plate is
+        # read again lower now (find_resource_points)
+        out.sort(key=lambda tl: (-(tl[1] if tl[1] else 0.5), math.dist(tl[0], self.centre)))
         return out
 
     def _scan_area(self, stop=None):
@@ -502,6 +512,19 @@ class AutoGather:
             while not screen.icons_drawn(f) and time.time() < end:
                 time.sleep(0.1)
                 f = g.frame()
+            if screen.view_level(f) != "patrol":
+                # zoomed in by something (a tap that landed on an icon): back out and look
+                # again - every view after it was read at the wrong zoom (2026-11-15)
+                log.info("gather: scan view %d wasn't at the searching zoom; zooming out", k + 1)
+                g._at = None
+                h.zoom_out()
+                if not g.pan_to(int(round(x)), int(round(y)), axes):
+                    continue
+                f = g.fresh_frame()
+                time.sleep(0.3)
+                f = g.frame()
+                if screen.view_level(f) != "patrol":
+                    continue
             cam = g.read_camera(f)
             if not cam:
                 continue
@@ -509,14 +532,17 @@ class AutoGather:
             if self._watch(f, cam[1:3]):
                 break                                    # a threat: the watcher takes over
             pts = self._settled_points(g, f)
-            here = [(p, to_tile(cam[1:3], axes, p["mark"], f.shape)) for p in pts]
+            exact = self.persp.usable(axes, f.shape)
+            here = [(p, self.persp.to_tile(cam[1:3], axes, p["mark"], f.shape)) for p in pts]
             # the same point seen from two views lands a tile or two apart: one level 6 stone
             # came out as 4 "points", 3 of them then checked for nothing (20 s each). But two
             # points on one picture are two real points, and an earlier point is the double of
             # one point here at most (nearest pairs first) - a full neighbour is never merged away
             pairs = sorted(((math.dist(t, q["tile"]), i, j) for i, (p, t) in enumerate(here)
                             for j, q in enumerate(found[:before])
-                            if math.dist(t, q["tile"]) < (2.5 if q["kind"] == p["kind"] else 1.5)))
+                            # (perspective-correct positions: a double lands within ~1.8 tiles,
+                            # and a real neighbour 2 tiles off stays a separate point)
+                            if math.dist(t, q["tile"]) < ((1.8 if exact else 2.5) if q["kind"] == p["kind"] else 1.2)))
             twin_of, used = {}, set()
             for _, i, j in pairs:
                 if i not in twin_of and j not in used:
@@ -529,7 +555,8 @@ class AutoGather:
                         twin.update(level=p["level"], taken=p["taken"])     # keep the higher level
                     continue
                 mx, my = p["mark"]
-                found.append({**p, "tile": t, "crop": (f[max(0, my - 30):my + 30, max(0, mx - 40):mx + 40].copy(),
+                found.append({**p, "tile": t, "cam": tuple(cam[1:3]), "shape": f.shape[:2],
+                              "crop": (f[max(0, my - 30):my + 30, max(0, mx - 40):mx + 40].copy(),
                                                        (max(0, mx - 40), max(0, my - 30)), f.shape[:2])})
         log.info("gather: scan of %d views in %.0f s: %s", len(views), time.time() - t0,
                  ", ".join(f"{k} {sum(1 for p in found if p['kind'] == k)}" for k in KINDS))
@@ -574,11 +601,23 @@ class AutoGather:
         if not h.zoom_close():
             return "failed", None
         ac = h._axes_close()
-        # a typed jump: exact (a drag went by the camera position from before the scan, stale
-        # after zooming in, and missed the point)
-        if not g.goto(int(round(tile[0])), int(round(tile[1]))):
-            return "failed", None
-        time.sleep(0.4)
+        # already on screen (points sit close together): tapped where it is, no jump (~3 s)
+        jumped = True
+        if self._close_off is not None:
+            f0 = g.frame()
+            cam0 = g.read_camera(f0)
+            if cam0 and screen.view_level(f0) == "close":
+                H0, W0 = f0.shape[:2]
+                co = self._close_off
+                q0 = to_screen(cam0[1:3], ac, (tile[0] - co[0], tile[1] - co[1]), f0.shape)
+                if 0.2 * W0 < q0[0] < 0.78 * W0 and 0.22 * H0 < q0[1] < 0.78 * H0:
+                    jumped = False
+        # else a typed jump: exact (a drag went by the camera position from before the scan,
+        # stale after zooming in, and missed the point)
+        if jumped:
+            if not g.goto(int(round(tile[0])), int(round(tile[1]))):
+                return "failed", None
+            time.sleep(0.4)
         tried = []
         seen_plates = False
         for _ in range(5):
@@ -589,7 +628,14 @@ class AutoGather:
             cam = g.read_camera(f)
             if not cam:
                 return "failed", None
-            q = to_screen(cam[1:3], ac, tile, f.shape)
+            # the close-zoom projection is off by a steady ~2.5 tiles (perspective); learnt from
+            # every box read (its exact X:Y vs where it was tapped) and taken off
+            co = self._close_off or (0.0, 0.0)
+            q = to_screen(cam[1:3], ac, (tile[0] - co[0], tile[1] - co[1]), f.shape)
+
+            def real_tile(m):
+                t = to_tile(cam[1:3], ac, m, f.shape)
+                return (t[0] + co[0], t[1] + co[1])
             # the scan's spot can be a tile or so off (live: a level 6 wood 150 px from the middle,
             # a barbarian fort right in it - the old 0.14 H search tapped the fort, found nothing
             # else and called the point "gone"): look up to ~1.5 tiles round, the plate with the
@@ -601,7 +647,7 @@ class AutoGather:
             # the projection at the close zoom can be ~2.5 tiles off (live: a level 6 stone
             # 0.37 H from it, called "gone" untapped): round it or round the middle (the jump
             # centres the point)
-            mid = (W / 2, H / 2)
+            mid = (W / 2, H / 2) if jumped else q          # (no jump: the point isn't centred)
 
             def off(m):
                 return min(math.dist(m, q), math.dist(m, mid))
@@ -609,6 +655,10 @@ class AutoGather:
                       if off(m) < 0.42 * H and 0.1 * W < m[0] < 0.86 * W and 0.12 * H < m[1] < 0.86 * H]
             plates = [m for m in plates
                       if not any(math.dist(to_tile(cam[1:3], ac, m, f.shape), t) < 1.0 for t in tried)]
+            if self._close_off is not None and self._checked:
+                # plates this scan already checked (the scan lists a point twice when two views
+                # place it ~3 tiles apart): not tapped again
+                plates = [m for m in plates if not any(math.dist(real_tile(m), xy) < 1.2 for xy in self._checked)]
             if not plates:
                 break
             def rank(m):
@@ -616,11 +666,12 @@ class AutoGather:
                 return (0 if (level and lv == level) else 1, off(m))
             m = min(plates, key=rank)
             tried.append(to_tile(cam[1:3], ac, m, f.shape))
-            for off in (0.0, 0.02):
-                texts, box = self._tap_box(m[0], m[1] - off * H)
+            for dy in (0.0, 0.02):
+                texts, box = self._tap_box(m[0], m[1] - dy * H)
                 if not texts:
                     continue
                 p = read_point(texts)
+                self._learn_close_off(p, to_tile(cam[1:3], ac, m, f.shape))
                 if p and p.get("kind") == kind:
                     if p.get("xy") and tuple(p["xy"]) in self._checked:
                         g.close_popups()
@@ -667,7 +718,10 @@ class AutoGather:
         g = self.game
         self.book.note(p)
         self._last_box = p
-        if level and p.get("level") and p["level"] < level:
+        # never lower than the scan's level for it, nor than any candidate still waiting (an
+        # unread plate went first and its box said 3 with 4s waiting - 2026-11-15)
+        need = max(level or 0, getattr(self, "_need", 0) or 0)
+        if need and p.get("level") and p["level"] < need:
             # the scan misread the plate (a level 3 wood read as 5 - a troop went to a 3 with
             # 4s, 5s around, the user 2026-11-15): back in the queue at its real level
             g.close_popups()
@@ -686,6 +740,30 @@ class AutoGather:
         return self._dispatch()
 
 
+    _close_off = None              # (dx, dy) tiles: box X:Y minus the close-zoom projection
+
+    def _learn_close_off(self, p, projected):
+        if not p or not p.get("xy"):
+            return
+        d = (p["xy"][0] - projected[0], p["xy"][1] - projected[1])
+        if math.hypot(*d) > 6:
+            return                                   # a far-off read: not the plate tapped
+        o = self._close_off
+        self._close_off = d if o is None else (0.6 * o[0] + 0.4 * d[0], 0.6 * o[1] + 0.4 * d[1])
+
+    def _learn_pair(self, tile, kind, box):
+        """The candidate's box gave its exact X:Y: one more sample for the map positions."""
+        if not box.get("xy") or box.get("kind") != kind or math.dist(box["xy"], tile) > 2.5:
+            return
+        q = min((q for q in self._scan[1] if q["kind"] == kind and q.get("cam")),
+                key=lambda q: math.dist(q["tile"], tile), default=None)
+        if q is None or math.dist(q["tile"], tile) > 0.5:
+            return
+        try:
+            self.persp.add_pair(q["mark"], q["shape"], q["cam"], box["xy"], self.hunter.axes)
+        except Exception:
+            log.debug("gather: couldn't learn the map position", exc_info=True)
+
     MISS_DIR = Path("plate_misses")
 
     def _keep_miss(self, tile, kind, level):
@@ -693,9 +771,12 @@ class AutoGather:
         true level (more real samples for the digit references - the user: "keep on doing it
         till it never fails")."""
         box = getattr(self, "_last_box", None) or {}
+        self._learn_pair(tile, kind, box)
         real = box.get("level")
         if not real or real == level:
             return
+        if not box.get("xy") or math.dist(box["xy"], tile) > 2.5:
+            return                                   # a neighbour's box, not this plate's
         q = min((q for q in self._scan[1] if q["kind"] == kind and q.get("crop") is not None),
                 key=lambda q: math.dist(q["tile"], tile), default=None)
         if q is None or math.dist(q["tile"], tile) > 0.5:

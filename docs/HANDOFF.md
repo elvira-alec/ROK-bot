@@ -1104,3 +1104,27 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
     plates. When a box shows a different level than the map read, the plate picture is kept in
     `plate_misses/` (png + json with the true level) - add those to the references.
     (4) A point a troop is on its way to is never picked again (`pending`).
+53. **v1.49:** a box lower than the scan's level OR lower than any candidate still waiting is
+    not sent (`AutoGather._need`; live: an unread plate - ranked 4.5 - went first, its box said
+    3 with 4s waiting). Night stone deposits: the icon merges with the plate's top edge, the
+    mark lands on the edge and the digit is cut - an unread plate is read again a little
+    lower (`find_resource_points`; `tests/real_screens/plates_night_edge`).
+    Also in 1.49: a scan view (and a guard look) found at the close zoom is zoomed back out and
+    looked at again (something zoomed the game in mid-scan; every later view was read at the
+    wrong zoom - seen twice in captures). The search button is pressed again only while the
+    bar is really still open and the camera hasn't moved (a late second press lands on the
+    map; a tap on an icon there zooms in). References retrained with 105 more plates
+    (0 wrong in all three cross-checks); 348 labelled plates in tests/real_screens/plates.
+    Also in 1.49 (overnight run, 2026-11-15): plate references retrained on ~1400 hand-checked
+    plate pictures incl. 750 night ones (each digit scored by its best two references; 0 wrong
+    in five cross-checks, every set held out in turn); plate-less icons (a small shield, seen
+    at night) rank last. **Perspective-correct scan positions** (`rokwatch/persp.py`): the
+    flat conversion was 1.1 tiles off (median, up to 4 near the edges) - points were listed two
+    or three times, and a full level 5 food 2 tiles from a level 4 was merged away and never
+    tried. A homography (picture fractions -> tile offset) fitted on the user's game
+    (`resources/persp_default.json`): 0.49 median, refitted live from auto-gather's own box
+    reads (`persp.json` in the app folder). Doubles merge within 1.8 tiles now (2.5 before).
+    At the close zoom the steady offset between projection and box X:Y is learnt
+    (`_close_off`) - taps aim at the right plate, plates already checked this scan aren't
+    tapped again. Dry runs (all four kinds, day and night): highest level first every time,
+    no box below the scan's level sent, ~7 s per point.

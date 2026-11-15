@@ -27,3 +27,18 @@ def test_every_real_plate_reads_right():
             wrong.append((l["file"], got))
     assert not wrong, wrong
     assert len(labels) >= 200 and sum(1 for l in labels if l["level"] == 5) >= 4
+
+
+def test_night_stone_plate_on_its_top_edge():
+    """At night the stone icon merges with the plate's top edge: the plate was found on the
+    edge and read as nothing (an unread level 3 stone went first, 2026-11-15)."""
+    import math
+    d = Path(__file__).parent / "real_screens" / "plates_night_edge"
+    for l in json.loads((d / "labels.json").read_text()):
+        c = cv2.imread(str(d / l["file"]))
+        H, W = l["size"]
+        f = np.zeros((H, W, 3), np.uint8)
+        x0, y0 = l["origin"]
+        f[y0:y0 + c.shape[0], x0:x0 + c.shape[1]] = c
+        pts = [p for p in screen.find_resource_points(f) if math.dist(p["mark"], l["mark"]) < 12]
+        assert pts and pts[0]["kind"] == l["kind"] and pts[0]["level"] == l["level"], (l, pts)

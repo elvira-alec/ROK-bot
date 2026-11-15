@@ -349,7 +349,7 @@ def _sender(results):
     def est(tile, kind, level):
         calls.append((tuple(round(v) for v in tile), level))
         res, xy, box_level = results.pop(0)
-        a._last_box = {"level": box_level}
+        a._last_box = {"level": box_level, "xy": xy}
         return res, xy
     a.try_estimate = est
     return a, calls
@@ -435,3 +435,22 @@ def test_misread_plate_is_kept(monkeypatch, tmp_path):
     monkeypatch.setattr(a, "scan", lambda kind, stop=None: [((187.5, 379.6), 5)])
     a.send_one("wood")
     assert any(p.name.endswith("_read5_true3.png") for p in tmp_path.iterdir())
+
+
+def test_box_below_a_waiting_candidate_is_not_sent():
+    """An unread plate went first; its box said 3 with level 4s still waiting: not sent."""
+    a, calls = _sender([("lower", (182, 374), 3), ("sent", (176, 364), 4)])
+    a.scan = lambda kind, stop=None: [((182.1, 373.7), None), ((176.0, 363.9), 4), ((150.5, 391.4), 3)]
+    assert a.send_one("stone") == (176, 364)
+    assert calls[0] == ((182, 374), None)
+
+
+def test_need_from_waiting_candidates():
+    a, _ = _sender([])
+
+    class G:
+        def close_popups(self):
+            pass
+    a.game, a._need = G(), 4
+    p = {"xy": (182, 374), "kind": "stone", "level": 3, "reserves": 354_375, "gatherer": None}
+    assert a._check_and_gather(p, [], None) == "lower"
