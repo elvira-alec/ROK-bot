@@ -543,30 +543,42 @@ function drawRadar(ar, radar) {
     + '<path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>';
   for (let i = 1; i < 6; i++) g += `<line x1="${i * 50}" y1="0" x2="${i * 50}" y2="300" stroke="#2a3550" stroke-width="0.5"/><line x1="0" y1="${i * 50}" x2="300" y2="${i * 50}" stroke="#2a3550" stroke-width="0.5"/>`;
   // your spots: each with its own dot and label. Ones on (nearly) the same tile get their dots
-  // spread a little around it, and labels that would land on each other move down a line
+  // stacked in a short column; a label that would land on another moves down a line (with a
+  // thin line back to its dot)
   const used = [];
-  const place = (px, py) => {
-    while (used.some(u => Math.abs(u[0] - px) < 50 && Math.abs(u[1] - py) < 10)) py += 10;
-    used.push([px, py]); return py;
+  // labels as boxes [left, right, y]: one that would overlap another moves down a line
+  const place = (px, py, text, end) => {
+    const w = 5 * text.length + 4, l = end ? px - w : px, r = end ? px : px + w;
+    while (used.some(u => u[0] < r && l < u[1] && Math.abs(u[2] - py) < 10)) py += 10;
+    used.push([l, r, py]); return py;
   };
   const spots = radar.mine.map(m => ({ ...m, px: X(m.x), py: Y(m.y) }));
-  spots.forEach((m, i) => {
-    const same = spots.filter(o => Math.abs(o.x - m.x) <= 2 && Math.abs(o.y - m.y) <= 2);
-    if (same.length > 1) {
-      const k = same.indexOf(m), ang = 2 * Math.PI * k / same.length;
-      m.dx = 7 * Math.cos(ang); m.dy = 7 * Math.sin(ang);
-    } else { m.dx = 0; m.dy = 0; }
-  });
+  // dots that would (nearly) touch on the map (within 20 px) are stacked in a short column from one
+  // point, each dot level with its own label - no lines needed for those
+  const piles = [];
+  for (const m of spots) {
+    const p0 = piles.find(q => Math.abs(q.px - m.px) < 20 && Math.abs(q.py - m.py) < 20);
+    if (p0) p0.items.push(m); else piles.push({ px: m.px, py: m.py, items: [m] });
+  }
+  for (const q of piles)
+    q.items.forEach((m, k) => {
+      m.dx = q.px - m.px;
+      m.dy = q.py - m.py + (k - (q.items.length - 1) / 2) * 10;
+    });
   if (radar.city) {
-    const py = place(X(radar.city[0]) + 9, Y(radar.city[1]) + 4);
+    const py = place(X(radar.city[0]) + 9, Y(radar.city[1]) + 4, 'his city', false);
     g += `<rect x="${X(radar.city[0]) - 6}" y="${Y(radar.city[1]) - 6}" width="12" height="12" rx="2" fill="#ef4d5a"/>`
        + `<text x="${X(radar.city[0]) + 9}" y="${py}" fill="#f3a0a7" font-size="9">his city</text>`;
   }
   for (const m of spots) {
     const cx = m.px + m.dx, cy = m.py + m.dy;
     const right = m.px > 210;                   // near the right edge: label on the left
-    const lx = right ? m.px - 12 : m.px + 12;
-    const py = place(lx, m.py + 4);
+    const lx = right ? cx - 9 : cx + 9;
+    const py = place(lx, cy + 4, m.label || m.name, right);
+    // a thin grey line from the dot to its label - only when the label had to move away
+    // from its dot (another label was in the way), so it's clear which label is whose
+    if (py !== cy + 4)
+      g += `<line x1="${cx}" y1="${cy}" x2="${right ? lx + 2 : lx - 2}" y2="${py - 3}" stroke="#6c7891" stroke-width="0.7"/>`;
     g += `<circle cx="${cx}" cy="${cy}" r="4.5" fill="#35c46a" stroke="#0f1420" stroke-width="1"/>`
        + `<text x="${lx}" y="${py}" fill="#9fe0b4" font-size="9"${right ? ' text-anchor="end"' : ''}>${esc(m.label || m.name)}</text>`;
   }

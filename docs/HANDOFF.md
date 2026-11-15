@@ -902,8 +902,10 @@ Fixed (each with a test that fails on the old code):
     - live: 10/10 jumps arrive, typically 2.4-2.8 s (was 8-19 s with retries / failures).
 34. **v1.27: panel map in guard mode** - "his city" was drawn on "my city" (guard mode centres
     on your city): `map_info` sends no city then. v1.28: every spot keeps its own dot and short
-    label ("troop 2") - NO grouping (user); dots on the same tile are spread a little around
-    it, labels that would overlap move down a line, near the right edge they go left of the dot.
+    label ("troop 2") - NO grouping (user). v1.29: dots within 20 px of each other on the
+    little map are stacked in a short column, each level with its own label; labels are
+    width-aware boxes, one that would overlap another moves down a line and gets a thin grey
+    line back to its dot; near the right edge labels go left of the dot.
     Idea from the user, not built: tapping a MARCHING commander makes the camera follow that
     troop - could be used to guard your marching troops (look around them as they move).
 
