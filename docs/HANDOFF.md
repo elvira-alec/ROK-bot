@@ -931,3 +931,25 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
     - Panel: "His armies" is now "Map"; in guard mode the line under it says it's guarding.
     - The online "tests" job had failed since v1.26 on tests/test_desktop.py (it expected the
       old instant click): updated.
+36. **Auto-gather (v1.30, user 2026-11-15)** - `rokwatch/gather.py`, panel switch + centre/radius.
+    RULES FROM THE USER (don't break):
+    - send ONLY troops that are home: GATHER -> "New Troop" (the plus) -> MARCH with whatever
+      the game fills in. **Never press MAX.** Never press the queue's "March" for a troop that's
+      already out (with 4/4 out, GATHER shows the queue with a GATHERING troop preselected).
+    - a troop always goes home to drop off its load before it goes out again: never redirect
+      a gathering/carrying troop (I once redirected one from gold to stone - wrong).
+    - only untouched points: reserves must equal the table (farms.FULL); a touched one is
+      skipped (blacklisted). The user sends to touched points by hand.
+    - balance by what points give: food = wood = 1, stone 0.75, gold 1/3; lowest first, each
+      troop's load counted in before choosing the next; nothing free of it -> next lowest.
+    - how: a scan at the SEARCHING zoom (fast, ~40 s for radius 12: 15 views) reads every
+      point's type from its white icon, level from its plate digit, taken from a round
+      green/red/blue badge (`screen.find_resource_points`, shapes in rokwatch/resources/,
+      built from labelled live samples in tests/real_screens/resources/). Then only the best
+      one: typed jump, nearest real plate tapped, box checked, sent. (Tapping every point to
+      survey took 9 min - the user said no; the game's own resource search only looks near
+      YOUR city.)
+    - closing a box drags the map: look again before the next tap (early "misses").
+    - the watcher overrides: an army aimed at a gathering troop -> recall it, auto-gather
+      paused 10 min.
+    - `Game.recall` zooms in first (selecting a troop at the searching zoom opens no box).
