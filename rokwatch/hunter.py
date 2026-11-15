@@ -693,9 +693,16 @@ class Tracker:
         return {"speed": round(speed, 1), "eta_min": round(eta, 1) if eta is not None else None}
 
     def map_info(self):
-        """For the panel's little map: his city and your spots."""
-        return {"city": [round(self.city[0]), round(self.city[1])],
-                "mine": [{"name": n, "x": round(p[0]), "y": round(p[1])} for n, p in self.my_sites]}
+        """For the panel's little map: his city (none in guard mode: the centre is then your
+        own city, and 'his city' was drawn on top of 'my city') and your spots, each with a
+        short label ('troop 2')."""
+        def short(n):
+            m = re.match(r"your troop (\d+)", n)
+            return f"troop {m.group(1)}" if m else n
+        return {"city": None if getattr(self, "guard_only", False)
+                else [round(self.city[0]), round(self.city[1])],
+                "mine": [{"name": n, "label": short(n), "x": round(p[0]), "y": round(p[1])}
+                         for n, p in self.my_sites]}
 
 # ---------------------------------------------------------------- the hunter
 
@@ -744,6 +751,7 @@ class Hunter:
         # "Guard my troops": no target - only your troops and city, and whoever comes at them.
         # Also what the watch falls back to when his city has gone from its spot (he moved).
         self.guard_only = bool(h.get("guard_only"))
+        self.tracker.guard_only = self.guard_only
         if self.guard_only:
             self.guard_every = min(self.guard_every or 60, 60)
             self.refresh_spots = min(self.refresh_spots, 300)
@@ -1772,6 +1780,7 @@ class Hunter:
         if self._city_missing < 3:
             return []
         self.city_moved, self.guard_only = True, True
+        self.tracker.guard_only = True
         self.guard_every = min(self.guard_every or 60, 60)
         self.tracker.armies = []
         mins = (now - self._city_missing_since) / 60

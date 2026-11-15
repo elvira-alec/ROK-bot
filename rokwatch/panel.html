@@ -533,7 +533,8 @@ function drawArmies(ar, radar) {
 function drawRadar(ar, radar) {
   const svg = $('radar');
   if (!radar) { svg.innerHTML = '<text x="150" y="150" text-anchor="middle" fill="#95a1b8" font-size="12">map shows once it\'s watching</text>'; return; }
-  const pts = [radar.city, ...radar.mine.map(m => [m.x, m.y]), ...ar.map(a => [a.x, a.y]), ...ar.filter(a => a.dest).map(a => a.dest)];
+  const pts = [...(radar.city ? [radar.city] : []), ...radar.mine.map(m => [m.x, m.y]), ...ar.map(a => [a.x, a.y]), ...ar.filter(a => a.dest).map(a => a.dest)];
+  if (!pts.length) { svg.innerHTML = ''; return; }
   let x0 = Math.min(...pts.map(p => p[0])), x1 = Math.max(...pts.map(p => p[0]));
   let y0 = Math.min(...pts.map(p => p[1])), y1 = Math.max(...pts.map(p => p[1]));
   const span = Math.max(x1 - x0, y1 - y0, 20) * 1.2, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
@@ -541,10 +542,34 @@ function drawRadar(ar, radar) {
   let g = '<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">'
     + '<path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>';
   for (let i = 1; i < 6; i++) g += `<line x1="${i * 50}" y1="0" x2="${i * 50}" y2="300" stroke="#2a3550" stroke-width="0.5"/><line x1="0" y1="${i * 50}" x2="300" y2="${i * 50}" stroke="#2a3550" stroke-width="0.5"/>`;
-  for (const m of radar.mine)
-    g += `<circle cx="${X(m.x)}" cy="${Y(m.y)}" r="5" fill="#35c46a"/><text x="${X(m.x) + 7}" y="${Y(m.y) + 4}" fill="#9fe0b4" font-size="9">${esc(m.name)}</text>`;
-  g += `<rect x="${X(radar.city[0]) - 6}" y="${Y(radar.city[1]) - 6}" width="12" height="12" rx="2" fill="#ef4d5a"/>`
-     + `<text x="${X(radar.city[0]) + 9}" y="${Y(radar.city[1]) + 4}" fill="#f3a0a7" font-size="9">his city</text>`;
+  // your spots: ones on (nearly) the same tile share one dot and one label ("troops 2, 3"),
+  // and labels that would land on each other are moved down a line
+  const groups = [];
+  for (const m of radar.mine) {
+    const g0 = groups.find(q => Math.abs(q.x - m.x) <= 2 && Math.abs(q.y - m.y) <= 2);
+    if (g0) g0.labels.push(m.label || m.name); else groups.push({ x: m.x, y: m.y, labels: [m.label || m.name] });
+  }
+  const used = [];
+  const place = (px, py) => {
+    while (used.some(u => Math.abs(u[0] - px) < 60 && Math.abs(u[1] - py) < 10)) py += 10;
+    used.push([px, py]); return py;
+  };
+  const label = labels => {
+    const tr = labels.filter(l => /^troop \d+$/.test(l)).map(l => l.split(' ')[1]);
+    const other = labels.filter(l => !/^troop \d+$/.test(l));
+    return [...other, ...(tr.length ? [(tr.length > 1 ? 'troops ' : 'troop ') + tr.join(', ')] : [])].join(' + ');
+  };
+  if (radar.city) {
+    const py = place(X(radar.city[0]) + 9, Y(radar.city[1]) + 4);
+    g += `<rect x="${X(radar.city[0]) - 6}" y="${Y(radar.city[1]) - 6}" width="12" height="12" rx="2" fill="#ef4d5a"/>`
+       + `<text x="${X(radar.city[0]) + 9}" y="${py}" fill="#f3a0a7" font-size="9">his city</text>`;
+  }
+  for (const q of groups) {
+    const right = X(q.x) > 210;                 // near the right edge: label on the left
+    const lx = right ? X(q.x) - 7 : X(q.x) + 7;
+    const py = place(lx, Y(q.y) + 4);
+    g += `<circle cx="${X(q.x)}" cy="${Y(q.y)}" r="5" fill="#35c46a"/><text x="${lx}" y="${py}" fill="#9fe0b4" font-size="9"${right ? ' text-anchor="end"' : ''}>${esc(label(q.labels))}</text>`;
+  }
   for (const a of ar) {
     const col = a.threat ? '#ef4d5a' : a.his ? '#3aa0ff' : '#95a1b8';
     if (a.trail && a.trail.length > 1)

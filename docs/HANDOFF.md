@@ -900,6 +900,12 @@ Fixed (each with a test that fails on the old code):
       and retypes only on the real mistake (`_boxes_wrong`: Y's number in the X box); presses
       the search button again while the bar stays open; waits 6 s for the camera (hotspot).
     - live: 10/10 jumps arrive, typically 2.4-2.8 s (was 8-19 s with retries / failures).
+34. **v1.27: panel map in guard mode** - "his city" was drawn on "my city" (guard mode centres
+    on your city): `map_info` sends no city then. Your spots on (nearly) the same tile share
+    one dot and a short label ("troops 1, 2, 3"); labels that would overlap move down a line;
+    near the right edge they go left of the dot.
+    Idea from the user, not built: tapping a MARCHING commander makes the camera follow that
+    troop - could be used to guard your marching troops (look around them as they move).
 
 Live result after 12-18 (7 min, his 4 farms out): every farm tracked the whole run (~250
 sightings each), 0 false alerts, 7-8 owner checks all answered first time, sweep ~40-80 s,
