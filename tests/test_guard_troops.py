@@ -83,11 +83,20 @@ def test_marches_going_elsewhere_or_standing_still_dont_alert():
     assert h.guard_my_troops() == []
 
 
-def test_red_diamond_near_a_troop_alerts():
+def test_red_diamond_alerts_only_on_a_line_ending_at_the_troop():
+    # a red diamond alone 6 tiles off raised a false alarm (live 2026-11-15): only one on a
+    # march line that ends at your troop counts
     h, _ = _hunter({(220, 430): [seen((224, 427), kind="hostile")]})
+    assert h.guard_my_troops() == []
+    h, _ = _hunter({(220, 430): [seen((226, 424), ((232, 418), (220.5, 429.6)), kind="hostile")]})
     al = h.guard_my_troops()
     assert len(al) == 1 and "MARCHING AGAINST YOUR TROOP 3" in al[0].title
 
+
+def test_scouts_never_alert_from_the_guard():
+    # scouting alerts only come from the game's red eye / border (the user's rule)
+    h, _ = _hunter({(200, 410): [seen((206, 404), ((212, 398), (200.8, 410.6)), kind="scout")]})
+    assert h.guard_my_troops() == []
 
 def test_auto_recall_that_troop_once():
     h, _ = _hunter({(200, 410): [seen((206, 404), ((212, 398), (200, 411)))]}, recall=True)

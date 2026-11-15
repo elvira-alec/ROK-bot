@@ -1024,3 +1024,7 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
     A scout near a troop alerts but doesn't stop auto-gather (only an army or the red swords).
     Open: the user's app update check fails with SSL CERTIFICATE_VERIFY_FAILED (falls back to
     PowerShell) - it stayed on 1.37.
+44. **v1.40 (false alerts, user 2026-11-15):** the guard no longer alerts on scouts at all (only the
+    game's red eye / border alert scouting - the user's rule); a red "hostile" diamond counts only
+    on a march line ending at your troop / base (a lone red diamond 6 tiles off was a false
+    alarm); "Auto-recall" alerts only when something was actually recalled.

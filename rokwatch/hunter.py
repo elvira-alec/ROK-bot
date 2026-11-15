@@ -1626,14 +1626,15 @@ class Hunter:
         """'aimed' when this sighting is marching at your troop at pos, 'hostile' for a
         red diamond (the game marks armies marching against you red), else None.
         Your own and your alliance's marches (green lines) never get here."""
-        if s.kind == "hostile":
-            return "hostile"
-        if s.kind not in ("army", "scout") or not s.moving or not s.ends:
-            return None
+        # scouts never alert from here: scouting alerts only come from the game's red eye /
+        # red border (the user's rule - a 'scout marching at your troop' alert broke it)
+        if s.kind not in ("army", "hostile") or not s.moving or not s.ends:
+            return None                            # (a red diamond alone, off a line: no - one
+                                                   # 6 tiles off raised a false alarm)
         if math.dist(s.tile, pos) <= 1.0:
             return None                            # already there: arriving gatherer / fighting
         if any(math.dist(e, pos) <= self.GUARD_REACH for e in s.ends):
-            return "aimed"
+            return "hostile" if s.kind == "hostile" else "aimed"
         return None
 
     def guard_my_troops(self, stop=None) -> list[Alert]:
@@ -1717,8 +1718,11 @@ class Hunter:
                 if self.gather:
                     self.gather.pause(10)
                 report = self.game.recall_all([pos])
-                alerts.append(Alert(f"recall-guard-{key}-{time.time()}", "Auto-recall", "; ".join(report),
-                                    urgent=True, cooldown=False))
+                if any("recalled" in r for r in report):          # (nothing done: no alert)
+                    alerts.append(Alert(f"recall-guard-{key}-{time.time()}", "Auto-recall", "; ".join(report),
+                                        urgent=True, cooldown=False))
+                else:
+                    log.info("hunt: auto-recall: %s", "; ".join(report))
             break                                  # one alert per spot per look
         return alerts
 
