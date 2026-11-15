@@ -321,3 +321,117 @@ def test_fullness_slider():
         assert a.min_full == 50
     finally:
         gather.LIVE.clear()
+
+
+def test_badge_colour_green_on_own_troop():
+    """Your own gatherer's pickaxe is green (live 2026-11-15, level 3 wood at 187,380)."""
+    import cv2 as _cv
+    from rokwatch import screen
+    f = _cv.resize(_cv.imread(str(_R.parent / "gather" / "green_pickaxe_l3_wood.jpg")), (1821, 1024))
+    pts = [p for p in screen.find_resource_points(f)
+           if p["kind"] == "wood" and abs(p["mark"][0] - 598 * 1821 / 1200) < 40
+           and abs(p["mark"][1] - 350 * 1024 / 675) < 40]
+    assert pts and screen.gather_badge_on(f, pts[0]["mark"]) == "green"
+
+
+def _sender(results):
+    import time as _t
+    a = gather.AutoGather.__new__(gather.AutoGather)
+    a.threat, a.sent, a._scan_taken, a._checked, a.pending = False, [], [], set(), []
+    a.centre, a.radius = (173, 378), 12
+    a.book = gather.PointBook.__new__(gather.PointBook)
+    a.book.points, a.book.black = {}, {}
+    a.book.save = lambda: None
+    a.say = lambda m: None
+    a._scan = (_t.time(), [])
+    calls = []
+
+    def est(tile, kind, level):
+        calls.append((tuple(round(v) for v in tile), level))
+        res, xy, box_level = results.pop(0)
+        a._last_box = {"level": box_level}
+        return res, xy
+    a.try_estimate = est
+    return a, calls
+
+
+def test_lower_level_requeued(monkeypatch):
+    """The scan read a level 3 wood as 5 (a troop went to a 3 with 4s around, 2026-11-15):
+    the box says 3 -> it goes back in the queue as a 3, the 4 is tried first."""
+    a, calls = _sender([("lower", (187, 380), 3), ("sent", (180, 386), 4)])
+    monkeypatch.setattr(a, "scan", lambda kind, stop=None: [((187.5, 379.6), 5), ((180.3, 385.5), 4),
+                                                             ((175.2, 390.6), 3)])
+    assert a.send_one("wood") == (180, 386)
+    assert calls == [((188, 380), 5), ((180, 386), 4)]
+    assert a.pending and a.pending[0]["xy"] == (180, 386) and a.sent[-1]["level"] == 4
+
+
+def test_box_level_checked():
+    a, _ = _sender([])
+
+    class G:
+        def close_popups(self):
+            pass
+    a.game = G()
+    p = {"xy": (187, 380), "kind": "wood", "level": 3, "reserves": 472_500, "gatherer": None}
+    assert a._check_and_gather(p, [], 5) == "lower"
+
+
+class _H:
+    MOVING_STATES = ("marching", "returning", "fighting", "stopped")
+
+    def __init__(self, troops):
+        self.my_troops = troops
+        self.recalled = []
+
+    def _recall_troop(self, i):
+        self.recalled.append(i)
+        return [f"troop {i + 1}: recalled"]
+
+
+def test_pending_someone_else_got_there_first(monkeypatch):
+    """Troop on its way, a red pickaxe appears on the point: ours is recalled."""
+    a, _ = _sender([])
+    a.note_sent((187, 380), "wood", 5)
+    h = _H({0: {"index": 0, "state": "gathering", "x": 179, "y": 370},
+            2: {"index": 2, "state": "marching", "x": 192, "y": 410}})
+    monkeypatch.setattr(a, "_badge_at", lambda h, pd: None)
+    assert a.check_pending(h) == [] and a.pending[0]["troop"] == 2
+    monkeypatch.setattr(a, "_badge_at", lambda h, pd: "red")
+    out = a.check_pending(h)
+    assert h.recalled == [2] and not a.pending and "got there first" in out[0]
+
+
+def test_pending_done_when_gathering_and_stranded_recalled(monkeypatch):
+    a, _ = _sender([])
+    monkeypatch.setattr(a, "_badge_at", lambda h, pd: None)
+    a.note_sent((187, 380), "wood", 5)
+    h = _H({2: {"index": 2, "state": "gathering", "x": 187, "y": 380}})
+    a.check_pending(h)
+    assert not a.pending                                  # ours is gathering: done
+    a.note_sent((176, 366), "stone", 4)
+    h = _H({1: {"index": 1, "state": "other", "x": 176, "y": 366}})
+    assert a.check_pending(h) == [] and a.pending        # once: could be arriving
+    out = a.check_pending(h)
+    assert h.recalled == [1] and "stranded" in out[0] and not a.pending
+
+
+def test_no_second_troop_to_a_point_on_the_way():
+    import time as _t
+    a, _ = _sender([])
+    a._scan = (_t.time(), [{"kind": "wood", "level": 5, "taken": False, "tile": (187.4, 380.3)},
+                           {"kind": "wood", "level": 4, "taken": False, "tile": (180.3, 385.5)}])
+    a.note_sent((187, 380), "wood", 5)
+    assert [lv for _, lv in a.scan("wood")] == [4]
+
+
+def test_misread_plate_is_kept(monkeypatch, tmp_path):
+    import numpy as np
+    a, _ = _sender([("lower", (187, 380), 3), ("gone", None, None)])
+    monkeypatch.setattr(a, "MISS_DIR", tmp_path)
+    crop = np.zeros((60, 80, 3), np.uint8)
+    a._scan = (a._scan[0], [{"kind": "wood", "level": 5, "taken": False, "tile": (187.5, 379.6),
+                             "mark": (900, 500), "crop": (crop, (860, 470), (1024, 1821))}])
+    monkeypatch.setattr(a, "scan", lambda kind, stop=None: [((187.5, 379.6), 5)])
+    a.send_one("wood")
+    assert any(p.name.endswith("_read5_true3.png") for p in tmp_path.iterdir())

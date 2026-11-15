@@ -1087,3 +1087,20 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
     reserves equal the table's full amount; `gather.full_enough`; takes effect at once via
     `gather.LIVE`). Blacklisted points stay skipped. The load isn't read on the MARCH screen
     any more (~1 s text read per send).
+52. **v1.48:** (1) the box's real level must be the scan's: a lower one ("lower") goes back
+    in the queue at its real level (live: the scan read a level 3 wood as 5 on two pictures,
+    the box said 3 and a troop went there with 4s and 5s around; the user had it recalled).
+    The log/panel show the box's level. (2) Points troops are sent to are watched
+    (`AutoGather.pending`, `check_pending` after each troop-list read): someone else's
+    pickaxe there (red / blue, `screen.gather_badge_on` now returns the colour) while ours is
+    marching -> ours recalled; ours standing there not gathering two rounds -> recalled
+    (stranded). Done when ours is gathering there; dropped after 30 min.
+    (3) Plate digits: references are now real plates from the user's game
+    (`rokwatch/resources/digit-<d>-rNN.png`, picked from ~500 hand-checked plate pictures, day /
+    night / desert / borders; `scratchpad` tools: collect_plates.py, plate_sheet.py,
+    plate_train.py). The drawn 5 read every real 5 as 6 or 3; drawn 7 / 8 dropped (not in the
+    table, the 8 matched real 3s). Matching: IoU with a pixel of shift, vectorised, 1.5 ms per
+    plate. Held-out test both ways: 0 wrong. `tests/test_plate_levels.py` holds all 243 labelled
+    plates. When a box shows a different level than the map read, the plate picture is kept in
+    `plate_misses/` (png + json with the true level) - add those to the references.
+    (4) A point a troop is on its way to is never picked again (`pending`).

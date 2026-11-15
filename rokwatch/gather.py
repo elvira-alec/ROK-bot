@@ -228,6 +228,7 @@ class AutoGather:
         self._scan = (0.0, [])                          # (when, points seen by the last scan)
         self._scan_taken = []                           # tiles tried since that scan
         self._checked = set()                           # exact X:Y boxes read since that scan
+        self.pending = []                               # points troops were sent to (watched)
         self.threat = False                             # the watcher saw something: stop
         self.storage, self.storage_at = None, 0.0       # your storage, last read (panel stats)
         self.sent = []                                  # recent sends (panel): time, kind, level, xy
@@ -392,16 +393,28 @@ class AutoGather:
         """One troop to the best full, free point of this kind. (x, y) or None.
         Fast (the user's way): one scan at the searching zoom reads every point's kind,
         level and whether someone's on it; only the best one is zoomed in on and checked."""
-        cands = self.scan(kind, stop)
+        cands = list(self.scan(kind, stop))
         tried = 0
-        for tile, level in cands:
+        while cands:
+            tile, level = cands.pop(0)
             if (stop and stop()) or tried >= 8 or self.threat:
                 break
             self.say(f"Auto-gather: checking the level {level or '?'} {kind} point near {tile[0]:.0f},{tile[1]:.0f}")
+            self._last_box = None
             res, xy = self.try_estimate(tile, kind, level)
+            self._keep_miss(tile, kind, level)
             if res == "double":
                 # the scan saw one point twice (views land ~3 tiles apart): not a try
                 self._scan_taken.append(tile)
+                continue
+            if res == "lower" and xy:
+                # its real level, from the box: queued again at that level (checked again
+                # when its turn comes - its exact X:Y this time)
+                real = (getattr(self, "_last_box", None) or {}).get("level")
+                self._scan_taken.append(tile)
+                log.info("gather: the %s near %.0f,%.0f is level %s, not %s", kind, tile[0], tile[1], real, level)
+                at = next((i for i, (_, lv) in enumerate(cands) if (lv or 4.5) < real), len(cands))
+                cands.insert(at, ((float(xy[0]), float(xy[1])), real))
                 continue
             tried += 1
             if xy:
@@ -410,7 +423,10 @@ class AutoGather:
                 self._scan_taken.append(tile)
                 self.sent.append({"time": time.strftime("%H:%M"), "kind": kind, "level": level,
                                   "xy": list(xy or (round(tile[0]), round(tile[1])))})
-                log.info("gather: sent a troop to the level %s %s at %s", level, kind, xy)
+                real = (getattr(self, "_last_box", None) or {}).get("level") or level
+                self.sent[-1]["level"] = real
+                log.info("gather: sent a troop to the level %s %s at %s", real, kind, xy)
+                self.note_sent(xy or (round(tile[0]), round(tile[1])), kind, real)
                 return xy or (round(tile[0]), round(tile[1]))
             if res == "no troop":
                 return None
@@ -447,6 +463,9 @@ class AutoGather:
             # only the checked spot itself (the scan's estimate is ~1 tile off): a wider skip
             # threw away full points next to a checked one (the user: "don't miss a single one")
             if any(math.dist(t, q) < 1.3 for q in self._scan_taken):
+                continue
+            # a point a troop is on its way to (no badge on it yet): never a second troop
+            if any(math.dist(t, pd["xy"]) < 1.5 for pd in getattr(self, "pending", [])):
                 continue
             if any(until > now and math.dist(t, xy) <= 1.3
                    for xy, until in self.book.black.items()):
@@ -509,7 +528,9 @@ class AutoGather:
                     if twin["kind"] == p["kind"] and (p["level"] or 0) > (twin["level"] or 0):
                         twin.update(level=p["level"], taken=p["taken"])     # keep the higher level
                     continue
-                found.append({**p, "tile": t})
+                mx, my = p["mark"]
+                found.append({**p, "tile": t, "crop": (f[max(0, my - 30):my + 30, max(0, mx - 40):mx + 40].copy(),
+                                                       (max(0, mx - 40), max(0, my - 30)), f.shape[:2])})
         log.info("gather: scan of %d views in %.0f s: %s", len(views), time.time() - t0,
                  ", ".join(f"{k} {sum(1 for p in found if p['kind'] == k)}" for k in KINDS))
         return found
@@ -604,7 +625,7 @@ class AutoGather:
                     if p.get("xy") and tuple(p["xy"]) in self._checked:
                         g.close_popups()
                         return "double", p.get("xy")        # this scan checked it already
-                    return self._check_and_gather(p, texts), p.get("xy")
+                    return self._check_and_gather(p, texts, level), p.get("xy")
                 g.close_popups()                         # (the close drags the map: look again)
                 break
         # plates can be missed on light ground (white plates on pale sand, live): tap the spot
@@ -638,13 +659,19 @@ class AutoGather:
                 if p.get("xy") and tuple(p["xy"]) in self._checked:
                     g.close_popups()
                     return "double", p.get("xy")
-                return self._check_and_gather(p, texts), p.get("xy")
+                return self._check_and_gather(p, texts, level), p.get("xy")
             g.close_popups()
         return "gone", None
 
-    def _check_and_gather(self, p, texts):
+    def _check_and_gather(self, p, texts, level=None):
         g = self.game
         self.book.note(p)
+        self._last_box = p
+        if level and p.get("level") and p["level"] < level:
+            # the scan misread the plate (a level 3 wood read as 5 - a troop went to a 3 with
+            # 4s, 5s around, the user 2026-11-15): back in the queue at its real level
+            g.close_popups()
+            return "lower"
         if p.get("gatherer"):
             g.close_popups()
             return "taken"
@@ -658,6 +685,110 @@ class AutoGather:
         g.b.click(*btn.center)
         return self._dispatch()
 
+
+    MISS_DIR = Path("plate_misses")
+
+    def _keep_miss(self, tile, kind, level):
+        """The box's level differs from the map plate's read: keep that plate picture with the
+        true level (more real samples for the digit references - the user: "keep on doing it
+        till it never fails")."""
+        box = getattr(self, "_last_box", None) or {}
+        real = box.get("level")
+        if not real or real == level:
+            return
+        q = min((q for q in self._scan[1] if q["kind"] == kind and q.get("crop") is not None),
+                key=lambda q: math.dist(q["tile"], tile), default=None)
+        if q is None or math.dist(q["tile"], tile) > 0.5:
+            return
+        try:
+            import cv2
+            crop, origin, size = q["crop"]
+            self.MISS_DIR.mkdir(exist_ok=True)
+            name = time.strftime("%Y%m%d-%H%M%S") + f"_read{level}_true{real}"
+            cv2.imwrite(str(self.MISS_DIR / f"{name}.png"), crop)
+            mark = (q["mark"][0] - origin[0], q["mark"][1] - origin[1])
+            (self.MISS_DIR / f"{name}.json").write_text(json.dumps(
+                {"mark": mark, "origin": origin, "size": list(size), "level": real, "read": level}))
+            log.info("gather: plate read %s, box says %s - kept in %s", level, real, self.MISS_DIR)
+        except Exception:
+            log.debug("gather: couldn't keep the plate", exc_info=True)
+
+    # -------------------------------------------------------------- after sending
+    def note_sent(self, xy, kind, level):
+        """Watch this point until our troop is gathering there (the user: someone else can
+        get there first and leave the troop stranded)."""
+        self.pending = [p for p in getattr(self, "pending", []) if p["xy"] != tuple(xy)]
+        self.pending.append({"xy": tuple(xy), "kind": kind, "level": level, "at": time.time(),
+                             "troop": None, "odd": 0})
+
+    PENDING_MAX = 1800          # a troop not there after 30 min: stop watching
+
+    def check_pending(self, h) -> list[str]:
+        """For each point a troop was sent to and isn't gathering at yet (after the troop
+        list was read this round): someone else's pickaxe there (red / blue) while ours is on
+        its way -> recall ours; ours standing there without gathering for two rounds
+        (stranded) -> recall it. Returns what it did."""
+        out = []
+        now = time.time()
+        troops = h.my_troops or {}
+        moving = getattr(h, "MOVING_STATES", ("marching", "returning", "fighting", "stopped"))
+        for pd in list(getattr(self, "pending", [])):
+            if now - pd["at"] > self.PENDING_MAX:
+                self.pending.remove(pd)
+                continue
+            near = [t for t in troops.values() if "x" in t and math.dist((t["x"], t["y"]), pd["xy"]) <= 1.5]
+            if any(t.get("state") == "gathering" for t in near):
+                self.pending.remove(pd)                # ours is gathering there: fine
+                continue
+            # which troop is going there: the first marching one not already someone's
+            mine = {p["troop"] for p in self.pending if p is not pd}
+            if pd["troop"] is None or troops.get(pd["troop"], {}).get("state") not in moving + ("other", "idle"):
+                cand = [t for t in troops.values() if t.get("state") == "marching" and t["index"] not in mine
+                        and "x" in t]
+                if cand:
+                    pd["troop"] = min(cand, key=lambda t: math.dist((t["x"], t["y"]), pd["xy"]))["index"]
+            stuck = [t for t in near if t.get("state") not in ("gathering",) + moving]
+            pd["odd"] = pd["odd"] + 1 if stuck else 0
+            if pd["odd"] >= 2:
+                out += [f"{pd['kind']} at {pd['xy'][0]},{pd['xy'][1]}: troop stranded, "]
+                out[-1] += "; ".join(h._recall_troop(stuck[0]["index"]))
+                self.book.blacklist(pd["xy"], 120)
+                self.pending.remove(pd)
+                continue
+            col = self._badge_at(h, pd)
+            if col in ("red", "blue"):
+                who = "an alliance member" if col == "blue" else "someone else"
+                msg = f"{pd['kind']} at {pd['xy'][0]},{pd['xy'][1]}: {who} got there first"
+                if pd["troop"] is not None:
+                    msg += "; " + "; ".join(h._recall_troop(pd["troop"]))
+                out.append(msg)
+                self.book.blacklist(pd["xy"], 120)
+                self.pending.remove(pd)
+        return out
+
+    def _badge_at(self, h, pd):
+        """The pickaxe badge colour on the point (searching zoom), None if none / not seen."""
+        from .hunter import to_screen
+        g = self.game
+        try:
+            if not g.pan_to(int(pd["xy"][0]), int(pd["xy"][1]), h.axes):
+                return None
+            f = g.fresh_frame()
+            cam = g.read_camera(f)
+            if not cam:
+                return None
+            self._watch(f, cam[1:3])
+            H = f.shape[0]
+            q = to_screen(cam[1:3], h.axes, pd["xy"], f.shape)
+            pts = [p for p in screen.find_resource_points(f)
+                   if p["kind"] == pd["kind"] and math.dist(p["mark"], q) < 0.1 * H]
+            if not pts:
+                return None
+            m = min(pts, key=lambda p: math.dist(p["mark"], q))["mark"]
+            return screen.gather_badge_on(f, m)
+        except Exception:
+            log.debug("gather: badge check failed", exc_info=True)
+            return None
 
     @property
     def min_full(self):

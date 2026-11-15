@@ -2399,6 +2399,15 @@ class Hunter:
             self._spots_at = self._guard_at = now
             self._progress(0, 1, "Checking your troops")
             self.update_my_troops(guard=self.method == "zoomed_out")
+            if self.gather and getattr(self.gather, "pending", None) and self.method == "zoomed_out":
+                # the points troops were just sent to: someone else there first -> recall
+                msgs = self.gather.check_pending(self)
+                for msg in msgs:
+                    log.info("gather: %s", msg)
+                    self.gather.last = msg
+                if msgs and screen.view_level(self.game.frame()) != "patrol":
+                    self.game._at = None
+                    self.zoom_out()                  # (a recall zooms in)
             if self.guard_only and self.method == "zoomed_out":
                 self._guard_alerts += self.guard_sites(stop)   # ...then your base (the user)
             busy = True

@@ -1746,13 +1746,45 @@ def resource_kind(frame, mark):
     return _best(m, _res_templates()["icon"], 0.5)[0]
 
 
+_digit_refs_c = None
+
+
+def _digit_refs():
+    """Reference digit masks as arrays: (labels, masks N x 20 x 16, may_shift N). Real plates
+    cut from the user's game (digit-<d>-rNN.png, picked from ~450 hand-checked plates, day /
+    night / desert; a pixel of shift allowed) - the old drawn ones only for digits with no
+    real sample yet, unshifted (the drawn 5 read every real 5 as 6 or 3, 2026-11-15)."""
+    global _digit_refs_c
+    if _digit_refs_c is None:
+        real, drawn = {}, {}
+        for p in sorted(RES_DIR.glob("digit-*.png")) if RES_DIR.exists() else []:
+            part = p.stem.split("-")
+            m = (cv2.imread(str(p), cv2.IMREAD_GRAYSCALE) > 127).astype(np.float32)
+            (real if part[2].startswith("r") else drawn).setdefault(part[1], []).append(m)
+        refs = [(d, m, True) for d, ms in real.items() for m in ms]
+        # (levels 7 / 8: not in the user's table - such a point can't be checked as intact;
+        # the drawn 8 matched real 3s better than the real 3s did)
+        refs += [(d, m, False) for d, ms in drawn.items() if d not in real and d not in "78" for m in ms]
+        _digit_refs_c = ([r[0] for r in refs], np.stack([r[1] for r in refs]).reshape(len(refs), -1),
+                         np.array([r[2] for r in refs]))
+    return _digit_refs_c
+
+
 def plate_level(frame, mark):
     """The level on a resource point's plate (1-8), None if unreadable or two digits."""
     m, n = plate_digit_mask(frame, mark)
     if m is None or n != 1:
         return None
-    d = _best(m, _res_templates()["digit"], 0.55)[0]
-    return int(d) if d and d.isdigit() else None
+    labels, R, may_shift = _digit_refs()
+    m = m.astype(np.float32)
+    T = np.stack([np.roll(np.roll(m, dx, axis=1), dy, axis=0)
+                  for dx in (0, -1, 1) for dy in (0, -1, 1)]).reshape(9, -1)     # [0] = unshifted
+    inter = T @ R.T                                                    # 9 x N
+    union = T.sum(1)[:, None] + R.sum(1)[None, :] - inter
+    iou = np.where(union > 0, inter / np.maximum(union, 1e-6), 0.0)
+    score = np.where(may_shift, iou.max(0), iou[0])
+    i = int(np.argmax(score))
+    return int(labels[i]) if score[i] >= 0.55 and labels[i].isdigit() else None
 
 
 def gather_badge_on(frame, mark):
@@ -1766,11 +1798,11 @@ def gather_badge_on(frame, mark):
         return False
     hsv = cv2.cvtColor(c, cv2.COLOR_BGR2HSV)
     h, s_, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
-    masks = [((h >= 45) & (h <= 85) & (s_ > 130) & (v > 110)),                       # green: you
-             (((h < 8) | (h > 172)) & (s_ > 150) & (v > 140)),                         # red: others
-             ((h >= 95) & (h <= 115) & (s_ > 150) & (v > 150))]                        # blue: alliance
+    masks = [("green", (h >= 45) & (h <= 85) & (s_ > 130) & (v > 110)),              # you
+             ("red", ((h < 8) | (h > 172)) & (s_ > 150) & (v > 140)),                  # others
+             ("blue", (h >= 95) & (h <= 115) & (s_ > 150) & (v > 150))]                # alliance
     lo, hi = 0.018 * H, 0.06 * H
-    for m in masks:
+    for colour, m in masks:
         m = cv2.morphologyEx(m.astype(np.uint8) * 255, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
         cs, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         for cnt in cs:
@@ -1778,8 +1810,8 @@ def gather_badge_on(frame, mark):
             # the disc's outline (the white pickaxe inside doesn't matter): round and filled
             if (lo <= w <= hi and lo <= hh <= hi and 0.7 <= w / hh <= 1.4
                     and cv2.contourArea(cnt) >= 0.55 * w * hh):
-                return True
-    return False
+                return colour                  # 'green' / 'red' / 'blue' (truthy)
+    return None
 
 
 def find_resource_points(frame):
@@ -1796,7 +1828,7 @@ def find_resource_points(frame):
         if not kind:
             continue
         out.append({"mark": (int(mk[0]), int(mk[1])), "kind": kind, "level": plate_level(frame, mk),
-                    "taken": gather_badge_on(frame, mk)})
+                    "taken": bool(gather_badge_on(frame, mk))})
     return out
 
 
