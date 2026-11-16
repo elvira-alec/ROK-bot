@@ -1195,3 +1195,6 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
     Also: the panel's gather radius takes effect at the next scan (`gather.LIVE["radius"]`,
     like min_full); before, only after Guard was restarted. The user set it to 20 (the level
     5 wood / level 6 food / level 6 stone down-left of the altar are 14-24 tiles out).
+60. **v1.56:** Connect (`Worker._do_open`) starts the game when only the RoK Launcher is open
+    (after a phone login): `_game_running` -> launcher start -> "Click to Start", then
+    connects. Before it said it couldn't find the game window.

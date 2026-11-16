@@ -1,0 +1,1578 @@
+22:40:15 INFO Version 1.23 is available (you have dev)
+22:40:16 INFO Connecting to the game...
+22:40:17 INFO Using the game window 'Rise of Kingdoms'
+22:40:17 INFO Connected to the game window: 'Rise of Kingdoms' (1852x1042). Now press 'What do you see?'. (Mouse into a corner = stop.)
+22:40:20 WARNING Couldn't find the game picture on the page; using the whole window.
+22:40:20 INFO Guarding your troops and city
+22:40:30 WARNING hunt: couldn't set the searching zoom from the close zoom
+22:40:37 WARNING goto: tapped the magnifier at 250,20 but the search didn't open
+22:40:37 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2120, in round
+    self.game.goto(int(self.city[0]), int(self.city[1]))
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 120, in goto
+    if self._quick_jump(f, x, y) or self._slow_jump(x, y):
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 190, in _slow_jump
+    v = self.look()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 73, in look
+    frame = self.frame() if frame is None else frame
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:40:38 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:40:39 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:40:40 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:40:42 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:40:43 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:40:44 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:40:45 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:40:46 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:40:47 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:40:48 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:40:53 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:40:58 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:41:03 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:41:08 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:41:13 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:41:18 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:41:23 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:41:28 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:41:33 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:41:38 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:41:38 WARNING ALERT THE GAME HAS CLOSED: The Rise of Kingdoms window is gone (it crashed or was closed). Nothing is being watched. Open the game again: the bot carries on by itself.
+22:41:43 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:41:48 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:41:53 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:41:58 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:42:03 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:42:08 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:42:13 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:42:18 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:42:23 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:42:28 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:42:33 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:42:38 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:42:43 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:42:48 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:42:53 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:42:58 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:43:03 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:43:08 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:43:13 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:43:18 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 548, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2096, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 835, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+22:43:23 INFO Stopped after 41 round(s). None of his armies are out.
+22:57:29 INFO Quit from the panel
+23:32:53 INFO Version 1.24 is available (you have dev)
+23:32:54 INFO Connecting to the game...
+23:32:54 INFO Using the game window 'Rise of Kingdoms'
+23:32:54 INFO Connected to the game window: 'Rise of Kingdoms' (1852x1042). Now press 'What do you see?'. (Mouse into a corner = stop.)
+23:32:58 WARNING Couldn't find the game picture on the page; using the whole window.
+23:32:58 INFO Guarding your troops and city
+23:33:00 WARNING The game lost its connection; pressing CONFIRM to reconnect
+23:33:03 INFO In your city (the game starts there); back to the map
+23:33:04 INFO Reconnected to the game
+23:33:40 INFO hunt: your troops: 1 gathering at 184,402; 2 gathering at 189,399; 3 gathering at 189,401; 4 gathering at 183,415
+23:33:50 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 51.5 s - moving 6.5 s, looking 2.7 s, checking owners 0.0 s
+23:33:55 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 4.5 s - moving 0.0 s, looking 0.0 s, checking owners 0.0 s
+23:33:57 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 2.1 s - moving 0.0 s, looking 0.0 s, checking owners 0.0 s
+23:33:59 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 2.1 s - moving 0.0 s, looking 0.0 s, checking owners 0.0 s
+23:34:06 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 7.3 s - moving 5.0 s, looking 2.2 s, checking owners 0.0 s
+23:34:09 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 2.1 s - moving 0.0 s, looking 0.0 s, checking owners 0.0 s
+23:34:11 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 2.1 s - moving 0.0 s, looking 0.0 s, checking owners 0.0 s
+23:34:13 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 2.1 s - moving 0.0 s, looking 0.0 s, checking owners 0.0 s
+23:34:15 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 2.1 s - moving 0.0 s, looking 0.0 s, checking owners 0.0 s
+23:34:17 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 2.2 s - moving 0.0 s, looking 0.0 s, checking owners 0.0 s
+23:34:19 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 2.1 s - moving 0.0 s, looking 0.0 s, checking owners 0.0 s
+23:34:21 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 2.1 s - moving 0.0 s, looking 0.0 s, checking owners 0.0 s
+23:34:24 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 2.1 s - moving 0.0 s, looking 0.0 s, checking owners 0.0 s
+23:34:26 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 2.1 s - moving 0.0 s, looking 0.0 s, checking owners 0.0 s
+23:34:28 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 2.1 s - moving 0.0 s, looking 0.0 s, checking owners 0.0 s
+23:34:30 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 2.1 s - moving 0.0 s, looking 0.0 s, checking owners 0.0 s
+23:34:32 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 2.1 s - moving 0.0 s, looking 0.0 s, checking owners 0.0 s
+23:34:34 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 2.1 s - moving 0.0 s, looking 0.0 s, checking owners 0.0 s
+23:34:36 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 2.1 s - moving 0.0 s, looking 0.0 s, checking owners 0.0 s
+23:34:39 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 2.1 s - moving 0.0 s, looking 0.0 s, checking owners 0.0 s
+23:34:41 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 2.1 s - moving 0.0 s, looking 0.0 s, checking owners 0.0 s
+23:34:43 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 2.1 s - moving 0.0 s, looking 0.0 s, checking owners 0.0 s
+23:34:45 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 2.1 s - moving 0.0 s, looking 0.0 s, checking owners 0.0 s
+23:34:47 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 2.1 s - moving 0.0 s, looking 0.0 s, checking owners 0.0 s
+23:34:50 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 2.8 s - moving 0.0 s, looking 0.0 s, checking owners 0.0 s
+23:34:53 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 2.7 s - moving 0.0 s, looking 0.0 s, checking owners 0.0 s
+23:34:55 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 2.7 s - moving 0.0 s, looking 0.0 s, checking owners 0.0 s
+23:34:58 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 2.7 s - moving 0.0 s, looking 0.0 s, checking owners 0.0 s
+23:35:01 INFO Round (guard): 0 spots, 0 armies seen (0 his) in 2.7 s - moving 0.0 s, looking 0.0 s, checking owners 0.0 s
+23:35:03 WARNING goto: tapped the magnifier at 250,20 but the search didn't open
+23:35:04 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2192, in round
+    self._guard_alerts = self.guard_my_troops(stop)
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 1582, in guard_my_troops
+    ok = self.game.pan_to(*pos, self.axes)
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 710, in pan_to
+    return self.goto(x, y)
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 120, in goto
+    if self._quick_jump(f, x, y) or self._slow_jump(x, y):
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 190, in _slow_jump
+    v = self.look()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 73, in look
+    frame = self.frame() if frame is None else frame
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:35:05 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:35:06 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:35:07 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:35:08 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:35:09 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:35:10 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:35:11 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:35:12 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:35:13 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:35:14 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:35:19 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:35:24 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:35:29 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:35:34 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:35:39 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:35:44 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:35:49 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:35:54 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:35:59 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:36:04 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:36:04 WARNING ALERT THE GAME HAS CLOSED: The Rise of Kingdoms window is gone (it crashed or was closed). Nothing is being watched. Open the game again: the bot carries on by itself.
+23:36:10 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:36:15 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:36:20 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:36:25 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:36:30 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:36:35 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:36:40 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:36:45 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:36:50 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d0 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:36:55 WARNING Round failed (Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']); recovering and carrying on
+Traceback (most recent call last):
+  File "C:\Users\elrid\ROK-bot\rokwatch\worker.py", line 559, in _do_hunt
+    for a in hunter.round(stop=self.stop_patrol.is_set):
+  File "C:\Users\elrid\ROK-bot\rokwatch\hunter.py", line 2106, in round
+    if self.game.recover_connection():
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 851, in recover_connection
+    f = self.frame()
+  File "C:\Users\elrid\ROK-bot\rokwatch\game.py", line 62, in frame
+    f = self.b.screenshot(self.area)
+  File "C:\Users\elrid\ROK-bot\rokwatch\trace.py", line 131, in timed_shot
+    f = _orig(*a, **k)
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 223, in screenshot
+    frame = self._capture_screen()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 208, in _capture_screen
+    self._front()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 143, in _front
+    self._attach()
+  File "C:\Users\elrid\ROK-bot\rokwatch\desktop.py", line 127, in _attach
+    raise RuntimeError(f"Couldn't find a window called '{self.title}'. Open the game "
+RuntimeError: Couldn't find a window called 'Rise of Kingdoms'. Open the game first. Windows I can see: ['Launcher', 'RoK Watcher - Google Chrome', '\u25d1 ROK-bot', 'RoKWatcher', 'NVIDIA GeForce Overlay', 'Configuración', 'Configuración', 'Program Manager']
+23:37:00 INFO Stopped after 60 round(s). None of his armies are out.
+23:53:00 INFO Quit from the panel

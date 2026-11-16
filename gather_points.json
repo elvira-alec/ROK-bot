@@ -1,0 +1,693 @@
+{
+ "points": {
+  "174,373": {
+   "kind": "wood",
+   "level": 4,
+   "reserves": 630000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760842.7514658
+  },
+  "178,377": {
+   "kind": "food",
+   "level": 4,
+   "reserves": 630000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794716231.7437086
+  },
+  "164,378": {
+   "kind": "wood",
+   "level": 5,
+   "reserves": 107850,
+   "gatherer": "[JONS]IronAR",
+   "full": false,
+   "seen": 1794713720.2237494
+  },
+  "183,379": {
+   "kind": "food",
+   "level": 3,
+   "reserves": 472500,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794754965.194923
+  },
+  "180,374": {
+   "kind": "gold",
+   "level": 6,
+   "reserves": 136647,
+   "gatherer": "[JONS]IronAR",
+   "full": false,
+   "seen": 1794715960.0149684
+  },
+  "181,377": {
+   "kind": "gold",
+   "level": 3,
+   "reserves": 115526,
+   "gatherer": null,
+   "full": false,
+   "seen": 1794755010.5892863
+  },
+  "184,377": {
+   "kind": "food",
+   "level": 3,
+   "reserves": 472500,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794754971.6561594
+  },
+  "181,382": {
+   "kind": "food",
+   "level": 4,
+   "reserves": 630000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760709.2639716
+  },
+  "179,387": {
+   "kind": "wood",
+   "level": 4,
+   "reserves": 630000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794715850.8665395
+  },
+  "181,387": {
+   "kind": "wood",
+   "level": 4,
+   "reserves": 630000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760832.1763053
+  },
+  "183,389": {
+   "kind": "wood",
+   "level": 4,
+   "reserves": 92996,
+   "gatherer": "[JONS]cojeburra",
+   "full": false,
+   "seen": 1794716187.2017717
+  },
+  "181,391": {
+   "kind": "food",
+   "level": 3,
+   "reserves": 472500,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794761058.7098234
+  },
+  "176,391": {
+   "kind": "wood",
+   "level": 3,
+   "reserves": 472500,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760876.0881197
+  },
+  "177,394": {
+   "kind": "wood",
+   "level": 3,
+   "reserves": 472500,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794716246.1869416
+  },
+  "171,389": {
+   "kind": "food",
+   "level": 4,
+   "reserves": 630000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794715750.9189348
+  },
+  "173,397": {
+   "kind": "stone",
+   "level": 3,
+   "reserves": 354375,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794715921.054084
+  },
+  "179,370": {
+   "kind": "wood",
+   "level": 6,
+   "reserves": 1260000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794716207.6518466
+  },
+  "164,386": {
+   "kind": "food",
+   "level": 4,
+   "reserves": 630000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794715735.990482
+  },
+  "161,394": {
+   "kind": "food",
+   "level": 3,
+   "reserves": 472500,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794716060.9196572
+  },
+  "186,399": {
+   "kind": "stone",
+   "level": 3,
+   "reserves": 354375,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794756537.219424
+  },
+  "184,400": {
+   "kind": "wood",
+   "level": 4,
+   "reserves": 630000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760855.9678788
+  },
+  "180,400": {
+   "kind": "wood",
+   "level": 3,
+   "reserves": 472500,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760901.8127718
+  },
+  "180,403": {
+   "kind": "wood",
+   "level": 3,
+   "reserves": 472500,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794754919.2082875
+  },
+  "183,405": {
+   "kind": "wood",
+   "level": 3,
+   "reserves": 472500,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760908.5866725
+  },
+  "177,390": {
+   "kind": "stone",
+   "level": 6,
+   "reserves": 34643,
+   "gatherer": null,
+   "full": false,
+   "seen": 1794760773.0151265
+  },
+  "183,399": {
+   "kind": "food",
+   "level": 4,
+   "reserves": 1700000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794715808.5833964
+  },
+  "174,399": {
+   "kind": "wood",
+   "level": 4,
+   "reserves": 630000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794755537.6754076
+  },
+  "178,403": {
+   "kind": "food",
+   "level": 4,
+   "reserves": 630000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760752.403655
+  },
+  "175,404": {
+   "kind": "food",
+   "level": 3,
+   "reserves": 472500,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794715936.718306
+  },
+  "178,405": {
+   "kind": "wood",
+   "level": 4,
+   "reserves": 630000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760869.3798885
+  },
+  "174,406": {
+   "kind": "food",
+   "level": 3,
+   "reserves": 472500,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794715944.365737
+  },
+  "162,392": {
+   "kind": "stone",
+   "level": 3,
+   "reserves": 354375,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760810.748897
+  },
+  "176,366": {
+   "kind": "stone",
+   "level": 4,
+   "reserves": 151092,
+   "gatherer": "[JONS]IronAR",
+   "full": false,
+   "seen": 1794755490.3095255
+  },
+  "155,389": {
+   "kind": "wood",
+   "level": 4,
+   "reserves": 630000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794756557.9354136
+  },
+  "159,388": {
+   "kind": "food",
+   "level": 4,
+   "reserves": 1700000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794716160.70845
+  },
+  "186,377": {
+   "kind": "wood",
+   "level": 3,
+   "reserves": 1700000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794716223.3377135
+  },
+  "187,380": {
+   "kind": "wood",
+   "level": 3,
+   "reserves": 462366,
+   "gatherer": null,
+   "full": false,
+   "seen": 1794760894.817561
+  },
+  "189,380": {
+   "kind": "food",
+   "level": 3,
+   "reserves": 472500,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794754977.9324982
+  },
+  "158,373": {
+   "kind": "gold",
+   "level": 4,
+   "reserves": 210000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794755639.2864394
+  },
+  "177,363": {
+   "kind": "stone",
+   "level": 4,
+   "reserves": 472500,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760783.2020903
+  },
+  "182,374": {
+   "kind": "stone",
+   "level": 3,
+   "reserves": 354375,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794716215.5431702
+  },
+  "176,364": {
+   "kind": "stone",
+   "level": 4,
+   "reserves": 472500,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760779.666602
+  },
+  "150,378": {
+   "kind": "stone",
+   "level": 4,
+   "reserves": 472500,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794756509.0624027
+  },
+  "152,366": {
+   "kind": "stone",
+   "level": 4,
+   "reserves": 472500,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794756516.3446798
+  },
+  "172,403": {
+   "kind": "stone",
+   "level": 3,
+   "reserves": 354375,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794756530.1548107
+  },
+  "153,389": {
+   "kind": "wood",
+   "level": 4,
+   "reserves": 630000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760862.6880476
+  },
+  "150,373": {
+   "kind": "wood",
+   "level": 4,
+   "reserves": 630000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794756586.020821
+  },
+  "152,379": {
+   "kind": "food",
+   "level": 6,
+   "reserves": 1260000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794761012.2344809
+  },
+  "158,390": {
+   "kind": "food",
+   "level": 4,
+   "reserves": 630000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794761018.816114
+  },
+  "153,394": {
+   "kind": "food",
+   "level": 4,
+   "reserves": 630000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760766.1372194
+  },
+  "150,390": {
+   "kind": "food",
+   "level": 4,
+   "reserves": 630000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794756646.840051
+  },
+  "186,386": {
+   "kind": "gold",
+   "level": 3,
+   "reserves": 157500,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794756660.7629056
+  },
+  "153,403": {
+   "kind": "gold",
+   "level": 3,
+   "reserves": 157500,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794756667.7894447
+  },
+  "149,387": {
+   "kind": "stone",
+   "level": 3,
+   "reserves": 354375,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794754280.7087564
+  },
+  "157,392": {
+   "kind": "food",
+   "level": 3,
+   "reserves": 472500,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794754394.979111
+  },
+  "192,375": {
+   "kind": "food",
+   "level": 4,
+   "reserves": 630000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760745.7651238
+  },
+  "175,363": {
+   "kind": "food",
+   "level": 4,
+   "reserves": 630000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760758.8811867
+  },
+  "153,363": {
+   "kind": "food",
+   "level": 4,
+   "reserves": 630000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794761052.229059
+  },
+  "191,370": {
+   "kind": "gold",
+   "level": 4,
+   "reserves": 210000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794756654.050038
+  },
+  "185,404": {
+   "kind": "stone",
+   "level": 3,
+   "reserves": 354375,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760818.078224
+  },
+  "151,388": {
+   "kind": "food",
+   "level": 5,
+   "reserves": 945000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794756606.418705
+  },
+  "186,394": {
+   "kind": "food",
+   "level": 4,
+   "reserves": 630000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794756626.6736345
+  },
+  "157,364": {
+   "kind": "gold",
+   "level": 6,
+   "reserves": 420000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794755632.5973303
+  },
+  "190,407": {
+   "kind": "gold",
+   "level": 3,
+   "reserves": 157500,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794755659.6500452
+  },
+  "163,378": {
+   "kind": "food",
+   "level": 4,
+   "reserves": 630000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760715.8951466
+  },
+  "179,363": {
+   "kind": "stone",
+   "level": 4,
+   "reserves": 472500,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760789.8330116
+  },
+  "161,362": {
+   "kind": "stone",
+   "level": 4,
+   "reserves": 472500,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760796.4256196
+  },
+  "152,409": {
+   "kind": "stone",
+   "level": 4,
+   "reserves": 472500,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760803.434583
+  },
+  "161,371": {
+   "kind": "wood",
+   "level": 5,
+   "reserves": 945000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760825.0363765
+  },
+  "161,376": {
+   "kind": "wood",
+   "level": 4,
+   "reserves": 630000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760849.2340925
+  },
+  "152,398": {
+   "kind": "wood",
+   "level": 3,
+   "reserves": 472500,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760914.9975526
+  },
+  "188,403": {
+   "kind": "wood",
+   "level": 3,
+   "reserves": 472500,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760921.4969127
+  },
+  "183,360": {
+   "kind": "wood",
+   "level": 3,
+   "reserves": 472500,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760928.1470811
+  },
+  "154,410": {
+   "kind": "wood",
+   "level": 3,
+   "reserves": 472500,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760935.1055977
+  },
+  "184,406": {
+   "kind": "stone",
+   "level": 3,
+   "reserves": 354375,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760941.7873662
+  },
+  "186,359": {
+   "kind": "stone",
+   "level": 3,
+   "reserves": 354375,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794760948.7764874
+  },
+  "171,361": {
+   "kind": "food",
+   "level": 4,
+   "reserves": 630000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794761025.4389331
+  },
+  "170,360": {
+   "kind": "food",
+   "level": 4,
+   "reserves": 630000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794761032.2398968
+  },
+  "182,406": {
+   "kind": "food",
+   "level": 4,
+   "reserves": 630000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794761038.8637664
+  },
+  "161,360": {
+   "kind": "food",
+   "level": 4,
+   "reserves": 630000,
+   "gatherer": null,
+   "full": true,
+   "seen": 1794761045.4235241
+  }
+ },
+ "black": {
+  "152,379": 1794762813.3482933,
+  "181,382": 1794762510.5030131,
+  "163,378": 1794762517.0015337,
+  "186,394": 1794762540.3301418,
+  "192,375": 1794762546.8929682,
+  "178,403": 1794762553.4728987,
+  "175,363": 1794762559.9675875,
+  "153,394": 1794762567.2237568,
+  "177,390": 1794767974.0648232,
+  "176,364": 1794762580.7399206,
+  "177,363": 1794762584.2462578,
+  "179,363": 1794762590.866589,
+  "161,362": 1794762597.6042936,
+  "152,409": 1794762604.6932247,
+  "162,392": 1794762611.9437177,
+  "185,404": 1794762619.1532502,
+  "161,371": 1794762626.2072918,
+  "181,387": 1794762634.5761054,
+  "174,373": 1794762643.823696,
+  "161,376": 1794762650.3475366,
+  "184,400": 1794762657.0701654,
+  "153,389": 1794762663.7974231,
+  "178,405": 1794762670.4406338,
+  "176,391": 1794762677.1308029,
+  "187,380": 1794762695.9340477,
+  "180,400": 1794762702.895949,
+  "183,405": 1794762709.6442602,
+  "152,398": 1794762716.0379827,
+  "188,403": 1794762722.53145,
+  "183,360": 1794762729.2355816,
+  "154,410": 1794762736.1362016,
+  "184,406": 1794762742.858111,
+  "186,359": 1794762749.869227,
+  "158,390": 1794762819.8571508,
+  "171,361": 1794762826.5359173,
+  "170,360": 1794762833.2792299,
+  "182,406": 1794762839.965318,
+  "161,360": 1794762846.4848707,
+  "153,363": 1794762853.2803864,
+  "181,391": 1794762859.8539963
+ },
+ "surveyed": {
+  "173,378": {
+   "t": 1794716246.4554713,
+   "r": 12.0
+  }
+ },
+ "load": null
+}

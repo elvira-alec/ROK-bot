@@ -224,9 +224,13 @@ class Worker:
                                "title (PC game / BlueStacks) or the web page where you play, "
                                "then Save.")
             return
+        # only the RoK launcher is open (after a phone login the game closes to it): press
+        # its start button and wait for the game, then connect
+        if not self._game_running(cfg):
+            return
         self._set("opening", "Connecting to the game..." if cfg.get("game_window")
                   else "Opening the game page...")
-        self.gb = GameBrowser.from_config(cfg).__enter__()
+        self.gb =GameBrowser.from_config(cfg).__enter__()
         from .trace import instrument
         instrument(self.gb)                         # (the debug recording logs its actions)
         if cfg.get("game_window"):

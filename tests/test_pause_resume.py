@@ -61,6 +61,36 @@ def test_never_starts_the_game_by_itself(monkeypatch):
     assert w._game_running({"game_window": "Rise of Kingdoms"}) and started == [1]
 
 
+def test_connect_starts_the_game_when_only_the_launcher_is_open(monkeypatch):
+    # after a phone login the game closes to the Launcher: Connect used to say "can't find
+    # the game"; now it presses start, waits, then connects
+    from rokwatch import browser
+    from rokwatch.worker import Worker
+    w = Worker.__new__(Worker)
+    w.status = types.SimpleNamespace(doing="", phase="ready", message="", progress=None)
+    w.stop_patrol = types.SimpleNamespace(is_set=lambda: False)
+    w.gb = None
+    seq = []
+    w._cfg = lambda: {"game_window": "Rise of Kingdoms"}
+    w._set = lambda phase, msg: seq.append(phase)
+    monkeypatch.setattr(restart, "game_window", lambda: None)
+    monkeypatch.setattr(restart, "start_game", lambda *a, **k: seq.append("started") or True)
+
+    class GB:
+        window_title, alive = "Rise of Kingdoms", True
+
+        def __enter__(self):
+            seq.append("connected")
+            return self
+
+        def rect(self):
+            return (0, 0, 100, 100)
+    monkeypatch.setattr(browser.GameBrowser, "from_config", classmethod(lambda c, cfg: GB()))
+    monkeypatch.setattr("rokwatch.trace.instrument", lambda gb: None)
+    w._do_open()
+    assert seq.index("started") < seq.index("connected") and seq[-1] == "ready"
+
+
 def test_start_screen_tapped_only_when_it_says_so():
     """'Click to Start' is tapped only when it shows - not through the loading screens (it
     tapped every 4 s, the user: "don't spam the clicks"). Real screens 2026-11-15."""
