@@ -117,6 +117,27 @@ def test_storage_with_a_missed_number_is_read_again(monkeypatch):
     assert gather.read_storage(f) == {"food": 1_000_000, "wood": 776_100, "stone": 1_100_000, "gold": 209_900}
 
 
+def test_a_free_troop_is_sent_without_waiting(tmp_path):
+    # live: a troop came home and it took ~4 min (5 rounds) to send it out again
+    import time as _t
+    a = gather.AutoGather.__new__(gather.AutoGather)
+    a.book = gather.PointBook(tmp_path / "b.json")
+    a.book.troops, a.paused_until, a.every = 4, 0.0, 60
+    now = _t.time()
+    a._at = now - 20
+    three = {i: {"index": i, "state": "gathering"} for i in (1, 2, 3)}
+    four = {**three, 4: {"index": 4, "state": "gathering"}}
+    assert a.due(now, three) and not a.due(now, four)
+    a._retry_at = now + 30                                 # found it free but sent nothing
+    assert not a.due(now, three)
+    # a troop heading home: the points are looked over before it arrives
+    a._scan, scans = (0.0, []), []
+    a._scan_area = lambda stop=None: scans.append(1) or []
+    assert not a.prescan(three) and not scans
+    assert a.prescan({**three, 4: {"index": 4, "state": "returning"}}) and scans == [1]
+    assert not a.prescan({**three, 4: {"index": 4, "state": "returning"}})   # fresh: once
+
+
 def test_troops_already_out_count_before_picking(tmp_path):
     # live 2026-11-16: 3 troops gathering gold, the 4th was sent to gold too
     import time as _t
@@ -145,6 +166,10 @@ def test_storage_with_a_lost_suffix_is_not_believed(monkeypatch, tmp_path):
     assert gather.read_storage(f) is None                    # a decimal without its M
     bar[0:1] = [T("1.7", 880), T("M", 920)]                 # the M read on its own
     assert gather.read_storage(f)["food"] == 1_700_000
+    # map level tags under the bar (live: food 16, wood 25)
+    bar[:] = [T("16", 850), T("5.3M", 900), T("25", 950), T("3.6M", 1000), T("4.2M", 1100),
+              T("20", 1150), T("1.0M", 1200), T("458", 1300)]
+    assert gather.read_storage(f) == {"food": 5_300_000, "wood": 3_600_000, "stone": 4_200_000, "gold": 1_000_000}
     # a 1M+ resource suddenly reading tiny: not trusted until a second zoom-in agrees
     a = gather.AutoGather.__new__(gather.AutoGather)
     a.book = gather.PointBook(tmp_path / "b.json")

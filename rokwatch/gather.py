@@ -70,9 +70,13 @@ def read_storage(frame):
         else:
             merged.append((x, s))
     nums = []
-    for _, s in merged:
+    for i, (_, s) in enumerate(merged):
         v = parse_amount(s)
         if v is None:
+            continue
+        if v < 1000 and s[-1].isdigit() and i < len(merged) - 1:
+            # a bare small number that isn't the last one (the gems): a map level tag under
+            # the bar ('16', '25'; live 2026-11-16 they took food's and wood's places)
             continue
         if "." in s and s[-1].isdigit():
             # '1.7' with its M lost - the game never shows a decimal without K / M: read again
@@ -292,6 +296,7 @@ class AutoGather:
             cur = read_storage(f)
             if cur and cur == prev:
                 if not self._believable(cur):
+                    self._save_odd(f)
                     return None
                 self.storage, self.storage_at = cur, time.time()
                 self.book.storage = cur
@@ -314,6 +319,19 @@ class AutoGather:
         log.warning("gather: storage read %s but it was %s - reading again before trusting it",
                     {k: cur[k] for k in odd}, {k: last[k] for k in odd})
         return False
+
+    def _save_odd(self, frame):
+        """The picture of a storage read that wasn't believed (snapshots/, at most every
+        10 min): evidence for the next fix."""
+        if time.time() - getattr(self, "_odd_saved", 0) < 600:
+            return
+        self._odd_saved = time.time()
+        try:
+            import cv2
+            Path("snapshots").mkdir(exist_ok=True)
+            cv2.imwrite(f"snapshots/{time.strftime('%Y%m%d-%H%M%S')}-storage-odd.jpg", frame)
+        except Exception:
+            log.debug("gather: couldn't save the odd storage picture", exc_info=True)
 
     def refresh_storage(self):
         """For the panel's numbers between sends: zoom in a moment, read, zoom back out."""
@@ -375,8 +393,33 @@ class AutoGather:
     def pause(self, minutes=10):
         self.paused_until = time.time() + minutes * 60
 
-    def due(self, now):
-        return now >= self.paused_until and now - self._at >= self.every
+    def due(self, now, troops=None):
+        """Time for a go: every `every` seconds, or straight away (15 s apart) when the troop
+        list shows fewer troops out than you have - the user: a troop came home and it took
+        five rounds to send it out again. Not again for a minute after a go that found a free
+        troop but sent nothing."""
+        if now < self.paused_until:
+            return False
+        if troops is None:
+            return now - self._at >= self.every
+        total = getattr(self, "total", None) or self.book.troops
+        if (total and len(troops) < total
+                and now - self._at >= 15 and now >= getattr(self, "_retry_at", 0)):
+            return True
+        return now - self._at >= self.every
+
+    def prescan(self, troops, stop=None) -> bool:
+        """A troop is on its way home: look over the points now, so it's sent the moment it
+        arrives (the scan takes ~2 min). Only when the last scan is over 4 min old."""
+        if not any(t.get("state") == "returning" for t in (troops or {}).values()):
+            return False
+        if time.time() - self._scan[0] < 240:
+            return False
+        log.info("gather: a troop is heading home - looking over the points now")
+        self._scan = (time.time(), self._scan_area(stop))
+        self._scan_taken = []
+        self._checked = set()
+        return True
 
     def say(self, msg):
         self.last = msg
@@ -426,8 +469,13 @@ class AutoGather:
             # must agree
             storage = self.read_storage_now()
             if not storage:
-                log.info("gather: couldn't read your storage")
-                return done
+                # the user: "even if it's misreading it, it should still send out something" -
+                # go by the last good read (kept over restarts) rather than not sending
+                storage = self.storage or getattr(self.book, "storage", None)
+                if not storage:
+                    log.info("gather: couldn't read your storage")
+                    return done
+                log.info("gather: couldn't read your storage - going by the last good read")
             b = balanced(storage)
             # what the troops already out will bring back counts too
             coming = self.coming(getattr(self.hunter, "my_troops", None) or {})
@@ -458,6 +506,8 @@ class AutoGather:
             self.hunter.zoom_out()
         if done:
             self.last = "sent troops to " + "; ".join(done)
+        else:
+            self._retry_at = time.time() + 60          # free but nothing sent: not every round
         return done
 
     def send_one(self, kind, stop=None):

@@ -1205,3 +1205,13 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
     on its way (`AutoGather.coming`: gathering troops + troops marching to pending points):
     all 4 troops went to gold one after another. Balancing is by gathering value
     (`RATIO`: 1 gold = 3 food), so 820K gold ranks like 2.5M food - the user found that odd.
+62. **v1.58:** live after 1.57: most zoom-ins at the base read map level tags under the bar
+    ("16", "25", "20") as food / wood / stone; `_believable` refused them, so storage was
+    only read now and then. `read_storage` now drops bare numbers under 1000 except the
+    last one (the gems). A refused read saves its picture: snapshots/*-storage-odd.jpg.
+    The ~1.5 min before a send is the scan of 25 views (~110 s). Storage unreadable at a
+    send -> it goes by the last good read (the user: "it should still send out something").
+    Faster resends (the user: "it's doing like five rounds before it realizes"): `due(now,
+    my_troops)` fires at once (15 s apart) when fewer troops are out than you have (a minute's
+    pause after a go that sent nothing, `_retry_at`); `prescan` looks over the points while a
+    troop is returning (scan older than 4 min), so the send needs no 2-min scan.

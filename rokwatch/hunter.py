@@ -2473,7 +2473,7 @@ class Hunter:
             self.gather.refresh_storage()
             busy = True
         if (self.gather and self.method == "zoomed_out" and self.mode != "sweep"
-                and not self.attackers and self.gather.due(now)):
+                and not self.attackers and self.gather.due(now, self.my_troops)):
             from .game import Stopped, GamePaused
             try:
                 did = self.gather.step(stop)
@@ -2487,6 +2487,16 @@ class Hunter:
                 log.info("gather: sent %s", "; ".join(did))
                 self._spots_at = 0.0               # read the troop list again (new gatherers)
             busy = True
+        elif (self.gather and self.method == "zoomed_out" and self.mode != "sweep"
+                and not self.attackers and now >= self.gather.paused_until):
+            # a troop on its way home: find its next point now, not after it's arrived
+            from .game import Stopped, GamePaused
+            try:
+                busy = self.gather.prescan(self.my_troops, stop) or busy
+            except (Stopped, GamePaused):
+                raise
+            except Exception as e:
+                log.warning("gather: looking over the points failed (%s)", e, exc_info=True)
         if self.mode == "guard" and not busy:
             # nothing to look at this round: keep an eye on the game's red eye / swords
             # (they show on any screen) without hammering the game
