@@ -1189,3 +1189,6 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
     "Click to Start" tapped only when that text shows (`restart.start_prompt`, OCR of the
     bottom strip, not on "Loading N%") - it tapped every 4 s through the loading screens.
     tests/real_screens/restart/.
+59. **v1.55:** each troop's "checked" time on the panel is when that troop was read (it was
+    the pass's start time for all). Live 00:42: Resume after a phone login -> launcher ->
+    one "Click to Start" tap -> guarding in ~12 s after the start screen.

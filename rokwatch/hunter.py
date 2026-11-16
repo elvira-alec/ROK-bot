@@ -1607,7 +1607,7 @@ class Hunter:
                 if pts:
                     q = min(pts, key=lambda q: math.dist(q["mark"], (Ww / 2, Hh / 2)))
                     t["kind"], t["level"] = q["kind"], q["level"]
-            t.update(state=slot.state, checked=now)
+            t.update(state=slot.state, checked=time.time())     # (each one when it's read)
             if spot and not spot.get("moved", True) and "x" in t:
                 # the camera didn't go anywhere (just after a reconnect the game ignored the
                 # taps: troop 1 "at your city", troops 2-4 all "at" the same spot) - keep where
