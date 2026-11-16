@@ -1192,3 +1192,6 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
 59. **v1.55:** each troop's "checked" time on the panel is when that troop was read (it was
     the pass's start time for all). Live 00:42: Resume after a phone login -> launcher ->
     one "Click to Start" tap -> guarding in ~12 s after the start screen.
+    Also: the panel's gather radius takes effect at the next scan (`gather.LIVE["radius"]`,
+    like min_full); before, only after Guard was restarted. The user set it to 20 (the level
+    5 wood / level 6 food / level 6 stone down-left of the altar are 14-24 tiles out).

@@ -260,6 +260,8 @@ class Panel:
                         v = max(3, min(40, int(float(v))))
                     except (TypeError, ValueError):
                         v = 12
+                    from . import gather as _g
+                    _g.LIVE["radius"] = v                   # takes effect at the next scan
                 elif k == "recall_scope":
                     v = "all" if v == "all" else "threatened"
                 elif k == "game_window_zoom_key":

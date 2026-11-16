@@ -215,7 +215,7 @@ class AutoGather:
         g = cfg.get("gather") or {}
         self.game, self.hunter = game, hunter
         self.centre = tuple(g.get("centre") or DEFAULT_CENTRE)
-        self.radius = float(g.get("radius") or DEFAULT_RADIUS)
+        self._radius = float(g.get("radius") or DEFAULT_RADIUS)
         self.every = float(g.get("check_seconds", 60))
         self.survey_every = float(g.get("survey_minutes", 30)) * 60
         self.book = PointBook()
@@ -920,6 +920,15 @@ class AutoGather:
         except Exception:
             log.debug("gather: badge check failed", exc_info=True)
             return None
+
+    @property
+    def radius(self):
+        """Search radius around the centre; the panel's setting takes effect at once."""
+        return float(LIVE.get("radius") or getattr(self, "_radius", DEFAULT_RADIUS))
+
+    @radius.setter
+    def radius(self, v):
+        self._radius = float(v)
 
     @property
     def min_full(self):
