@@ -1036,7 +1036,7 @@ class Hunter:
         view = View(frame, [], cam, True)
         # no level plate anywhere: icons not drawn (or nothing there). Either way this look
         # can't show that something has gone - a farm there would show its own plate
-        view.icons_loaded = bool(tags)
+        view.icons_loaded = bool(screen.icons_drawn(frame))
         try:
             self.game.b.last_view = view
         except AttributeError:

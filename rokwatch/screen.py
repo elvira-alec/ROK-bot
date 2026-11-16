@@ -1738,6 +1738,12 @@ def resource_icon_mask(frame, mark):
     v, s = hsv[..., 2].astype(np.int16), hsv[..., 1]
     bg = int(np.median(v))
     white = (s < 70) & (v > max(140, bg + 45))           # day and night (dimmer, bluish)
+    # on bright sand (desert round the altar, ground ~200) the icon is barely brighter than
+    # the ground but far less coloured (sand saturation ~100, icon <40): the level 4 food and
+    # stone there weren't recognised at all, and full level 5 / 6 points were skipped
+    # (2026-11-15)
+    if bg >= 175 and white.mean() < 0.05:              # (only there: elsewhere it adds noise)
+        white = (s < 40) & (v > bg + 10)
     # a gathering badge (round green / red / blue disc with a white pickaxe) can sit on the
     # icon's top: blank the disc out, or its pickaxe spoils the shape (your own gathering
     # points weren't recognised, so the panel couldn't say what your troops bring back)

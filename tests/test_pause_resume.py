@@ -59,3 +59,18 @@ def test_never_starts_the_game_by_itself(monkeypatch):
     assert w._game_running({"game_window": "BlueStacks"}) and not started
     assert w._game_running({"game_url": "http://x"}) and not started
     assert w._game_running({"game_window": "Rise of Kingdoms"}) and started == [1]
+
+
+def test_start_screen_tapped_only_when_it_says_so():
+    """'Click to Start' is tapped only when it shows - not through the loading screens (it
+    tapped every 4 s, the user: "don't spam the clicks"). Real screens 2026-11-15."""
+    import cv2
+    from pathlib import Path
+    from rokwatch import restart
+    d = Path(__file__).parent / "real_screens" / "restart"
+    f = cv2.imread(str(d / "click_to_start.jpg"))
+    p = restart.start_prompt(f)
+    H, W = f.shape[:2]
+    assert p and abs(p[0] - W / 2) < 0.1 * W and 0.8 * H < p[1] < 0.95 * H
+    for n in ("loading_6pct.jpg", "loading_16pct.jpg"):
+        assert restart.start_prompt(cv2.imread(str(d / n))) is None, n

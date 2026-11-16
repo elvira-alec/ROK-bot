@@ -98,6 +98,22 @@ def find_start_button(frame):
     return int(x0 + cx), int(y0 + cy)
 
 
+_START_RX = __import__("re").compile(r"click|start|toca|clic|empez|inicia|pulsa", __import__("re").I)
+_LOADING_RX = __import__("re").compile(r"loading|cargando|\d+\s*%", __import__("re").I)
+
+
+def start_prompt(frame):
+    """Where the game's start screen says "Click to Start" (a dark bar low in the middle),
+    or None - also None on the loading screens ("Loading 6%"). Only then is it tapped (the
+    user: "don't spam the clicks"; it tapped every 4 s through every loading screen)."""
+    from . import screen
+    H, W = frame.shape[:2]
+    for t in screen.read_text(frame, (int(0.3 * W), int(0.78 * H), int(0.4 * W), int(0.2 * H))):
+        if _START_RX.search(t.text) and not _LOADING_RX.search(t.text):
+            return t.center
+    return None
+
+
 def start_game(cfg=None, stop=None, say=None, timeout=240) -> bool:
     """Get the game running and past its start screen. True once the game shows the map,
     your city or a game dialog (the usual recovery takes it from there)."""
@@ -154,9 +170,10 @@ def start_game(cfg=None, stop=None, say=None, timeout=240) -> bool:
             if screen.modal_dialog(f) or screen.camera_coords(f, texts) or screen.home_view(f, texts):
                 log.info("restart: the game is up")
                 return True
-            if time.time() - tapped > 4:
-                H, W = f.shape[:2]
-                w.click(W // 2, int(0.84 * H))
+            p = start_prompt(f) if time.time() - tapped > 6 else None
+            if p:
+                log.info("restart: tapping 'Click to Start'")
+                w.click(*p)
                 tapped = time.time()
             time.sleep(1.0)
     return False

@@ -1178,3 +1178,14 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
     CONFIRM pressed, reconnected. Bug seen: right after the reconnect the troop taps didn't
     jump (troop 1 "at your city", 2-4 all at one spot). `troop_spot` now returns "moved";
     a non-exact read where the camera didn't move keeps the troop's last position.
+58. **v1.54:** (1) 1.53 crashed every guard round at the base look (`tags` left in look_spot
+    by the icons_ready refactor -> NameError; gather never ran). Fixed; tests/test_lint.py
+    (pyflakes: undefined names) guards it. (2) bright sand round the altar: white resource
+    icons weren't separated from the ground (ground V ~200; the icon rule needed V > bg+45),
+    so points there weren't recognised at all (the user: a level 5 wood and a level 6 stone
+    down-left of the altar skipped). On bright ground (median V >= 175) with little white
+    found: low saturation (S < 40, V > bg + 10). Live altar views: food 4 / wood 4 at 160,378
+    now read. (3) restart: COMENZAR pressed only when the button is found, at most every 30 s;
+    "Click to Start" tapped only when that text shows (`restart.start_prompt`, OCR of the
+    bottom strip, not on "Loading N%") - it tapped every 4 s through the loading screens.
+    tests/real_screens/restart/.
