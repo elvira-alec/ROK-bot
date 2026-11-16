@@ -117,6 +117,45 @@ def test_storage_with_a_missed_number_is_read_again(monkeypatch):
     assert gather.read_storage(f) == {"food": 1_000_000, "wood": 776_100, "stone": 1_100_000, "gold": 209_900}
 
 
+def test_troops_already_out_count_before_picking(tmp_path):
+    # live 2026-11-16: 3 troops gathering gold, the 4th was sent to gold too
+    import time as _t
+    a = gather.AutoGather.__new__(gather.AutoGather)
+    a.book = gather.PointBook(tmp_path / "b.json")
+    a._scan, a.load = (0.0, []), 450_000
+    a.pending = [{"xy": (161, 389), "kind": "gold", "at": _t.time()},      # marching there
+                 {"xy": (157, 364), "kind": "gold", "at": _t.time()}]      # already gathering
+    troops = {1: {"index": 1, "state": "gathering", "x": 157, "y": 364, "kind": "gold"},
+              2: {"index": 2, "state": "gathering", "x": 177, "y": 374, "kind": "gold"}}
+    assert a.coming(troops)["gold"] == 3 * 150_000
+    storage = {"food": 5_400_000, "wood": 3_700_000, "stone": 4_200_000, "gold": 820_000}
+    b = gather.balanced(storage)
+    for k, v in a.coming(troops).items():
+        b[k] += v / gather.RATIO[k]
+    assert min(b, key=b.get) == "wood"
+
+
+def test_storage_with_a_lost_suffix_is_not_believed(monkeypatch, tmp_path):
+    # live 2026-11-16: 1M+ food and wood read as a few units and 4 troops went for them
+    import numpy as np
+    from rokwatch import screen
+    f = np.zeros((1024, 1821, 3), np.uint8)
+    bar = [T("1.7", 900), T("1.2M", 1000), T("1.0M", 1100), T("2.1M", 1200), T("458", 1300)]
+    monkeypatch.setattr(screen, "read_text", lambda frame, region=None, strip=False: bar)
+    assert gather.read_storage(f) is None                    # a decimal without its M
+    bar[0:1] = [T("1.7", 880), T("M", 920)]                 # the M read on its own
+    assert gather.read_storage(f)["food"] == 1_700_000
+    # a 1M+ resource suddenly reading tiny: not trusted until a second zoom-in agrees
+    a = gather.AutoGather.__new__(gather.AutoGather)
+    a.book = gather.PointBook(tmp_path / "b.json")
+    a.storage = None
+    a.book.storage = {"food": 1_700_000, "wood": 1_200_000, "stone": 1_000_000, "gold": 2_100_000}
+    odd = {"food": 17, "wood": 12, "stone": 1_000_000, "gold": 2_100_000}
+    assert not a._believable(odd)
+    assert a._believable(odd)                                # read the same again: real
+    assert a._believable({"food": 1_600_000, "wood": 1_200_000, "stone": 900_000, "gold": 2_000_000})
+
+
 # ------------------------------------------------------------- reading points at the searching zoom
 
 import json as _json

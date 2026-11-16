@@ -61,8 +61,24 @@ def read_storage(frame):
     to right: food, wood, stone, gold, gems."""
     H, W = frame.shape[:2]
     texts = screen.read_text(frame, (int(0.40 * W), 0, int(0.55 * W), int(0.055 * H)), strip=True)
-    nums = sorted(((t.center[0], parse_amount(t.text)) for t in texts), key=lambda p: p[0])
-    nums = [v for _, v in nums if v is not None]
+    toks = sorted(((t.center[0], t.text.strip().upper().replace(" ", "")) for t in texts), key=lambda p: p[0])
+    # a suffix read as its own word ('1.7' 'M'): put it back on its number
+    merged = []
+    for x, s in toks:
+        if s in ("K", "M", "B") and merged and re.fullmatch(r"[\d.,]+", merged[-1][1]):
+            merged[-1] = (merged[-1][0], merged[-1][1] + s)
+        else:
+            merged.append((x, s))
+    nums = []
+    for _, s in merged:
+        v = parse_amount(s)
+        if v is None:
+            continue
+        if "." in s and s[-1].isdigit():
+            # '1.7' with its M lost - the game never shows a decimal without K / M: read again
+            # (live 2026-11-16: food and wood 1M+ read as a few units, troops sent for them)
+            return None
+        nums.append(v)
     if len(nums) < 4:
         return None
     if len(nums) == 4 and nums[3] < 1000:
@@ -174,13 +190,15 @@ class PointBook:
         self.surveyed = d.get("surveyed") or {}
         self.load = d.get("load")                       # a troop's load, from the last send
         self.troops = d.get("troops")                   # how many troops you can send (N/M's M)
+        self.storage = d.get("storage")                 # your storage at the last good read
 
     def save(self):
         try:
             self.path.write_text(json.dumps({
                 "points": {f"{x},{y}": v for (x, y), v in self.points.items()},
                 "black": {f"{x},{y}": v for (x, y), v in self.black.items()},
-                "surveyed": self.surveyed, "load": self.load, "troops": self.troops}, indent=1))
+                "surveyed": self.surveyed, "load": self.load, "troops": self.troops,
+                "storage": getattr(self, "storage", None)}, indent=1))
         except OSError:
             pass
 
@@ -273,11 +291,29 @@ class AutoGather:
                 self.hunter._dangers_frame(f)        # the red eye / swords show here too
             cur = read_storage(f)
             if cur and cur == prev:
+                if not self._believable(cur):
+                    return None
                 self.storage, self.storage_at = cur, time.time()
+                self.book.storage = cur
+                self.book.save()
                 return cur
             prev = cur
             time.sleep(0.35)
         return None
+
+    def _believable(self, cur) -> bool:
+        """A resource that was 100K+ at the last read and now reads under 2% of that is
+        probably a misread (live: 1M+ food and wood read as a few units). Accepted only when
+        the next read (another zoom-in) says the same."""
+        last = self.storage or getattr(self.book, "storage", None) or {}   # (kept over restarts)
+        odd = [k for k in KINDS if last.get(k, 0) >= 100_000 and cur.get(k, 0) < 0.02 * last[k]]
+        if not odd or getattr(self, "_odd", None) == cur:
+            self._odd = None
+            return True
+        self._odd = cur
+        log.warning("gather: storage read %s but it was %s - reading again before trusting it",
+                    {k: cur[k] for k in odd}, {k: last[k] for k in odd})
+        return False
 
     def refresh_storage(self):
         """For the panel's numbers between sends: zoom in a moment, read, zoom back out."""
@@ -307,6 +343,19 @@ class AutoGather:
             if kind in KINDS:
                 amount = self.load * RATIO[kind]
                 out[kind] += int(min(amount, left) if left else amount)
+        return out
+
+    def coming(self, troops):
+        """incoming() plus the troops still marching to a point auto-gather sent them to
+        (the user: count what's already on its way before picking the next one - all 4
+        troops went to gold one after the other)."""
+        out = self.incoming(troops)
+        there = [(t["x"], t["y"]) for t in (troops or {}).values()
+                 if t.get("state") == "gathering" and "x" in t]
+        for p in getattr(self, "pending", []) or []:
+            if p.get("kind") in KINDS and not any(math.dist(p["xy"], xy) <= 1.5 for xy in there) \
+                    and time.time() - p.get("at", 0) < self.PENDING_MAX:
+                out[p["kind"]] += int(self.load * RATIO[p["kind"]])
         return out
 
     def summary(self, troops=None):
@@ -380,8 +429,13 @@ class AutoGather:
                 log.info("gather: couldn't read your storage")
                 return done
             b = balanced(storage)
-            log.info("gather: %d troop(s) free; storage %s", free,
-                     {k: f"{v / 1000:.0f}k" for k, v in storage.items()})
+            # what the troops already out will bring back counts too
+            coming = self.coming(getattr(self.hunter, "my_troops", None) or {})
+            for k, v in coming.items():
+                b[k] = b.get(k, 0) + v / RATIO[k]
+            log.info("gather: %d troop(s) free; storage %s; on its way %s", free,
+                     {k: f"{v / 1000:.0f}k" for k, v in storage.items()},
+                     {k: f"{v / 1000:.0f}k" for k, v in coming.items() if v})
             for _ in range(free):
                 # lowest first; nothing free of it around -> the next lowest
                 sent = False

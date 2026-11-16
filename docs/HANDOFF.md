@@ -1198,3 +1198,10 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
 60. **v1.56:** Connect (`Worker._do_open`) starts the game when only the RoK Launcher is open
     (after a phone login): `_game_running` -> launcher start -> "Click to Start", then
     connects. Before it said it couldn't find the game window.
+61. **v1.57:** storage misread after a restart (food / wood 1M+ read as "0k", 4 troops sent):
+    `read_storage` rejects a decimal without K/M and joins a lone K/M to its number;
+    `AutoGather._believable`: a 100K+ resource now under 2% of the last good read (kept in
+    gather_points.json "storage") needs a second zoom-in to agree. Picking now counts what's
+    on its way (`AutoGather.coming`: gathering troops + troops marching to pending points):
+    all 4 troops went to gold one after another. Balancing is by gathering value
+    (`RATIO`: 1 gold = 3 food), so 820K gold ranks like 2.5M food - the user found that odd.
