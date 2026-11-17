@@ -352,12 +352,19 @@ class AutoGather:
             if t.get("state") != "gathering" or "x" not in t:
                 continue
             xy = (t["x"], t["y"])
-            p = next((v for k, v in self.book.points.items() if math.dist(k, xy) <= 1.5), None)
+            # a troop's spot from the map (not its box) can be a couple of tiles off
+            reach = 1.5 if t.get("exact") else 3.0
+            near = [(math.dist(k, xy), v) for k, v in self.book.points.items() if math.dist(k, xy) <= reach]
+            p = min(near, key=lambda dv: dv[0])[1] if near else None
             kind = t.get("kind") or (p.get("kind") if p else None)     # read at the troop-list jump
             left = p.get("reserves") if p else None
             if not kind:
-                q = next((q for q in scan if math.dist(q["tile"], xy) <= 1.5), None)
+                q = next((q for q in scan if math.dist(q["tile"], xy) <= reach), None)
                 kind = q["kind"] if q else None
+            if not kind:
+                s = next((s for s in reversed(getattr(self, "sent", []) or [])
+                          if s.get("xy") and math.dist(tuple(s["xy"]), xy) <= reach), None)
+                kind = s.get("kind") if s else None
             if kind in KINDS:
                 amount = self.load * RATIO[kind]
                 out[kind] += int(min(amount, left) if left else amount)
@@ -379,9 +386,12 @@ class AutoGather:
     def summary(self, troops=None):
         """For the panel: storage, what each counts as, what's coming in, the next pick,
         recent sends."""
+        inc = self.coming(troops)
         b = balanced(self.storage) if self.storage else {}
+        # the next pick counts what's on its way, like the send does (the user: it said wood
+        # with 1.5M wood coming in and no troop on gold)
+        b = {k: v + inc.get(k, 0) / RATIO[k] for k, v in b.items()}
         nxt = min(KINDS, key=lambda k: (b.get(k, float("inf")), KINDS.index(k))) if b else None
-        inc = self.incoming(troops)
         return {"storage": self.storage, "incoming": inc, "ratio": RATIO,
                 "storage_at": time.strftime("%H:%M", time.localtime(self.storage_at)) if self.storage else None,
                 "balanced": {k: round(v) for k, v in b.items()},

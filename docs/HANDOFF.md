@@ -1215,3 +1215,7 @@ after no panel page is open - it was NOT watching overnight. Worth telling the u
     my_troops)` fires at once (15 s apart) when fewer troops are out than you have (a minute's
     pause after a go that sent nothing, `_retry_at`); `prescan` looks over the points while a
     troop is returning (scan older than 4 min), so the send needs no 2-min scan.
+63. **v1.59:** the panel's "Next troop" counts what's on its way (`summary` uses `coming`,
+    like the send); a gathering troop's kind is matched within 3 tiles when its spot isn't
+    exact (one troop's wood went uncounted, kind null), else from `sent`. The bars aren't cut:
+    scaled so the biggest storage + incoming fills the track.

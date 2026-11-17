@@ -156,6 +156,22 @@ def test_troops_already_out_count_before_picking(tmp_path):
     assert min(b, key=b.get) == "wood"
 
 
+def test_panel_next_pick_counts_whats_coming(tmp_path):
+    # live 2026-11-17: the panel said "next: wood" with 1.5M wood coming and no troop on gold
+    a = gather.AutoGather.__new__(gather.AutoGather)
+    a.book = gather.PointBook(tmp_path / "b.json")
+    a.book.points = {(175, 372): {"kind": "wood", "level": 5}}
+    a._scan, a.load, a.pending, a.sent = (0.0, []), 1_272_603, [], []
+    a.storage, a.storage_at, a.centre, a._radius, a.paused_until, a.last = (
+        {"food": 6_100_000, "wood": 5_200_000, "stone": 4_200_000, "gold": 2_000_000}, 0, (166, 374), 18, 0, "")
+    troops = {0: {"state": "gathering", "x": 176, "y": 403, "kind": "food"},
+              1: {"state": "gathering", "x": 177, "y": 370, "kind": None, "exact": False},   # 3 tiles off
+              2: {"state": "gathering", "x": 165, "y": 384, "kind": "wood"},
+              3: {"state": "gathering", "x": 174, "y": 374, "kind": "stone"}}
+    s = a.summary(troops)
+    assert s["incoming"]["wood"] == 2 * 1_272_603 and s["next"] == "gold"
+
+
 def test_storage_with_a_lost_suffix_is_not_believed(monkeypatch, tmp_path):
     # live 2026-11-16: 1M+ food and wood read as a few units and 4 troops went for them
     import numpy as np
